@@ -1,0 +1,7 @@
+name = "PhyloSummaries"
+uuid = "431a9082-0c03-4c0b-a224-e592b0e14882"
+authors = ["Cecile Ane <cecileane@users.noreply.github.com>", "Joshua Justison <jjustison@users.noreply.github.com>", "and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1.2"
