@@ -1,7 +1,17 @@
 using PhyloSummaries
 using Documenter
 
-DocMeta.setdocmeta!(PhyloSummaries, :DocTestSetup, :(using PhyloSummaries); recursive=true)
+using DocumenterInterLinks
+links = InterLinks(
+    "PhyloNetworks" => "https://juliaphylo.github.io/PhyloNetworks.jl/stable/objects.inv",
+)
+
+# loading PhyloNetworks by default in all docstring examples
+DocMeta.setdocmeta!(
+    PhyloSummaries,
+    :DocTestSetup,
+    :(using PhyloNetworks; using PhyloSummaries);
+    recursive=true)
 
 makedocs(;
     modules=[PhyloSummaries],
@@ -20,4 +30,5 @@ makedocs(;
 deploydocs(;
     repo="github.com/JuliaPhylo/PhyloSummaries.jl",
     devbranch="main",
+    push_preview = true,
 )
