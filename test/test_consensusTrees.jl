@@ -1,48 +1,44 @@
-using Test
-using PhyloNetworks
-using PhyloSummaries
-using Base: BitSet
 
-const PN = PhyloNetworks
+@testset "extract_bipartitions! canonicalises unrooted splits" begin
+    first_tree = PN.readnewick("((A,B),(C,D));")
+    PN.directedges!(first_tree)
+    taxa = sort(PN.tiplabels(first_tree))
 
-function direct_tree(newick::AbstractString)
-    net = PN.readnewick(newick, false)
-    PN.directedges!(net)
-    return net
+    counts = Dict{Tuple{Vararg{Int}}, Int}()
+    PhyloSummaries.extract_bipartitions!(counts, first_tree, taxa, false)
+
+    second_tree = PN.readnewick("((A,C),(B,D));")
+    PN.directedges!(second_tree)
+    PhyloSummaries.extract_bipartitions!(counts, second_tree, taxa, false)
+
+    expected = Dict(
+        (1, 1, 0, 0) => 2,  
+        (1, 0, 1, 0) => 2   
+    )
+
+    @test counts == expected
 end
 
-@testset "extract_edge_bipartition " begin
-    tree = direct_tree("((A,B),(C,D));")
-    taxa = sort(PN.tiplabels(tree))
 
-    splits = Tuple{Vararg{Int}}[]
-    for edge in tree.edge
-        split = PhyloSummaries.extract_edge_bipartition(edge, taxa)
-        split === nothing && continue
-        push!(splits, split)
-    end
+@testset "extract_bipartitions! counts expected splits" begin
 
-    @test !isempty(splits)
-    @test length(unique(splits)) == 1
-    @test unique(splits)[1] == (1, 1, 0, 0)
+    first_tree = PN.readnewick("((A,B),(C,D));")
+    PN.directedges!(first_tree)
+    taxa = sort(PN.tiplabels(first_tree))
 
-end
+    counts = Dict{Tuple{Vararg{Int}}, Int}()
+    PhyloSummaries.extract_bipartitions!(counts, first_tree, taxa, true)
 
-@testset "consensus_bipartition " begin
-    counts = Dict{Tuple{Vararg{Int}},Int}()
-    subsets = Dict{Tuple{Vararg{Int}},Vector{Int}}()
-    subset_sets = Dict{Tuple{Vararg{Int}},BitSet}()
+    second_tree = PN.readnewick("((A,C),(B,D));")
+    PN.directedges!(second_tree)
+    PhyloSummaries.extract_bipartitions!(counts, second_tree, taxa, true)
 
-    tree1 = direct_tree("((A,B),(C,D));")
-    taxa = sort(PN.tiplabels(tree1))
-    PhyloSummaries.extract_bipartitions!(counts, subsets, subset_sets, tree1, taxa)
+    expected = Dict(
+        (1, 1, 0, 0) => 1,  
+        (0, 0, 1, 1) => 1, 
+        (1, 0, 1, 0) => 1,  
+        (0, 1, 0, 1) => 1  
+    )
 
-    tree2 = direct_tree("((A,C),(B,D));")
-    PhyloSummaries.extract_bipartitions!(counts, subsets, subset_sets, tree2, taxa)
-
-    selected = PhyloSummaries.consensus_bipartition(counts, subset_sets)
-
-    @test selected == [(1, 1, 0, 0)]
-    @test counts[(1, 1, 0, 0)] == 2
-
+    @test counts == expected
 end

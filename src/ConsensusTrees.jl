@@ -1,47 +1,53 @@
-using Base: BitSet
 
+"""
+    consensus_tree(networks::AbstractVector{PN.HybridNetwork}, rooted::Bool)
 
-function consensus_tree(networks::AbstractVector{PN.HybridNetwork};)
+Construct a consensus network from the supplied phylogenetic networks. Throws an
+`ArgumentError` when no networks are provided or there exists a network with different tiplables. When a 
+single network is given,returns a deep copy of it.
+# Assumptions:
+- All networks share the same taxa set.
+- All inputs are trees.
+# Arguments:
+- `networks::AbstractVector{PN.HybridNetwork}`: A vector of phylogenetic networks.
+- `rooted::Bool`: Whether to treat the networks as rooted or unrooted when
+  extracting bipartitions.
+"""
+function consensus_tree(networks::AbstractVector{PN.HybridNetwork},  rooted::Bool )
     isempty(networks) && throw(ArgumentError("consensus_tree requires at least one network"))
     if length(networks) == 1
         return deepcopy(networks[1])
     end
 
-    
 
     taxa = sort(PN.tiplabels(networks[1]))
-    validate_taxa_match!(networks, taxa)
 
     counts = Dict{Tuple{Vararg{Int}},Int}()
 
     for net in networks
-        root_idx = if net.isrooted
-            root_name = net.node[net.rooti].name
-            idx = root_name === "" ? nothing : findfirst(==(root_name), taxa)
-            something(idx, length(taxa))
-        else
-            length(taxa)
+        if length(PN.tiplabels(net)) != length(taxa)
+            throw(ArgumentError("networks do not share the same taxa set"))
         end
-        extract_bipartitions!(counts, net, taxa, root_idx)
+        extract_bipartitions!(counts, net, taxa, rooted)
     end
 
     return consensus_bipartition() #TODO
 end
 
-function validate_taxa_match!(networks::AbstractVector{PN.HybridNetwork}, reference_taxa::Vector{String})
-    refsorted = reference_taxa
-    for (idx, net) in pairs(networks)
-        taxa = sort(PN.tiplabels(net))
-        taxa == refsorted || throw(ArgumentError("network $idx does not share the same taxa set"))
-    end
-    return nothing
-end
+"""
+    extract_bipartitions!(counts, net, taxa, rooted)
 
+Accumulate bipartitions from `net` into `counts`. Hardwired clusters are
+generated from a defensive copy of the network so the original structure stays
+untouched. Only valid splits contribute to the count totals. If tiplabels do not
+match the taxa set, PN.hardwiredclusters will throw an error.
+
+"""
 function extract_bipartitions!(
     counts::Dict{Tuple{Vararg{Int}},Int},
     net::PN.HybridNetwork,
     taxa::Vector{String},
-    root_idx::Int
+    rooted::Bool
     )
     
     net_copy = deepcopy(net)
@@ -54,10 +60,10 @@ function extract_bipartitions!(
     for row_idx in axes(hw_matrix, 1)
         edge_number = hw_matrix[row_idx, 1]
         edge_number > 0 || continue
-
         edge_kind = hw_matrix[row_idx, end]
-        edge_kind == 10 || continue  
-        split = bipartition_from_cluster(view(hw_matrix, row_idx, taxa_cols), root_idx)
+        edge_kind == 10 || continue # only consider tree edges
+
+        split = bipartition_from_cluster(view(hw_matrix, row_idx, taxa_cols), rooted, taxa)
         split === nothing && continue
 
         counts[split] = get(counts, split, 0) + 1
@@ -67,10 +73,18 @@ function extract_bipartitions!(
     return nothing
 end
 
-function bipartition_from_cluster(cluster::AbstractVector, root_idx::Int)
+"""
+    bipartition_from_cluster(cluster, rooted, taxa)
+
+Transform a hardwired cluster indicator vector into a tuple key usable inside
+`counts`. Returns `nothing` when the cluster does not represent a proper split.
+When `rooted` is false, if the root is included in the cluster, the
+partition is inverted to exclude it.
+"""
+function bipartition_from_cluster(cluster::AbstractVector, rooted::Bool, taxa)
     partition = copy(cluster)
-    if partition[root_idx] == 1
-        partition .= .!partition
+    if !rooted && partition[length(taxa)] == 1
+        partition .= 1 .- partition
     end
     
     ones = count(==(1), partition)
@@ -79,42 +93,12 @@ function bipartition_from_cluster(cluster::AbstractVector, root_idx::Int)
     return Tuple(partition)
 end
 
+"""
+    consensus_bipartition()
 
+Placeholder for assembling the consensus network from accumulated bipartition
+frequencies. 
+"""
 function consensus_bipartition()
     return nothing
 end
-
-
-#     counts::Dict{Tuple{Vararg{Int}},Int},
-#     subset_sets::Dict{Tuple{Vararg{Int}},BitSet}
-# )
-    
-#     sorted_splits = sort!(
-#         collect(keys(counts));
-#         by = split -> (-counts[split], length(split), split)
-#     )
-
-#     selected = Tuple{Vararg{Int}}[]
-#     selected_sets = BitSet[]
-
-#     for split in sorted_splits
-#         bs = subset_sets[split]
-#         compatible = true
-#         for existing in selected_sets
-#             compatible = issubset(bs, existing) ||
-#                           issubset(existing, bs) ||
-#                           isempty(intersect(bs, existing))
-#             compatible || break
-#         end
-#         if compatible
-#             push!(selected, split)
-#             push!(selected_sets, bs)
-#         end
-#     end
-
-#     return selected
-# end
-
-# change to use the matrix
-# change to tuple of boolean and then use that as a key.
-# once we hace n-3 stop
