@@ -4,8 +4,9 @@ using PhyloNetworks
 
 const PN = PhyloNetworks
 
-include("ConsensusTrees.jl")
+export
+consensustree
 
-export consensus_tree
+include("consensustrees.jl")
 
 end
