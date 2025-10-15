@@ -1,10 +1,10 @@
 
 """
-    consensustree(networks::AbstractVector{PN.HybridNetwork};
+    consensustree(trees::AbstractVector{PN.HybridNetwork};
                   rooted=false, proportion=0.5)
 
 Consensus tree summarizing the bipartitions (or clades) shared by more than
-the required `proportion` of input `networks`.
+the required `proportion` of input `trees`.
 An `ArgumentError` is thrown if one input network is not a tree, or the list of
 input trees is empty, or if the input trees do not all have the same tip labels.
 When a single tree is given, the result is a deep copy of it.
@@ -17,27 +17,35 @@ By default, the majority-rule consensus is calculated: the tree is built from
 the bipartitions (or clades) present in more than 50% of the input trees.
 The greedy consensus tree can be obtained by using `proportion=0`.
 
+assumptions and **warnings**:
+- Input trees are assumed to have their edges correctly directed.
+  If unsure, run `directedges!.(trees)` prior.
+- Input trees should not have degree-2 nodes other than the root
+  (nodes with 1 only parent and 1 child).
+  If unsure, run `removedegree2nodes!.(trees, true))` to keep their root even
+  of degree 2 or `removedegree2nodes!.(trees, false))` unroot them also.
+
 # example
 
 fixit / todo: add a jldoctest block, to serve both as an example and as a unit test
 (during documentation build).
 """
 function consensustree(
-    networks::AbstractVector{PN.HybridNetwork};
+    trees::AbstractVector{PN.HybridNetwork};
     rooted::Bool=false,
     proportion::Number=0.5,
 )
-    isempty(networks) &&
+    isempty(trees) &&
         throw(ArgumentError("consensustree requires at least one network"))
-    all(n.numhybrids==0 for n in networks) ||
+    all(n.numhybrids==0 for n in trees) ||
         throw(ArgumentError("consensustree requires input trees (without reticulations)"))
-    if length(networks) == 1
-        return deepcopy(networks[1])
+    if length(trees) == 1
+        return deepcopy(trees[1])
     end
-    taxa = sort!(tiplabels(networks[1]))
+    taxa = sort!(tiplabels(trees[1]))
 
-    splitcounts = Dict{Tuple{Vararg{Int}},Int}()
-    for net in networks
+    splitcounts = Dict{NTuple{length(taxa),Int},Int}()
+    for net in trees
         length(net.leaf) == length(taxa) ||
             throw(ArgumentError("input trees do not share the same taxon set"))
         count_bipartitions!(splitcounts, net, taxa, rooted)
@@ -61,52 +69,58 @@ If the tip labels in `net` do not match those in `taxa` (as a set), then an
 error will be thrown indirectly (via `PhyloNetworks.hardwiredclusters`).
 """
 function count_bipartitions!(
-    counts::Dict{Tuple{Vararg{Int}},Int},
+    counts::Dict{NTuple{N,Int},Int},
     net::PN.HybridNetwork,
     taxa::Vector{String},
-    rooted::Bool
-)
-    net_copy = deepcopy(net) # can we avoid this? this will cause a slow down and extra memory usage
-    directedges!(net_copy) # fixit: add an argument to have the option to avoid doing this
-
-    hw_matrix = hardwiredclusters(net_copy, taxa)
-    taxa_len = length(taxa)
-    taxa_cols = 2:(taxa_len + 1)
+    rooted::Bool,
+) where N
+    if !rooted
+        rootdegree = length(getroot(net).edge)
+        if rootdegree == 2
+            net = deepcopy(net) # re-binds the variable 'net'
+            PN.fuseedgesat!(net.rooti, net)
+        elseif rootdegree == 1 # should almost never happen
+            net = deepcopy(net)
+            deleteleaf!(net, net.rooti; index=true)
+            PN.fuseedgesat!(net.rooti, net)
+        end
+    end
+    hw_matrix = hardwiredclusters(net, taxa)
+    taxa_cols = 2:(length(taxa) + 1)
 
     for row_idx in axes(hw_matrix, 1)
         edge_number = hw_matrix[row_idx, 1]
-        edge_number > 0 || continue
+        edge_number > 0 || continue # fixit: why? edge numbers are arbitrary. could be negative. they just need to be unique
         edge_kind = hw_matrix[row_idx, end]
-        edge_kind == 10 || continue # only consider tree edges
+        edge_kind == 10 || continue # only consider tree edges. fixit: consensustree already checked that 'net' is a tree
 
-        split = bipartition_from_cluster(view(hw_matrix, row_idx, taxa_cols), rooted, taxa)
-        split === nothing && continue
-
+        split = tuple_from_clustervector(view(hw_matrix, row_idx, taxa_cols), rooted)
+        isnothing(split) && continue
         counts[split] = get(counts, split, 0) + 1
-
     end
-
-    return nothing
+    return counts
 end
 
 """
-    bipartition_from_cluster(cluster, rooted, taxa)
+    tuple_from_clustervector(cluster01vector, rooted)
 
-Transform a hardwired cluster indicator vector into a tuple key usable inside
-`counts`. Returns `nothing` when the cluster does not represent a proper split.
-When `rooted` is false, if the root is included in the cluster, the
-partition is inverted to exclude it.
+Tuple of booleans `t` with `t[i]` true / false if `taxa[i]` does / does not
+belong in the hardwired cluster vector `cluster01vector` of 0/1 integers;
+or `nothing` if the cluster is trivial (all 0s or all 1s).
+
+If `rooted` is false, then clusters are considered as bipartitions and the last
+taxon is used as outgroup with a `false` entry.
+For example, clusters `0011` and `1100` represent the same bipartition, and
+both would return tuple `(true,true,false,false)`.
 """
-function bipartition_from_cluster(cluster::AbstractVector, rooted::Bool, taxa)
-    partition = copy(cluster)
-    if !rooted && partition[length(taxa)] == 1
-        partition .= 1 .- partition
+function tuple_from_clustervector(cluster01vector::AbstractVector, rooted::Bool)
+    if all(isequal(1), cluster01vector) || all(isequal(0), cluster01vector)
+        return nothing
     end
-    
-    ones = count(==(1), partition)
-    zeros = length(partition) - ones
-    (ones <= 1 || zeros <= 1) && return nothing
-    return Tuple(partition)
+    if !rooted && cluster01vector[end] == 1
+        return Tuple(x==0 for x in cluster01vector)
+    end
+    return Tuple(x==1 for x in cluster01vector)
 end
 
 """
