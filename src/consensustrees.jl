@@ -51,7 +51,7 @@ function consensustree(
         count_bipartitions!(splitcounts, net, taxa, rooted)
     end
 
-    return consensus_bipartition(splitcounts, proportion) #TODO
+    return consensus_bipartition(splitcounts, proportion, length(trees), taxa) #TODO
 end
 
 """
@@ -69,11 +69,11 @@ If the tip labels in `net` do not match those in `taxa` (as a set), then an
 error will be thrown indirectly (via `PhyloNetworks.hardwiredclusters`).
 """
 function count_bipartitions!(
-    counts::Dict{NTuple{N,Int},Int},
+    counts::Dict{BitVector,Int},
     net::PN.HybridNetwork,
     taxa::Vector{String},
     rooted::Bool,
-) where N
+) 
     if !rooted
         rootdegree = length(getroot(net).edge)
         if rootdegree == 2
@@ -89,10 +89,6 @@ function count_bipartitions!(
     taxa_cols = 2:(length(taxa) + 1)
 
     for row_idx in axes(hw_matrix, 1)
-        edge_number = hw_matrix[row_idx, 1]
-        edge_number > 0 || continue # fixit: why? edge numbers are arbitrary. could be negative. they just need to be unique
-        edge_kind = hw_matrix[row_idx, end]
-        edge_kind == 10 || continue # only consider tree edges. fixit: consensustree already checked that 'net' is a tree
 
         split = tuple_from_clustervector(view(hw_matrix, row_idx, taxa_cols), rooted)
         isnothing(split) && continue
@@ -118,9 +114,9 @@ function tuple_from_clustervector(cluster01vector::AbstractVector, rooted::Bool)
         return nothing
     end
     if !rooted && cluster01vector[end] == 1
-        return Tuple(x==0 for x in cluster01vector)
+        return BitVector(x==0 for x in cluster01vector)
     end
-    return Tuple(x==1 for x in cluster01vector)
+    return BitVector(x==1 for x in cluster01vector)
 end
 
 """
@@ -129,6 +125,62 @@ end
 Placeholder for assembling the consensus network from accumulated bipartition
 frequencies. 
 """
-function consensus_bipartition()
-    return nothing
+function consensus_bipartition( splitcounts::Dict{BitVector,Int},
+    proportion::Number, 
+    numtrees::Number,
+    taxa::Vector{String},
+) 
+
+    p = max(0.5, proportion)
+    threshold = ceil(p * numtrees)
+    # TODO: Add all bipartitions where frequency > 0.5 * numtrees
+    final_bipartitions = Vector{BitVector}()
+
+
+    for (bipartition, frequency) in splitcounts
+        if frequency >= threshold
+            push!(final_bipartitions, bipartition)
+        end
+    end
+
+end
+
+
+function create_tree_from_bipartition_set(taxa::Vector{String}, bipartitions::Vector{BitVector})
+
+    n = length(taxa)
+
+    clusters = Set{Set{String}}()
+    for bv in bipartitions
+        cluster = Set(taxa[i] for i in eachindex(bv) if bv[i])
+        if 1 < length(cluster) < n
+            push!(clusters, cluster)
+        end
+    end
+
+    if isempty(clusters)
+        return readTopology("(" * join(taxa, ",") * ");")
+    end
+
+    sorted_clusters = sort(collect(clusters), by=length)
+
+    rep = Dict{String,String}(t => t for t in taxa)
+
+    for C in sorted_clusters
+        members = unique([rep[t] for t in C])
+        if length(members) <= 1
+            continue
+        end
+        subtree = "(" * join(members, ",") * ")"
+        for t in C
+            rep[t] = subtree
+        end
+    end
+
+
+    tops = unique(values(rep))
+    newick_str = length(tops) == 1 ? (tops[1] * ";") : ("(" * join(tops, ",") * ");")
+
+    return readnewick(newick_str)
+
 end
