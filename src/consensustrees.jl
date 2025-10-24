@@ -174,9 +174,12 @@ function consensus_bipartition( splitcounts::Dict{BitVector,Int},
     end
     for (bipartition, frequency) in splitcounts
         if frequency < threshold & frequency > ceil(proportion * numtrees)
-            if is_compatible(bipartition, final_bipartitions)
-                push!(final_bipartitions, bipartition)
+            for final_bipartition in final_bipartitions
+                if is_compatible(bipartition, final_bipartition)
+                    push!(final_bipartitions, bipartition)
+                end
             end
+            
         end
     end
 
@@ -186,6 +189,11 @@ function consensus_bipartition( splitcounts::Dict{BitVector,Int},
 
 end
 
+"""
+    is_compatible(a, b)
+    Check if two bipartitions `a` and `b` (as `BitVector`s) are compatible.
+
+"""
 function is_compatible(a::BitVector, b::BitVector)::Bool
     @assert length(a) == length(b)
     inter = a .& b
@@ -267,6 +275,7 @@ function create_tree_from_bipartition_set(taxa::Vector{String}, bipartitions::Ve
         for i in eachindex(bv)
             if bv[i] == 1
                 leaf = leaf_nodes[taxa[i]]
+                ## fix dont remove parent edge. change at LCA
                 parent_edge = getparentedge(leaf)
                 if parent_edge !== nothing
                     parent = parent_edge.node[1]
