@@ -7,7 +7,7 @@ Consensus tree summarizing the bipartitions (or clades) shared by more than
 the required `proportion` of input `trees`.
 An `ArgumentError` is thrown if one input network is not a tree, or the list of
 input trees is empty, or if the input trees do not all have the same tip labels.
-When a single tree is given, the result is a deep copy of it.
+Input trees are not modified.
 
 By default, input trees are considered unrooted, and bipartitions are considered.
 Use `rooted=true` to consider all input trees as rooted, in which case clades
@@ -40,7 +40,9 @@ function consensustree(
     all(n.numhybrids==0 for n in trees) ||
         throw(ArgumentError("consensustree requires input trees (without reticulations)"))
     if length(trees) == 1
-        return deepcopy(trees[1])
+        net = deepcopy(trees[1])
+        # fixit: suppressroot!(net) when ready, from PN
+        return 
     end
     taxa = sort!(tiplabels(trees[1]))
 
@@ -80,6 +82,7 @@ function count_bipartitions!(
 ) 
     if !rooted
         rootdegree = length(getroot(net).edge)
+        # fixit: replace code below by suppressroot!(net), after deepcopy if needed
         if rootdegree == 2
             net = deepcopy(net) # re-binds the variable 'net'
             PN.fuseedgesat!(net.rooti, net)
@@ -240,32 +243,24 @@ function create_tree_from_bipartition_set(taxa::Vector{String}, bipartitions::Ve
 
 
     net = PN.HybridNetwork()
-    root = PN.Node(1,false)
+    root = PN.Node(-2,false) # root has number -2
     PN.pushNode!(net, root)
     net.rooti = 1
 
-
-
+    # leaves have numbers 1:n
     leaf_nodes = Dict{String, PN.Node}()
-    node_counter = length(net.node) + 1
-    edge_counter = length(net.edge) + 1
-    for t in taxa
-        leaf = PN.Node(node_counter, true)
-        leaf.name = t
-        node_counter += 1
+    for (i,t) in enumerate(taxa)
+        edge = PN.Edge(i) # ischild1 is true by default
+        leaf = PN.Node(i,true,false, # true: leaf
+            -1.,edge,false,false,false,false,false,false,-1,nothing,-1,-1,t)
         PN.pushNode!(net, leaf)
         leaf_nodes[t] = leaf
-        edge = PN.Edge(edge_counter)
-        edge.node = [leaf, root]
-        edge.ischild1 = true
+        edge.node = [leaf, root] # to match ischild1 is true
         PN.pushEdge!(net, edge)
-        push!(leaf.edge, edge)
         push!(root.edge, edge)
-       
-        edge_counter += 1
     end
 
-
+    node_counter = n+1 # alternatively: start at -3 and go down -= 1
     for bv in bipartitions
         internal = PN.Node(node_counter,false)
         node_counter += 1

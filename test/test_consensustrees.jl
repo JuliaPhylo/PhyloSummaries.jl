@@ -33,9 +33,9 @@ end
 @testset "majority-rule consensus (paper example)" begin
     # Input trees (3 total)
     tree1 = readnewick("((A,B),(C,D));")
-    tree2 = readnewick("((A,B),(C,D));")
+    tree2 = readnewick("((C,D),(B,A));")
     tree3 = readnewick("((A,C),(B,D));")
-    trees = [tree1, tree2, tree3]
+    trees = [tree3, tree2, tree1]
 
     # Expected majority-rule consensus tree
     # (A,B) appears in 2/3 trees → included
