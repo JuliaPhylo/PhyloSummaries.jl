@@ -1,13 +1,26 @@
 
 """
     consensustree(trees::AbstractVector{PN.HybridNetwork};
-                  rooted=false, proportion=0.5)
+                  rooted=false,
+                  proportion=0.5,
+                  storesupport=:egdelength)
 
 Consensus tree summarizing the bipartitions (or clades) shared by more than
 the required `proportion` of input `trees`.
 An `ArgumentError` is thrown if one input network is not a tree, or the list of
 input trees is empty, or if the input trees do not all have the same tip labels.
 Input trees are not modified.
+
+output: tuple `(tree, supportvalues)` where the consensus tree is an
+object of type `HybridNetwork`, and `supportvalues` is a dictionary mapping the
+edge numbers in `tree` to their frequencies in the input trees.
+
+fixit:
+- return support values
+- store support values as edge lengths
+- write new `writenewick(net, edgesupport)`
+- in jldoctest: add example to write edge support as part of newick string
+- and add example to plot the network with support shown for each edge
 
 By default, input trees are considered unrooted, and bipartitions are considered.
 Use `rooted=true` to consider all input trees as rooted, in which case clades
@@ -27,13 +40,29 @@ assumptions and **warnings**:
 
 # example
 
-fixit / todo: add a jldoctest block, to serve both as an example and as a unit test
-(during documentation build).
+```jldoctest
+julia> nwk = ["((c,d),((a1,a2),b))", "(((a2,a1),b),(c,d))", "(((a1,a2),c),d,b)"];
+
+julia> treesample = readnewick.(nwk);
+
+julia> con = consensustree(treesample); writenewick(con)
+# fixit: write expected result
+
+julia> consensustree(treesample; rooted=true) |> writenewick
+# fixit
+
+julia> consensustree(treesample; rooted=true, proportion=0) |> writenewick
+# fixit
+
+julia> consensustree(treesample; proportion=0.75) |> writenewick
+# fixit
+```
 """
 function consensustree(
     trees::AbstractVector{PN.HybridNetwork};
     rooted::Bool=false,
     proportion::Number=0.5,
+    storesupport::Symbol=:egdelength,
 )
     isempty(trees) &&
         throw(ArgumentError("consensustree requires at least one network"))
@@ -41,19 +70,25 @@ function consensustree(
         throw(ArgumentError("consensustree requires input trees (without reticulations)"))
     if length(trees) == 1
         net = deepcopy(trees[1])
-        # fixit: suppressroot!(net) when ready, from PN
+        suppressroot!(net) # requires PN v1.3
+        #= PN v1.3 is currently in branch 'unroot'.
+        do this in some environment (but not in PhyloSummaries' main folder!)
+        pkg> add PhyloNetworks#unroot
+        these complications will go away after this PR is merged
+        https://github.com/JuliaPhylo/PhyloNetworks.jl/pull/237
+        and after v1.3.0 is registered. =#
         return 
     end
     taxa = sort!(tiplabels(trees[1]))
 
-    splitcounts = Dict{BitVector,Int}()
+    splitcounts = Dictionary{BitVector,Int}()
     for net in trees
         length(net.leaf) == length(taxa) ||
             throw(ArgumentError("input trees do not share the same taxon set"))
         count_bipartitions!(splitcounts, net, taxa, rooted)
     end
-
-    return consensus_bipartition(splitcounts, proportion, length(trees), taxa) #TODO
+    consensus_bipartitions!(splitcounts, proportion, length(trees))
+    return create_tree_from_bipartition_set(taxa, splitcounts) #TODO
 end
 
 """
@@ -75,31 +110,23 @@ If the tip labels in `net` do not match those in `taxa` (as a set), then an
 error will be thrown indirectly (via `PhyloNetworks.hardwiredclusters`).
 """
 function count_bipartitions!(
-    counts::Dict{BitVector,Int},
+    counts::Dictionary{BitVector,Int},
     net::PN.HybridNetwork,
     taxa::Vector{String},
     rooted::Bool,
 ) 
     if !rooted
-        rootdegree = length(getroot(net).edge)
-        # fixit: replace code below by suppressroot!(net), after deepcopy if needed
-        if rootdegree == 2
+        if length(getroot(net).edge) < 3
             net = deepcopy(net) # re-binds the variable 'net'
-            PN.fuseedgesat!(net.rooti, net)
-        elseif rootdegree == 1 # should almost never happen
-            net = deepcopy(net)
-            deleteleaf!(net, net.rooti; index=true)
-            PN.fuseedgesat!(net.rooti, net)
+            suppressroot!(net)
         end
     end
     hw_matrix = hardwiredclusters(net, taxa)
     taxa_cols = 2:(length(taxa) + 1)
-
     for row_idx in axes(hw_matrix, 1)
-
         split = tuple_from_clustervector(view(hw_matrix, row_idx, taxa_cols), rooted)
         isnothing(split) && continue
-        counts[split] = get(counts, split, 0) + 1
+        set!(counts, split, get(counts, split, 0) + 1)
     end
     return counts
 end
@@ -112,7 +139,7 @@ belong in the hardwired cluster vector `cluster01vector` of 0/1 integers;
 or `nothing` if the cluster is trivial (all 0s or all 1s).
 
 If `rooted` is false, then clusters are considered as bipartitions and the last
-taxon is used as outgroup with a `false` entry.
+taxon is used as an outgroup with a `false` entry.
 For example, clusters `0011` and `1100` represent the same bipartition, and
 both would return tuple `(true,true,false,false)`.
 """
@@ -121,94 +148,116 @@ function tuple_from_clustervector(cluster01vector::AbstractVector, rooted::Bool)
         return nothing
     end
     if !rooted && cluster01vector[end] == 1
-        return (x==0 for x in cluster01vector)
+        return BitVector(x==0 for x in cluster01vector)
     end
-    return (x==1 for x in cluster01vector)
+    return BitVector(x==1 for x in cluster01vector)
 end
 
 """
-    consensus_bipartition(splitcounts, proportion, numtrees, taxa)
+    consensus_bipartition!(splitcounts::Dictionary{BitVector,Int},
+        proportion::Number, numtrees::Number)
 
-Select all bipartitions that meet the frequency threshold and
-assemble the final consensus tree.
+Filter dictionary `splitcounts` to keep only the entries whose count (value in
+the dictionary) greater than `proportion × numtrees`. Bipartitions with weight
+over 50% must be compatible with each other. Bipartitions are added one by one,
+from most to least frequent, so long as they are compatible with bipartititions
+previously kept.
 
-Each bipartition in `splitcounts` is included if it occurs in at least
-`ceil(proportion * numtrees)` of the input trees. The selected bipartitions
-are passed to [`create_tree_from_bipartition_set`](@ref) to construct
-the resulting consensus topology.
+The result can be passed to [`create_tree_from_bipartition_set`](@ref) to
+construct the associated consensus tree topology.
+`proportion = 0.5` corresponds to the majority-rule consensus tree and
+`proportion = 0` to a greedy consensus tree.
 
-By default `proportion = 0.5`, this yields a majority-rule consensus tree.
-Setting `proportion < 0.5` produces a greedy consensus tree that includes
-all compatible bipartitions with frequency higher than.
+Output: `splitcounts` modified, with some entries filtered out, and sorted
+by frequency if `proportion<0.5`.
 
-# Arguments
-- `splitcounts::Dict{BitVector,Int}`: Mapping of bipartition vectors to their counts.
-- `proportion::Number`: Inclusion threshold (e.g., `0.5` for majority rule).
-- `numtrees::Number`: Total number of input trees.
-- `taxa::Vector{String}`: Ordered list of taxon labels corresponding to bipartition indices.
-
-# Returns
-A `PhyloNetworks.HybridNetwork` object representing the consensus tree.
+Assumption: all counts are positive.
 
 # Example
-```julia
-splitcounts = Dict(BitVector([1,1,0,0]) => 3, BitVector([0,0,1,1]) => 3)
-taxa = ["A","B","C","D"]
-consensus_bipartition(splitcounts, 0.5, 4, taxa)
-# → HybridNetwork for ((A,B),(C,D));
+```jldoctest
+julia> using Dictionaries
+
+julia> splitcounts = dictionary([[true,false]=>3, [false,false]=>1, [true,true]=>4])
+3-element Dictionary{Vector{Bool}, Int64}:
+ Bool[1, 0] │ 3
+ Bool[0, 0] │ 1
+ Bool[1, 1] │ 4
+
+julia> consensus_bipartition!(splitcounts, 0.5, 4)
+2-element Dictionary{Vector{Bool}, Int64}:
+ Bool[1, 0] │ 3
+ Bool[1, 1] │ 4
+
+julia> splitcounts = dictionary([[true,false]=>3, [false,false]=>1, [true,true]=>4]);
+
+julia> consensus_bipartition!(splitcounts, 0, 4)
+3-element Dictionary{Vector{Bool}, Int64}:
+ Bool[1, 1] │ 4
+ Bool[1, 0] │ 3
+ Bool[0, 0] │ 1
 ```
 """
-function consensus_bipartition( splitcounts::Dict{BitVector,Int},
+function consensus_bipartitions!(
+    splitcounts::Dictionary{BitVector,Int},
     proportion::Number, 
     numtrees::Number,
-    taxa::Vector{String},
 ) 
-
-    p = max(0.5, proportion)
-    threshold = ceil(p * numtrees)
-
-    final_bipartitions = Vector{BitVector}()
-
-
-    for (bipartition, frequency) in splitcounts
-        if frequency >= threshold
-            push!(final_bipartitions, bipartition)
-        end
+    threshold1 = max(0.5, proportion) * numtrees # all above must be compatible
+    threshold2 = proportion * numtrees  # applies if proportion < 0.5
+    if proportion >= 0.5
+        filter!(v -> v > threshold1, splitcounts)
+        return(splitcounts)
     end
-    for (bipartition, frequency) in splitcounts
-        if frequency < threshold & frequency > ceil(proportion * numtrees)
-            for final_bipartition in final_bipartitions
-                if is_compatible(bipartition, final_bipartition)
-                    push!(final_bipartitions, bipartition)
-                end
+    if threshold2 > 0 # 0 for greedy consensus: frequent case
+        filter!(v -> v > threshold2, splitcounts)
+    end
+    sort!(splitcounts, rev=true) # works for a Dictionary, but not a Dict
+    nsplits = 0
+    for (candidate_bp, freq) in pairs(splitcounts)
+        if freq > threshold1
+            nsplits += 1
+            continue
+        end
+        # freq > threshold2 ensured by previous filtering
+        iscompat = true
+        for (i,bp) in enumerate(keys(splitcounts))
+            i > nsplits && break # only compare with previous splits
+            if !treecompatible(candidate_bp, bp)
+                iscompat = false
+                break
             end
-            
+        end
+        if iscompat # then keep candidate bipartition
+            nsplits += 1
+        else
+            delete!(splitcounts, candidate_bp)
         end
     end
-
-
-
-    return create_tree_from_bipartition_set(taxa, final_bipartitions)
-
+    return splitcounts
 end
 
 """
-    is_compatible(a, b)
-    Check if two bipartitions `a` and `b` (as `BitVector`s) are compatible.
+    treecompatible(a::BitVector, b::BitVector)
 
+true / false if two clusters `a` and `b` are / are not tree-compatible.
+
+If A is the cluster of descendants of `a` (with `true` entries in `a`) and
+if B is the cluster of descendant of `b`, these 2 clusters are tree-compatible
+if there exists some tree that has both clusters.
+This can be checked by the condition: A∩B is empty, or A⊆B, or B⊆A.
 """
-function is_compatible(a::BitVector, b::BitVector)::Bool
+function treecompatible(a::BitVector, b::BitVector)::Bool
     @assert length(a) == length(b)
     inter = a .& b
     if !any(inter)                     
         return true
     end
-
     if inter == a || inter == b       
         return true
     end
     return false
 end
+
 """
     create_tree_from_bipartition_set(taxa, bipartitions)
 
@@ -238,10 +287,11 @@ tree = create_tree_from_bipartition_set(taxa, bipartitions)
 # → HybridNetwork for ((A,B),(C,D));
 ```
 """
-function create_tree_from_bipartition_set(taxa::Vector{String}, bipartitions::Vector{BitVector})
+function create_tree_from_bipartition_set(
+    taxa::Vector{String},
+    bipartitions::Dictionary{BitVector,Int},
+)
     n = length(taxa)
-
-
     net = PN.HybridNetwork()
     root = PN.Node(-2,false) # root has number -2
     PN.pushNode!(net, root)
@@ -250,9 +300,9 @@ function create_tree_from_bipartition_set(taxa::Vector{String}, bipartitions::Ve
     # leaves have numbers 1:n
     leaf_nodes = Dict{String, PN.Node}()
     for (i,t) in enumerate(taxa)
-        edge = PN.Edge(i) # ischild1 is true by default
+        edge = PN.Edge(i,1.0) # ischild1 is true by default. length=1 for 100% support
         leaf = PN.Node(i,true,false, # true: leaf
-            -1.,edge,false,false,false,false,false,false,-1,nothing,-1,-1,t)
+            -1.,[edge],false,false,false,false,false,false,-1,nothing,-1,-1,t)
         PN.pushNode!(net, leaf)
         leaf_nodes[t] = leaf
         edge.node = [leaf, root] # to match ischild1 is true
@@ -261,11 +311,11 @@ function create_tree_from_bipartition_set(taxa::Vector{String}, bipartitions::Ve
     end
 
     node_counter = n+1 # alternatively: start at -3 and go down -= 1
-    for bv in bipartitions
+    edge_counter = n+1
+    for (bv,weight) in pairs(bipartitions)
         internal = PN.Node(node_counter,false)
         node_counter += 1
         PN.pushNode!(net, internal)
-
 
         for i in eachindex(bv)
             if bv[i] == 1

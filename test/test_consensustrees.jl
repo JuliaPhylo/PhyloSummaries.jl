@@ -1,40 +1,46 @@
 
 @testset "consensus trees" begin
 
+@test_throws ArgumentError consensustree(PN.HybridNetwork[])
+@test_throws ArgumentError consensustree([readnewick("((A,#H1),(B)#H1);")])
+
 tree1 = readnewick("((A,B),(C,D));")
-tree2 = readnewick("((A,C),(B,D));")
+tree2 = readnewick("((C,D),(B,A));")
+tree3 = readnewick("((A,C),(B,D));")
 taxa = ["A","B","C","D"]
 
 @testset "count_bipartitions! unrooted" begin
-counts = Dict{BitVector,Int}()
+counts = Dictionary{BitVector,Int}()
 PhyloSummaries.count_bipartitions!(counts, tree1, taxa, false)
-PhyloSummaries.count_bipartitions!(counts, tree2, taxa, false)
+PhyloSummaries.count_bipartitions!(counts, tree3, taxa, false)
 expected = Dict(
     BitVector([1, 1, 0, 0]) => 1,
     BitVector([1, 0, 1, 0]) => 1,
 )
-@test counts == expected
+@test length(counts) == length(expected)
+for bp in keys(expected)
+    @test counts[bp] == expected[bp]
+end
 end
 
 
 @testset "count_bipartitions! rooted" begin
-counts = Dict{BitVector,Int}()
-# PhyloSummaries.consensustree([tree1, tree2];)
+counts = Dictionary{BitVector,Int}()
 PhyloSummaries.count_bipartitions!(counts, tree1, taxa, true)
-PhyloSummaries.count_bipartitions!(counts, tree2, taxa, true)
+PhyloSummaries.count_bipartitions!(counts, tree3, taxa, true)
 expected = Dict(
     BitVector([1, 1, 0, 0]) => 1,
     BitVector([0, 0, 1, 1]) => 1,
     BitVector([1, 0, 1, 0]) => 1,
     BitVector([0, 1, 0, 1]) => 1,
 )
-@test counts == expected
+@test length(counts) == length(expected)
+for bp in keys(expected)
+    @test counts[bp] == expected[bp]
 end
+end
+
 @testset "majority-rule consensus (paper example)" begin
-    # Input trees (3 total)
-    tree1 = readnewick("((A,B),(C,D));")
-    tree2 = readnewick("((C,D),(B,A));")
-    tree3 = readnewick("((A,C),(B,D));")
     trees = [tree3, tree2, tree1]
 
     # Expected majority-rule consensus tree
@@ -43,7 +49,7 @@ end
     # → consensus should be ((A,B),(C,D));
     expected = readnewick("((A,B),(C,D));")
 
-    consensus = PhyloSummaries.consensustree(trees; rooted=false, proportion=0.5)
+    consensus = consensustree(trees; rooted=false, proportion=0.5)
     @test writenewick(consensus) == writenewick(expected)
 end
 
@@ -85,7 +91,7 @@ end
 
 # @testset "consensustree single-tree copy" begin
 #     t = readnewick("((A,B),(C,D));")
-#     result = PhyloSummaries.consensustree([t])
+#     result = consensustree([t])
 #     @test writeTopology(result) == writeTopology(t)
 # end
 
@@ -94,20 +100,11 @@ end
 #     t2 = readnewick("((A,C),(B,D));")
 #     t3 = readnewick("((A,B),(C,D));")  # reinforce first split
 
-#     consensus = PhyloSummaries.consensustree([t1, t2, t3])
+#     consensus = consensustree([t1, t2, t3])
 #     newick = writeTopology(consensus)
 #     # majority split (A,B)|(C,D) should dominate
 #     @test occursin("(A,B)", newick)
 #     @test occursin("(C,D)", newick)
-# end
-
-# @testset "consensustree argument errors" begin
-#     using PhyloNetworks
-#     t = readnewick("(A,B);")
-#     bad = deepcopy(t)
-#     bad.numhybrids = 1
-#     @test_throws ArgumentError PhyloSummaries.consensustree([])
-#     @test_throws ArgumentError PhyloSummaries.consensustree([bad])
 # end
 
 end

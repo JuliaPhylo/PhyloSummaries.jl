@@ -2,6 +2,7 @@ using PhyloSummaries
 using Test
 using Aqua
 
+using Dictionaries # fixit: see if we still need it at the end
 using PhyloNetworks
 
 const PN = PhyloNetworks

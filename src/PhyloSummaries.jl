@@ -1,5 +1,6 @@
 module PhyloSummaries
 
+using Dictionaries
 using PhyloNetworks
 
 const PN = PhyloNetworks
