@@ -71,12 +71,10 @@ function consensustree(
     if length(trees) == 1
         net = deepcopy(trees[1])
         suppressroot!(net) # requires PN v1.3
-        #= PN v1.3 is currently in branch 'unroot'.
+        #= PN v1.3 is currently in branch 'master'.
         do this in some environment (but not in PhyloSummaries' main folder!)
-        pkg> add PhyloNetworks#unroot
-        these complications will go away after this PR is merged
-        https://github.com/JuliaPhylo/PhyloNetworks.jl/pull/237
-        and after v1.3.0 is registered. =#
+        pkg> add PhyloNetworks#master
+        these complications will go away after v1.3.0 is registered. =#
         return 
     end
     taxa = sort!(tiplabels(trees[1]))
@@ -294,54 +292,112 @@ function create_tree_from_bipartition_set(
     n = length(taxa)
     net = PN.HybridNetwork()
     root = PN.Node(-2,false) # root has number -2
-    PN.pushNode!(net, root)
-    net.rooti = 1
-
-    # leaves have numbers 1:n
-    leaf_nodes = Dict{String, PN.Node}()
+    # do *not* push the root to net.node yet: push leaves first, to make
+    # taxa[i] be the label of net.node[i], so later we can use bv[leaf.number]
+    # leaves: numbered 1:n
+    #leaf_nodes = Dict{String, PN.Node}() # todo: remove if not needed
     for (i,t) in enumerate(taxa)
         edge = PN.Edge(i,1.0) # ischild1 is true by default. length=1 for 100% support
         leaf = PN.Node(i,true,false, # true: leaf
             -1.,[edge],false,false,false,false,false,false,-1,nothing,-1,-1,t)
         PN.pushNode!(net, leaf)
-        leaf_nodes[t] = leaf
+        #leaf_nodes[t] = leaf # todo: remove if not needed
         edge.node = [leaf, root] # to match ischild1 is true
         PN.pushEdge!(net, edge)
         push!(root.edge, edge)
     end
+    PN.pushNode!(net, root)
+    net.rooti = n+1 # n leaves listed first, root listed next in net.node
 
-    node_counter = n+1 # alternatively: start at -3 and go down -= 1
+    # internal nodes: numbered -3,-4 etc., as done by readnewick
+    node_counter = -3
     edge_counter = n+1
     for (bv,weight) in pairs(bipartitions)
-        internal = PN.Node(node_counter,false)
-        node_counter += 1
-        PN.pushNode!(net, internal)
-
-        for i in eachindex(bv)
-            if bv[i] == 1
-                leaf = leaf_nodes[taxa[i]]
-                ## fix dont remove parent edge. change at LCA
-                parent_edge = getparentedge(leaf)
-                if parent_edge !== nothing
-                    parent = parent_edge.node[1]
-                    PN.deleteEdge!(net, parent_edge)
-                    edge_counter -= 1
+        #= *before* modifying the network, traverse it to find
+        Q1. which node 'lca' should be the parent of the new node, and
+        Q2. which children of 'lca' should become children of the new node.
+        To do so: use .booln2 and .booln3 to store:
+           '1+ descendant of node ∈ clade?'
+           '{node's descendants} ⊆ clade ?' =#
+        node2clade_intersection_initialize(net, bv)
+        node2clade_intersection_update(getroot(net)) # post-order
+        # solve Q1: find lowest node with .booln2 && !.booln3
+        lca = getroot(net)
+        (lca.booln2 && !lca.booln3) ||
+            error("incorrect clade-intersection data at root, or trivial 1...1 clade")
+        while true
+            foundlca = true
+            for ce in lca.edge
+                cn = getchild(ce)
+                cn === lca && continue
+                if cn.booln2 && !cn.booln3
+                    lca = cn
+                    foundlca = false
+                    break
                 end
-
-                e = PN.Edge(edge_counter)
-                e.node = [leaf, internal]
-                e.ischild1 = true
-                PN.pushEdge!(net, e)
-                push!(internal.edge, e)
-                push!(leaf.edge, e)
+            end
+            foundlca && break # of while loop
+        end
+        # create a new node and new edge
+        newnode = PN.Node(node_counter,false)
+        newnode.fvalue = weight # store clade support in the clade's MRCA
+        node_counter -= 1
+        # new edge: store clade support as edge length and in .y
+        newe = PN.Edge(edge_counter,weight,false,weight,0.0,1.0,
+            [newnode,lca], true, # ischild1 is true: to agre with node ordering
+            -1,true,true,false)
+        edge_counter += 1
+        # solve Q2: find all the lca's children with .booln2 && .booln3
+        nchildren = 0
+        for ce in lca.edge # don't add new edge to lca.edge yet
+            cn = getchild(ce)
+            cn === lca && continue
+            if cn.booln2 && cn.booln3 # then cn should become a child of newnode
+                nchildren += 1
+                PN.removeEdge!(lca, ce) # disconnect lca-ce, connect newnode-ce
+                PN.removeNode!(lca, ce)
+                push!(newnode.edge, ce)
+                push!(ce.node, newnode) # agrees with ischild1=true
             end
         end
-
-
+        nchildren > 0 ||
+            error("could not connect the new clade node to any children. perhaps trivial 0..0 clade?")
+        # todo: check for this earlier to avoid creating a corrupted network
+        # now we can modify lca.edge and net
+        push!(lca.edge, newe)
+        push!(newnode.edge, newe)
+        PN.pushEdge!(net, newe)
+        PN.pushNode!(net, newnode)
     end
-
-    PN.directEdges!(net)
+    # PN.directEdges!(net) # not needed: .node vectors built to agree with ischild1
     return net
 end
 
-
+# assumes: bv[j] corresponds to the node numbered j: j=net.node[i].number
+function node2clade_intersection_initialize(net, bv)
+    for node net.node
+        if node.leaf
+            node.booln2 = node.booln3 = bv[node.number]
+        else
+            node.booln2 = false # OR of children
+            node.booln3 = true  # AND of children
+        end
+    end
+end
+# assumes that
+# 1. leaves have been initialized: true if in the clade, false otherwise
+# 2. edges are correctly directed (correct ischild1 to use getchild)
+function node2clade_intersection_update(pn::PN.Node)
+    pn.leaf && return(nothing)
+    for ce in node.edge # loop over 'c'hild 'e'dges
+        cn = getchild(ce)
+        cn === pn && continue # skip parent edge
+        if cn.booln2 && !pn.booln2 # OR from all children
+            pn.booln2 = true
+        end
+        if !cn.booln3 && pn.booln3 # AND from all children
+            pn.booln2 = false
+        end
+    end
+    return nothing
+end
