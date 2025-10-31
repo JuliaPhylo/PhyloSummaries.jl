@@ -19,5 +19,5 @@ const PN = PhyloNetworks
 end
 
 @testset "PhyloSummaries.jl" begin
-    include("test_consensusTrees.jl")
+    include("test_consensustrees.jl")
 end

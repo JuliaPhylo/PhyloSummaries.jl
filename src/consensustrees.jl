@@ -86,6 +86,7 @@ function consensustree(
         count_bipartitions!(splitcounts, net, taxa, rooted)
     end
     consensus_bipartitions!(splitcounts, proportion, length(trees))
+    # println(splitcounts)
     return create_tree_from_bipartition_set(taxa, splitcounts) #TODO
 end
 
@@ -231,6 +232,7 @@ function consensus_bipartitions!(
             delete!(splitcounts, candidate_bp)
         end
     end
+
     return splitcounts
 end
 
@@ -338,31 +340,40 @@ function create_tree_from_bipartition_set(
             end
             foundlca && break # of while loop
         end
+        println(lca.number, ": LCA of clade ")
         # create a new node and new edge
-        newnode = PN.Node(node_counter,false)
+        newnode = PN.Node(node_counter,false)   
         newnode.fvalue = weight # store clade support in the clade's MRCA
         node_counter -= 1
         # new edge: store clade support as edge length and in .y
-        newe = PN.Edge(edge_counter,weight,false,weight,0.0,1.0,
-            [newnode,lca], true, # ischild1 is true: to agre with node ordering
-            -1,true,true,false)
+        newe = PN.Edge(edge_counter,float(weight))
+        newe.node= [newnode,lca]
         edge_counter += 1
         # solve Q2: find all the lca's children with .booln2 && .booln3
         nchildren = 0
+        # causing issues when modifying lca.edge while iterating over it
+        edgesinbipartition = PN.EdgeT{PN.Node}[]
         for ce in lca.edge # don't add new edge to lca.edge yet
             cn = getchild(ce)
+            println(cn.name, " "  ,   cn.number)
+
             cn === lca && continue
             if cn.booln2 && cn.booln3 # then cn should become a child of newnode
+                println(cn.name)
+                push!(edgesinbipartition, ce)
                 nchildren += 1
-                PN.removeEdge!(lca, ce) # disconnect lca-ce, connect newnode-ce
-                PN.removeNode!(lca, ce)
-                push!(newnode.edge, ce)
-                push!(ce.node, newnode) # agrees with ischild1=true
+                
             end
         end
         nchildren > 0 ||
             error("could not connect the new clade node to any children. perhaps trivial 0..0 clade?")
-        # todo: check for this earlier to avoid creating a corrupted network
+        for ce in edgesinbipartition
+            PN.removeEdge!(lca, ce) # disconnect lca-ce, connect newnode-ce
+            PN.removeNode!(lca, ce)
+            push!(newnode.edge, ce)
+            push!(ce.node, newnode) # agrees with ischild1=true
+        end
+            # todo: check for this earlier to avoid creating a corrupted network
         # now we can modify lca.edge and net
         push!(lca.edge, newe)
         push!(newnode.edge, newe)
@@ -375,9 +386,12 @@ end
 
 # assumes: bv[j] corresponds to the node numbered j: j=net.node[i].number
 function node2clade_intersection_initialize(net, bv)
-    for node net.node
+    for node in net.node
         if node.leaf
             node.booln2 = node.booln3 = bv[node.number]
+            print(node.name, ": ", node.booln2, ", ", node.booln3, "\n")
+            println("----")
+
         else
             node.booln2 = false # OR of children
             node.booln3 = true  # AND of children
@@ -389,14 +403,15 @@ end
 # 2. edges are correctly directed (correct ischild1 to use getchild)
 function node2clade_intersection_update(pn::PN.Node)
     pn.leaf && return(nothing)
-    for ce in node.edge # loop over 'c'hild 'e'dges
+    for ce in pn.edge # loop over 'c'hild 'e'dges
         cn = getchild(ce)
         cn === pn && continue # skip parent edge
+        node2clade_intersection_update(cn)
         if cn.booln2 && !pn.booln2 # OR from all children
             pn.booln2 = true
         end
         if !cn.booln3 && pn.booln3 # AND from all children
-            pn.booln2 = false
+            pn.booln3 = false
         end
     end
     return nothing

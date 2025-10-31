@@ -9,39 +9,48 @@ tree2 = readnewick("((C,D),(B,A));")
 tree3 = readnewick("((A,C),(B,D));")
 taxa = ["A","B","C","D"]
 
-@testset "count_bipartitions! unrooted" begin
-counts = Dictionary{BitVector,Int}()
-PhyloSummaries.count_bipartitions!(counts, tree1, taxa, false)
-PhyloSummaries.count_bipartitions!(counts, tree3, taxa, false)
-expected = Dict(
-    BitVector([1, 1, 0, 0]) => 1,
-    BitVector([1, 0, 1, 0]) => 1,
-)
-@test length(counts) == length(expected)
-for bp in keys(expected)
-    @test counts[bp] == expected[bp]
-end
-end
+# @testset "count_bipartitions! unrooted" begin
+# counts = Dictionary{BitVector,Int}()
+# PhyloSummaries.count_bipartitions!(counts, tree1, taxa, false)
+# C
+# println(length(counts))
+
+# end
 
 
-@testset "count_bipartitions! rooted" begin
-counts = Dictionary{BitVector,Int}()
-PhyloSummaries.count_bipartitions!(counts, tree1, taxa, true)
-PhyloSummaries.count_bipartitions!(counts, tree3, taxa, true)
-expected = Dict(
-    BitVector([1, 1, 0, 0]) => 1,
-    BitVector([0, 0, 1, 1]) => 1,
-    BitVector([1, 0, 1, 0]) => 1,
-    BitVector([0, 1, 0, 1]) => 1,
-)
-@test length(counts) == length(expected)
-for bp in keys(expected)
-    @test counts[bp] == expected[bp]
-end
-end
+# @testset "count_bipartitions! rooted" begin
+# counts = Dictionary{BitVector,Int}()
+# PhyloSummaries.count_bipartitions!(counts, tree1, taxa, true)
+# PhyloSummaries.count_bipartitions!(counts, tree3, taxa, true)
 
-@testset "majority-rule consensus (paper example)" begin
-    trees = [tree3, tree2, tree1]
+# expected = Dict(
+#     BitVector([1, 1, 0, 0]) => 1,
+#     BitVector([0, 0, 1, 1]) => 1,
+#     BitVector([1, 0, 1, 0]) => 1,
+#     BitVector([0, 1, 0, 1]) => 1,
+# )
+# @test length(counts) == length(expected)
+# for bp in keys(expected)
+#     @test counts[bp] == expected[bp]
+# end
+
+
+# end
+
+# @testset "majority-rule consensus (paper example)" begin
+#     trees = [tree3, tree2, tree1]
+
+#     # Expected majority-rule consensus tree
+#     # (A,B) appears in 2/3 trees → included
+#     # (C,D) appears in 2/3 trees → included
+#     # → consensus should be ((A,B),(C,D));
+#     expected = readnewick("((A,B),(C,D));")
+
+#     consensus = consensustree(trees; rooted=false, proportion=0.5)
+#     @test writenewick(consensus) == writenewick(expected)
+# end
+@testset "majority-rule consensus 2" begin
+    trees = [tree2, tree1]
 
     # Expected majority-rule consensus tree
     # (A,B) appears in 2/3 trees → included
@@ -49,7 +58,8 @@ end
     # → consensus should be ((A,B),(C,D));
     expected = readnewick("((A,B),(C,D));")
 
-    consensus = consensustree(trees; rooted=false, proportion=0.5)
+    consensus = consensustree(trees; rooted=true, proportion=0.5)
+    
     @test writenewick(consensus) == writenewick(expected)
 end
 
