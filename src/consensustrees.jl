@@ -41,21 +41,25 @@ assumptions and **warnings**:
 # example
 
 ```jldoctest
-julia> nwk = ["((c,d),((a1,a2),b))", "(((a2,a1),b),(c,d))", "(((a1,a2),c),d,b)"];
+julia> nwk = ["((c,d),((a1,a2),b));", "(((a2,a1),b),c,d);", "(((a1,a2),c),d,b);"];
 
 julia> treesample = readnewick.(nwk);
 
-julia> con = consensustree(treesample); writenewick(con)
-# fixit: write expected result
+julia> con = consensustree(treesample); writenewick(con, round=true)
+"(c,d,((a2,a1):1.0,b):0.667);"
 
-julia> consensustree(treesample; rooted=true) |> writenewick
-# fixit
+julia> con = consensustree(treesample; rooted=true); writenewick(con, round=true)
+"(c,d,(b,(a1,a2):1.0):0.667);"
 
-julia> consensustree(treesample; rooted=true, proportion=0) |> writenewick
-# fixit
+julia> consensustree(treesample; rooted=true, proportion=0) # greedy consensus
+HybridNetwork, Semidirected Network
+8 edges
+9 nodes: 5 tips, 0 hybrid nodes, 4 internal tree nodes.
+tip labels: a1, a2, b, c, ...
+(((a2,a1):1.0,b):0.667,(d,c):0.333);
 
 julia> consensustree(treesample; proportion=0.75) |> writenewick
-# fixit
+"(b,c,d,(a2,a1):1.0);"
 ```
 """
 function consensustree(
@@ -85,9 +89,9 @@ function consensustree(
             throw(ArgumentError("input trees do not share the same taxon set"))
         count_bipartitions!(splitcounts, net, taxa, rooted)
     end
-    consensus_bipartitions!(splitcounts, proportion, length(trees))
-    # println(splitcounts)
-    return create_tree_from_bipartition_set(taxa, splitcounts) #TODO
+    ntrees = length(trees)
+    consensus_bipartitions!(splitcounts, proportion, ntrees)
+    return tree_from_bipartitions(taxa, splitcounts, ntrees)
 end
 
 """
@@ -162,7 +166,7 @@ over 50% must be compatible with each other. Bipartitions are added one by one,
 from most to least frequent, so long as they are compatible with bipartititions
 previously kept.
 
-The result can be passed to [`create_tree_from_bipartition_set`](@ref) to
+The result can be passed to [`tree_from_bipartitions`](@ref) to
 construct the associated consensus tree topology.
 `proportion = 0.5` corresponds to the majority-rule consensus tree and
 `proportion = 0` to a greedy consensus tree.
@@ -232,7 +236,6 @@ function consensus_bipartitions!(
             delete!(splitcounts, candidate_bp)
         end
     end
-
     return splitcounts
 end
 
@@ -259,9 +262,12 @@ function treecompatible(a::BitVector, b::BitVector)::Bool
 end
 
 """
-    create_tree_from_bipartition_set(taxa, bipartitions)
+    tree_from_bipartitions(taxa::Vector{String},
+        bipartitions::Dictionary{BitVector,Int}, ntrees::Number)
 
 Construct a consensus tree topology from a compatible set of bipartitions.
+
+todo: finalize this docstring
 
 Each bipartition (represented as a `BitVector`) is converted into a cluster
 of taxa and combined hierarchically to reconstruct the tree structure.
@@ -269,11 +275,11 @@ Clusters are processed in ascending order of size, ensuring that smaller
 subtrees are nested before larger clusters.  
 Trivial clusters (size 1 or equal to the number of taxa) are ignored.
 
-This function assumes that the bipartitions provided are mutually compatible
+This function assumes that the bipartitions provided are pairwise tree-compatible
 and collectively represent a valid tree. 
 
 # Arguments
-- `taxa::Vector{String}`: Ordered list of taxon labels corresponding to the bit positions.
+- `taxa`: Ordered list of taxon labels corresponding to the bit positions.
 - `bipartitions::Vector{BitVector}`: Compatible bipartitions representing clusters of taxa.
 
 # Returns
@@ -283,13 +289,14 @@ A `PhyloNetworks.HybridNetwork` object representing the reconstructed consensus 
 ```julia
 taxa = ["A","B","C","D"]
 bipartitions = [BitVector([1,1,0,0]), BitVector([0,0,1,1])]
-tree = create_tree_from_bipartition_set(taxa, bipartitions)
+tree = tree_from_bipartitions(taxa, bipartitions)
 # → HybridNetwork for ((A,B),(C,D));
 ```
 """
-function create_tree_from_bipartition_set(
+function tree_from_bipartitions(
     taxa::Vector{String},
     bipartitions::Dictionary{BitVector,Int},
+    ntrees::Number,
 )
     n = length(taxa)
     net = PN.HybridNetwork()
@@ -299,7 +306,7 @@ function create_tree_from_bipartition_set(
     # leaves: numbered 1:n
     #leaf_nodes = Dict{String, PN.Node}() # todo: remove if not needed
     for (i,t) in enumerate(taxa)
-        edge = PN.Edge(i,1.0) # ischild1 is true by default. length=1 for 100% support
+        edge = PN.Edge(i,-1.0) # ischild1 is true by default. length=-1 for NA
         leaf = PN.Node(i,true,false, # true: leaf
             -1.,[edge],false,false,false,false,false,false,-1,nothing,-1,-1,t)
         PN.pushNode!(net, leaf)
@@ -315,6 +322,7 @@ function create_tree_from_bipartition_set(
     node_counter = -3
     edge_counter = n+1
     for (bv,weight) in pairs(bipartitions)
+        all(bv) || all(.!bv) && @warn("will skip trivial clade: $bv")
         #= *before* modifying the network, traverse it to find
         Q1. which node 'lca' should be the parent of the new node, and
         Q2. which children of 'lca' should become children of the new node.
@@ -342,38 +350,35 @@ function create_tree_from_bipartition_set(
         end
         println(lca.number, ": LCA of clade ")
         # create a new node and new edge
-        newnode = PN.Node(node_counter,false)   
+        newnode = PN.Node(node_counter,false)
+        weight /= ntrees
         newnode.fvalue = weight # store clade support in the clade's MRCA
         node_counter -= 1
         # new edge: store clade support as edge length and in .y
-        newe = PN.Edge(edge_counter,float(weight))
-        newe.node= [newnode,lca]
+        newe = PN.Edge(edge_counter,weight,false,weight,0.0,1.0,
+            [newnode,lca], true, # ischild1 is true: to agre with node ordering
+            true,-1,true,true,false)
         edge_counter += 1
         # solve Q2: find all the lca's children with .booln2 && .booln3
         nchildren = 0
-        # causing issues when modifying lca.edge while iterating over it
-        edgesinbipartition = PN.EdgeT{PN.Node}[]
-        for ce in lca.edge # don't add new edge to lca.edge yet
+        nedges = length(lca.edge)
+        for i in nedges:-1:1 # delete elements in lca.edge from the end
+            ce = lca.edge[i] # don't add new edge to lca.edge yet
             cn = getchild(ce)
             println(cn.name, " "  ,   cn.number)
 
             cn === lca && continue
             if cn.booln2 && cn.booln3 # then cn should become a child of newnode
                 println(cn.name)
-                push!(edgesinbipartition, ce)
                 nchildren += 1
-                
+                deleteat!(lca.edge,i) # disconnect lca-ce, connect newnode-ce
+                push!(newnode.edge, ce)
+                ce.node[2] = newnode # replaces lca, because ischil1 true and lca was parent
+                # ischild1=true still agrees with newnode being the parent
             end
         end
         nchildren > 0 ||
-            error("could not connect the new clade node to any children. perhaps trivial 0..0 clade?")
-        for ce in edgesinbipartition
-            PN.removeEdge!(lca, ce) # disconnect lca-ce, connect newnode-ce
-            PN.removeNode!(lca, ce)
-            push!(newnode.edge, ce)
-            push!(ce.node, newnode) # agrees with ischild1=true
-        end
-            # todo: check for this earlier to avoid creating a corrupted network
+            error("could not connect the new clade node to any children")
         # now we can modify lca.edge and net
         push!(lca.edge, newe)
         push!(newnode.edge, newe)
