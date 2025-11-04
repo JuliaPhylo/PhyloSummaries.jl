@@ -1,13 +1,15 @@
 
 @testset "consensus trees" begin
 
-@test_throws ArgumentError consensustree(PN.HybridNetwork[])
-@test_throws ArgumentError consensustree([readnewick("((A,#H1),(B)#H1);")])
-
 tree1 = readnewick("((A,B),(C,D));")
 tree2 = readnewick("((C,D),(B,A));")
 tree3 = readnewick("((A,C),(B,D));")
 taxa = ["A","B","C","D"]
+
+@test_throws ArgumentError consensustree(PN.HybridNetwork[])
+@test_throws ArgumentError consensustree([readnewick("((A,#H1),(B)#H1);")])
+@test_throws "not share the same taxon set" consensustree([tree1, readnewick("((A,B),C);")])
+@test_throws "not in taxon list" consensustree([tree1, readnewick("((A,B),C,E);")])
 
 @testset "count_bipartitions! unrooted" begin
 counts = Dictionary{BitVector,Int}()
