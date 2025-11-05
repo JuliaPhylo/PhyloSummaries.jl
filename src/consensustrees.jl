@@ -2,7 +2,7 @@
 """
     consensustree(trees::AbstractVector{PN.HybridNetwork};
                   rooted=false,
-                  proportion=0.5,
+                  proportion=0,
                   storesupport=:egdelength)
 
 Consensus tree summarizing the bipartitions (or clades) shared by more than
@@ -11,24 +11,27 @@ An `ArgumentError` is thrown if one input network is not a tree, or the list of
 input trees is empty, or if the input trees do not all have the same tip labels.
 Input trees are not modified.
 
-output: tuple `(tree, supportvalues)` where the consensus tree is an
-object of type `HybridNetwork`, and `supportvalues` is a dictionary mapping the
-edge numbers in `tree` to their frequencies in the input trees.
+Output: consensus tree as an object of type `HybridNetwork`, with the
+bipartition (or clade) support values stored as edge length, and also in
+more "hidden" internal fields that should not be relied upon as they may change:
+in each edge `.y` value, and in each node `.fvalue` for the clade descendant
+from that node. Note that storing support values at nodes is *unsafe* for
+unrooted bipartitions, as the bipartition associated with the node's descendants
+given some rooting may become *one* of node's child subclade after re-rooting.
 
 fixit:
-- return support values
-- store support values as edge lengths
-- write new `writenewick(net, edgesupport)`
-- in jldoctest: add example to write edge support as part of newick string
-- and add example to plot the network with support shown for each edge
+- in docs/manual: include an example to plot the network with support shown
+  for each edge
+- use edge lengths in input trees...
 
 By default, input trees are considered unrooted, and bipartitions are considered.
 Use `rooted=true` to consider all input trees as rooted, in which case clades
 (rather than bipartitions) are used to build the output rooted consensus tree.
 
-By default, the majority-rule consensus is calculated: the tree is built from
-the bipartitions (or clades) present in more than 50% of the input trees.
-The greedy consensus tree can be obtained by using `proportion=0`.
+By default, the greedy consensus consensus is calculated: the tree is built from
+the bipartitions (or clades) with the highest support, until no more can be added.
+The majority-rule tree can be obtained by using `proportion=0.5`: it is built
+only from bipartitions (or clades) present in more than 50% of the input trees.
 
 assumptions and **warnings**:
 - Input trees are assumed to have their edges correctly directed.
@@ -48,15 +51,17 @@ julia> treesample = readnewick.(nwk);
 julia> con = consensustree(treesample); writenewick(con, round=true)
 "(c,d,((a2,a1):1.0,b):0.667);"
 
-julia> con = consensustree(treesample; rooted=true); writenewick(con, round=true)
-"(c,d,(b,(a1,a2):1.0):0.667);"
+julia> con = consensustree(treesample; rooted=true); # greedy consensus
 
-julia> consensustree(treesample; rooted=true, proportion=0) # greedy consensus
-HybridNetwork, Semidirected Network
-8 edges
-9 nodes: 5 tips, 0 hybrid nodes, 4 internal tree nodes.
-tip labels: a1, a2, b, c, ...
+julia> writenewick(con, round=true)
 (((a2,a1):1.0,b):0.667,(d,c):0.333);
+
+julia> consensustree(treesample; rooted=true, proportion=0.5) # majority-rule
+HybridNetwork, Semidirected Network
+7 edges
+8 nodes: 5 tips, 0 hybrid nodes, 3 internal tree nodes.
+tip labels: a1, a2, b, c, ...
+"(c,d,(b,(a1,a2):1.0):0.667);"
 
 julia> consensustree(treesample; proportion=0.75) |> writenewick
 "(b,c,d,(a2,a1):1.0);"
@@ -65,7 +70,7 @@ julia> consensustree(treesample; proportion=0.75) |> writenewick
 function consensustree(
     trees::AbstractVector{PN.HybridNetwork};
     rooted::Bool=false,
-    proportion::Number=0.5,
+    proportion::Number=0,
     storesupport::Symbol=:egdelength,
 )
     isempty(trees) &&
@@ -74,12 +79,20 @@ function consensustree(
         throw(ArgumentError("consensustree requires input trees (without reticulations)"))
     if length(trees) == 1
         net = deepcopy(trees[1])
-        suppressroot!(net) # requires PN v1.3
+        rooted || suppressroot!(net) # requires PN v1.3
         #= PN v1.3 is currently in branch 'master'.
         do this in some environment (but not in PhyloSummaries' main folder!)
         pkg> add PhyloNetworks#master
         these complications will go away after v1.3.0 is registered. =#
-        return 
+        # to preserve original lengths, do *not* store support as edge lengths
+        # fixit: this is inconsistent with the case of 2+ input trees
+        for e in net.edge
+            if !isexternal(e)
+                e.y = 1.0
+                getchild(e).fvalue = 1.0
+            end
+        end
+        return net
     end
     taxa = sort!(tiplabels(trees[1]))
 
