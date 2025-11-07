@@ -79,38 +79,40 @@ end # of sub-testset
     # (A,B) appears in 2/3 trees → included
     # (C,D) appears in 2/3 trees → included
     # → consensus should be ((A,B),(C,D));
-    expected = readnewick("((A,B),(C,D));")
 
-    consensus = consensustree(trees; rooted=false, proportion=0.5)
-    @test writenewick(consensus) == writenewick(expected)
+    consensus = consensustree(trees; rooted=true, proportion=0.5)
+    @test writenewick(consensus, round = true) == "((D,C):0.667,(B,A):0.667);"
 end
 =#
+@testset "majority-rule consensus 2" begin
+    trees = [tree2, tree1]
+
+    # Expected majority-rule consensus tree
+    # (A,B) appears in 2/3 trees → included
+    # (C,D) appears in 2/3 trees → included
+    # → consensus should be ((A,B),(C,D));
+
+    consensus = consensustree(trees; rooted=true, proportion=0.5)
+    @test writenewick(consensus) == "((D,C):1.0,(B,A):1.0);"
+end
 
 
-# @testset "tuple_from_clustervector" begin
-#     v1 = [0, 0, 1, 1]
-#     v2 = [1, 1, 0, 0]
-#     v3 = [1, 1, 1, 1]  # trivial
-#     v4 = [0, 0, 0, 0]  # trivial
+@testset "consensustree (rooted majority, 5 trees, 5 taxa)" begin
+        
+    nwk = [
+        "(((A,B),(C,D)),E);",
+        "((E,(A,B)),(C,D));",
+        "((A,B),(C,(D,E)));",
+        "(((A,B),E),(C,D));",
+        "((A,B),((C,D),E));",
+    ]
+    trees = readnewick.(nwk)
 
-#     @test PhyloSummaries.tuple_from_clustervector(v1, false) == BitVector([0,0,1,1])
-#     @test PhyloSummaries.tuple_from_clustervector(v2, false) == BitVector([1,1,0,0])
-#     @test isnothing(PhyloSummaries.tuple_from_clustervector(v3, false))
-#     @test isnothing(PhyloSummaries.tuple_from_clustervector(v4, false))
-# end
+    con = consensustree(trees; rooted=true, proportion=0.5)
 
-# @testset "consensus_bipartition filtering" begin
-#     taxa = ["A","B","C","D"]
-#     splitcounts = Dict(
-#         BitVector([1,1,0,0]) => 2,
-#         BitVector([1,0,1,0]) => 1,
-#         BitVector([0,1,0,1]) => 3
-#     )
-#     result = PhyloSummaries.consensus_bipartition(splitcounts, 0.5, 4, taxa)
-#     # expect bipartitions with freq >= ceil(0.5*4)=2 → first and third included
-#     @test any(x -> x == BitVector([1,1,0,0]), result)
-#     @test any(x -> x == BitVector([0,1,0,1]), result)
-#     @test !any(x -> x == BitVector([1,0,1,0]), result)
-# end
+
+    @test writenewick(con) =="(E,(B,A):1.0,(D,C):0.8);"
+end
+
 
 end

@@ -280,8 +280,6 @@ end
 
 Construct a consensus tree topology from a compatible set of bipartitions.
 
-todo: finalize this docstring
-
 Each bipartition (represented as a `BitVector`) is converted into a cluster
 of taxa and combined hierarchically to reconstruct the tree structure.
 Clusters are processed in ascending order of size, ensuring that smaller
@@ -291,20 +289,11 @@ Trivial clusters (size 1 or equal to the number of taxa) are ignored.
 This function assumes that the bipartitions provided are pairwise tree-compatible
 and collectively represent a valid tree. 
 
-# Arguments
-- `taxa`: Ordered list of taxon labels corresponding to the bit positions.
-- `bipartitions::Vector{BitVector}`: Compatible bipartitions representing clusters of taxa.
 
 # Returns
 A `PhyloNetworks.HybridNetwork` object representing the reconstructed consensus tree.
 
-# Example
-```julia
-taxa = ["A","B","C","D"]
-bipartitions = [BitVector([1,1,0,0]), BitVector([0,0,1,1])]
-tree = tree_from_bipartitions(taxa, bipartitions)
-# → HybridNetwork for ((A,B),(C,D));
-```
+
 """
 function tree_from_bipartitions(
     taxa::Vector{String},
@@ -361,7 +350,6 @@ function tree_from_bipartitions(
             end
             foundlca && break # of while loop
         end
-        println(lca.number, ": LCA of clade ")
         # create a new node and new edge
         newnode = PN.Node(node_counter,false)
         weight /= ntrees
@@ -378,11 +366,9 @@ function tree_from_bipartitions(
         for i in nedges:-1:1 # delete elements in lca.edge from the end
             ce = lca.edge[i] # don't add new edge to lca.edge yet
             cn = getchild(ce)
-            println(cn.name, " "  ,   cn.number)
 
             cn === lca && continue
             if cn.booln2 && cn.booln3 # then cn should become a child of newnode
-                println(cn.name)
                 nchildren += 1
                 deleteat!(lca.edge,i) # disconnect lca-ce, connect newnode-ce
                 push!(newnode.edge, ce)
@@ -398,7 +384,7 @@ function tree_from_bipartitions(
         PN.pushEdge!(net, newe)
         PN.pushNode!(net, newnode)
     end
-    # PN.directEdges!(net) # not needed: .node vectors built to agree with ischild1
+
     return net
 end
 
@@ -407,9 +393,6 @@ function node2clade_intersection_initialize(net, bv)
     for node in net.node
         if node.leaf
             node.booln2 = node.booln3 = bv[node.number]
-            print(node.name, ": ", node.booln2, ", ", node.booln3, "\n")
-            println("----")
-
         else
             node.booln2 = false # OR of children
             node.booln3 = true  # AND of children
@@ -424,7 +407,7 @@ function node2clade_intersection_update(pn::PN.Node)
     for ce in pn.edge # loop over 'c'hild 'e'dges
         cn = getchild(ce)
         cn === pn && continue # skip parent edge
-        node2clade_intersection_update(cn)
+        node2clade_intersection_update(cn) 
         if cn.booln2 && !pn.booln2 # OR from all children
             pn.booln2 = true
         end
