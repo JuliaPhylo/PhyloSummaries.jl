@@ -1,5 +1,5 @@
 
-@testset "consensus trees" begin
+
 
 tree1 = readnewick("((A,B),(C,D));")
 tree2 = readnewick("((C,D),(B,A));") # ≈ tree1
@@ -51,22 +51,21 @@ end
 # 4 taxa, 5 trees, missing edge lengths
 trees = [tree2,tree1,tree3,tree4,tree5]
 con = consensustree(trees; rooted=true, proportion=0.8)
-writenewick(con) == "(A,B,C,D);"
+writenewick(con,round=true) == "(A,B,C,D);"
 con = consensustree(trees; proportion=0.7)
-writenewick(con) == "(C,D,(B,A):0.8);"
+writenewick(con,round=true) == "(C,D,(B,A):0.8);"
 con = consensustree(trees; rooted=true) # greedy
-@test_broken writenewick(con) == "((B,A):0.8,(D,C):0.4);"
+@test writenewick(con,round=true) == "((D,C):0.4,(B,A):0.8);"
 # fixit: currently ((B,A):0.8,(D,(C):0.2):0.4);
 # problem: extra degree-2 node to C
-@test_broken [n.fvalue for n in con.node if !n.leaf] == [-1,.8,.4]
-@test_broken [e.y for e in con.edge if !isexternal(e)] == [.8,.4]
+@test [n.fvalue for n in con.node if !n.leaf] == [-1,.4,.8]
+@test [e.y for e in con.edge if !isexternal(e)] == [.4,.8]
 
 tfile = joinpath(@__DIR__,"..","test","raxmltrees.tre")
 # tfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","raxmltrees.tre")
 trees = readmultinewick(tfile)
 con = consensustree(trees)
-@test_broken writenewick(con) == "(E,O,((A,B):0.833,(D,C):1.0):0.533);"
-# fixit: double-check the clades' support values
+@test writenewick(con,round=true) == "(E,O,((A,B):0.833,(C,D):1.0):0.533);" 
 # fixit: problem with 3 extra nodes...
 
 end # of sub-testset
@@ -115,4 +114,4 @@ end
 end
 
 
-end
+

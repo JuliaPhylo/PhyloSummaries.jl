@@ -95,14 +95,19 @@ function consensustree(
         return net
     end
     taxa = sort!(tiplabels(trees[1]))
-
+    taxa_set = Set(taxa)
     splitcounts = Dictionary{BitVector,Int}()
     for net in trees
         length(net.leaf) == length(taxa) ||
-            throw(ArgumentError("input trees do not share the same taxon set"))
+        throw(ArgumentError("input trees do not share the same taxon set"))
+        for leaf in net.leaf
+            leaf.name in taxa_set ||
+                throw(ArgumentError("taxon $(leaf.name) not in taxon list"))
+        end
         count_bipartitions!(splitcounts, net, taxa, rooted)
     end
     ntrees = length(trees)
+
     consensus_bipartitions!(splitcounts, proportion, ntrees)
     return tree_from_bipartitions(taxa, splitcounts, ntrees)
 end
@@ -138,6 +143,9 @@ function count_bipartitions!(
         end
     end
     hw_matrix = hardwiredclusters(net, taxa)
+    # @info tipLabels(net)
+    # @info "taxa: $taxa"
+    # @info "hardwired cluster matrix size: $(size(hw_matrix))"
     taxa_cols = 2:(length(taxa) + 1)
     for row_idx in axes(hw_matrix, 1)
         split = tuple_from_clustervector(view(hw_matrix, row_idx, taxa_cols), rooted)
@@ -161,6 +169,11 @@ both would return tuple `(true,true,false,false)`.
 """
 function tuple_from_clustervector(cluster01vector::AbstractVector, rooted::Bool)
     if all(isequal(1), cluster01vector) || all(isequal(0), cluster01vector)
+        return nothing
+    end
+    # if there is ony one '1' or only one '0', then the bipartition is trivial
+
+    if sum(cluster01vector) == 1
         return nothing
     end
     if !rooted && cluster01vector[end] == 1
@@ -227,21 +240,25 @@ function consensus_bipartitions!(
     if threshold2 > 0 # 0 for greedy consensus: frequent case
         filter!(v -> v > threshold2, splitcounts)
     end
-    sort!(splitcounts, rev=true) # works for a Dictionary, but not a Dict
+    sort!(splitcounts, rev=false) # works for a Dictionary, but not a Dict
     nsplits = 0
-    for (candidate_bp, freq) in pairs(splitcounts)
+    for (candidate_bp, freq) in reverse(pairs(splitcounts)) # reverse order because we delete values
         if freq > threshold1
             nsplits += 1
             continue
         end
         # freq > threshold2 ensured by previous filtering
         iscompat = true
-        for (i,bp) in enumerate(keys(splitcounts))
-            i > nsplits && break # only compare with previous splits
-            if !treecompatible(candidate_bp, bp)
+        count = 1
+        k  = collect(keys(splitcounts)) 
+
+        for i in length((k)):-1:0 #traverse the dictionary in reverse order
+            count > nsplits && break # only compare with previous splits
+            if !treecompatible(candidate_bp, k[i])
                 iscompat = false
                 break
             end
+            count+=1
         end
         if iscompat # then keep candidate bipartition
             nsplits += 1
@@ -249,6 +266,8 @@ function consensus_bipartitions!(
             delete!(splitcounts, candidate_bp)
         end
     end
+
+
     return splitcounts
 end
 
@@ -265,12 +284,15 @@ This can be checked by the condition: A∩B is empty, or A⊆B, or B⊆A.
 function treecompatible(a::BitVector, b::BitVector)::Bool
     @assert length(a) == length(b)
     inter = a .& b
-    if !any(inter)                     
+
+    if !any(inter)    
         return true
     end
-    if inter == a || inter == b       
+    if inter == a || inter == b   
         return true
     end
+
+
     return false
 end
 
@@ -301,18 +323,18 @@ function tree_from_bipartitions(
     ntrees::Number,
 )
     n = length(taxa)
+
     net = PN.HybridNetwork()
     root = PN.Node(-2,false) # root has number -2
     # do *not* push the root to net.node yet: push leaves first, to make
     # taxa[i] be the label of net.node[i], so later we can use bv[leaf.number]
     # leaves: numbered 1:n
-    #leaf_nodes = Dict{String, PN.Node}() # todo: remove if not needed
+
     for (i,t) in enumerate(taxa)
         edge = PN.Edge(i,-1.0) # ischild1 is true by default. length=-1 for NA
         leaf = PN.Node(i,true,false, # true: leaf
             -1.,[edge],false,false,false,false,false,false,-1,nothing,-1,-1,t)
         PN.pushNode!(net, leaf)
-        #leaf_nodes[t] = leaf # todo: remove if not needed
         edge.node = [leaf, root] # to match ischild1 is true
         PN.pushEdge!(net, edge)
         push!(root.edge, edge)
