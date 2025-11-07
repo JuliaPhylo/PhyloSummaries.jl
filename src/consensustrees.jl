@@ -2,8 +2,7 @@
 """
     consensustree(trees::AbstractVector{PN.HybridNetwork};
                   rooted=false,
-                  proportion=0,
-                  storesupport=:egdelength)
+                  proportion=0)
 
 Consensus tree summarizing the bipartitions (or clades) shared by more than
 the required `proportion` of input `trees`.
@@ -71,7 +70,6 @@ function consensustree(
     trees::AbstractVector{PN.HybridNetwork};
     rooted::Bool=false,
     proportion::Number=0,
-    storesupport::Symbol=:egdelength,
 )
     isempty(trees) &&
         throw(ArgumentError("consensustree requires at least one network"))
