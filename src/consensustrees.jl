@@ -95,19 +95,20 @@ function consensustree(
         return net
     end
     taxa = sort!(tiplabels(trees[1]))
-    taxa_set = Set(taxa)
+    # taxa_set = Set(taxa)
     splitcounts = Dictionary{BitVector,Int}()
     for net in trees
         length(net.leaf) == length(taxa) ||
-        throw(ArgumentError("input trees do not share the same taxon set"))
+            throw(ArgumentError("input trees do not share the same taxon set"))
+        #= not needed: will be checked by hardwiredclusters
         for leaf in net.leaf
             leaf.name in taxa_set ||
                 throw(ArgumentError("taxon $(leaf.name) not in taxon list"))
         end
+        =#
         count_bipartitions!(splitcounts, net, taxa, rooted)
     end
     ntrees = length(trees)
-
     consensus_bipartitions!(splitcounts, proportion, ntrees)
     return tree_from_bipartitions(taxa, splitcounts, ntrees)
 end
@@ -168,12 +169,9 @@ For example, clusters `0011` and `1100` represent the same bipartition, and
 both would return tuple `(true,true,false,false)`.
 """
 function tuple_from_clustervector(cluster01vector::AbstractVector, rooted::Bool)
-    if all(isequal(1), cluster01vector) || all(isequal(0), cluster01vector)
-        return nothing
-    end
-    # if there is ony one '1' or only one '0', then the bipartition is trivial
-
-    if sum(cluster01vector) == 1
+    n1 = sum(cluster01vector)
+    n0 = length(cluster01vector)-n1
+    if n1 <= 1 || n0 <= 1 # trivial clusters
         return nothing
     end
     if !rooted && cluster01vector[end] == 1
@@ -242,6 +240,7 @@ function consensus_bipartitions!(
     end
     sort!(splitcounts, rev=false) # works for a Dictionary, but not a Dict
     nsplits = 0
+    # do not reverse(pairs(splitcounts)): makes a full copy of the dictionary
     for (candidate_bp, freq) in reverse(pairs(splitcounts)) # reverse order because we delete values
         if freq > threshold1
             nsplits += 1
@@ -250,6 +249,7 @@ function consensus_bipartitions!(
         # freq > threshold2 ensured by previous filtering
         iscompat = true
         count = 1
+        # do not collect keys each time: makes a full copy
         k  = collect(keys(splitcounts)) 
 
         for i in length((k)):-1:0 #traverse the dictionary in reverse order
@@ -284,52 +284,46 @@ This can be checked by the condition: A∩B is empty, or A⊆B, or B⊆A.
 function treecompatible(a::BitVector, b::BitVector)::Bool
     @assert length(a) == length(b)
     inter = a .& b
-
-    if !any(inter)    
+    if !any(inter)
         return true
     end
-    if inter == a || inter == b   
+    if inter == a || inter == b
         return true
     end
-
-
     return false
 end
 
 """
     tree_from_bipartitions(taxa::Vector{String},
-        bipartitions::Dictionary{BitVector,Int}, ntrees::Number)
+        clusters::Dictionary{BitVector,<:Number},
+        ntrees::Number)
 
-Construct a consensus tree topology from a compatible set of bipartitions.
+Construct a consensus tree from a compatible set of cluster, as a
+`PhyloNetworks.HybridNetwork` object.
+Each cluster is represented as a `BitVector` key `b`, and is given a weight:
+its value `clusters[b]` divided by `ntrees`.
+For each cluster, a node is added to the consensus tree, whose descendant
+taxa is the set `taxa[i]` for indices `i` such that b[i] is true.
+The cluster's weight is stored in the node's `.fvalue` ---which is fragile,
+if clusters are to be considered as unrooted bipartitions. The weight is also
+stored in fields of the node's parent edge: `.length` and `.y`.
 
-Each bipartition (represented as a `BitVector`) is converted into a cluster
-of taxa and combined hierarchically to reconstruct the tree structure.
-Clusters are processed in ascending order of size, ensuring that smaller
-subtrees are nested before larger clusters.  
-Trivial clusters (size 1 or equal to the number of taxa) are ignored.
+Assumption: the input clusters are pairwise tree-compatible, which is the
+condition for them to be the clusters of a valid rooted tree.
 
-This function assumes that the bipartitions provided are pairwise tree-compatible
-and collectively represent a valid tree. 
-
-
-# Returns
-A `PhyloNetworks.HybridNetwork` object representing the reconstructed consensus tree.
-
-
+Used by: [`consensustree`](@ref)
 """
 function tree_from_bipartitions(
     taxa::Vector{String},
-    bipartitions::Dictionary{BitVector,Int},
+    bipartitions::Dictionary{BitVector,<:Number},
     ntrees::Number,
 )
     n = length(taxa)
-
     net = PN.HybridNetwork()
     root = PN.Node(-2,false) # root has number -2
     # do *not* push the root to net.node yet: push leaves first, to make
     # taxa[i] be the label of net.node[i], so later we can use bv[leaf.number]
     # leaves: numbered 1:n
-
     for (i,t) in enumerate(taxa)
         edge = PN.Edge(i,-1.0) # ischild1 is true by default. length=-1 for NA
         leaf = PN.Node(i,true,false, # true: leaf
@@ -406,7 +400,6 @@ function tree_from_bipartitions(
         PN.pushEdge!(net, newe)
         PN.pushNode!(net, newnode)
     end
-
     return net
 end
 
@@ -429,7 +422,7 @@ function node2clade_intersection_update(pn::PN.Node)
     for ce in pn.edge # loop over 'c'hild 'e'dges
         cn = getchild(ce)
         cn === pn && continue # skip parent edge
-        node2clade_intersection_update(cn) 
+        node2clade_intersection_update(cn)
         if cn.booln2 && !pn.booln2 # OR from all children
             pn.booln2 = true
         end

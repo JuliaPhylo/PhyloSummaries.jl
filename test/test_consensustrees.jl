@@ -1,5 +1,4 @@
-
-
+@testset "consensus trees" begin
 
 tree1 = readnewick("((A,B),(C,D));")
 tree2 = readnewick("((C,D),(B,A));") # ≈ tree1
@@ -51,13 +50,11 @@ end
 # 4 taxa, 5 trees, missing edge lengths
 trees = [tree2,tree1,tree3,tree4,tree5]
 con = consensustree(trees; rooted=true, proportion=0.8)
-writenewick(con,round=true) == "(A,B,C,D);"
+writenewick(con) == "(A,B,C,D);"
 con = consensustree(trees; proportion=0.7)
 writenewick(con,round=true) == "(C,D,(B,A):0.8);"
 con = consensustree(trees; rooted=true) # greedy
 @test writenewick(con,round=true) == "((D,C):0.4,(B,A):0.8);"
-# fixit: currently ((B,A):0.8,(D,(C):0.2):0.4);
-# problem: extra degree-2 node to C
 @test [n.fvalue for n in con.node if !n.leaf] == [-1,.4,.8]
 @test [e.y for e in con.edge if !isexternal(e)] == [.4,.8]
 
@@ -113,5 +110,4 @@ end
     @test writenewick(con) =="(E,(B,A):1.0,(D,C):0.8);"
 end
 
-
-
+end
