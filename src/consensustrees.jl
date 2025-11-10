@@ -142,9 +142,7 @@ function count_bipartitions!(
         end
     end
     hw_matrix = hardwiredclusters(net, taxa)
-    # @info tipLabels(net)
-    # @info "taxa: $taxa"
-    # @info "hardwired cluster matrix size: $(size(hw_matrix))"
+
     taxa_cols = 2:(length(taxa) + 1)
     for row_idx in axes(hw_matrix, 1)
         split = tuple_from_clustervector(view(hw_matrix, row_idx, taxa_cols), rooted)
@@ -239,7 +237,7 @@ function consensus_bipartitions!(
     sort!(splitcounts, rev=false) # works for a Dictionary, but not a Dict
     nsplits = 0
     # do not reverse(pairs(splitcounts)): makes a full copy of the dictionary
-    for (candidate_bp, freq) in reverse(pairs(splitcounts)) # reverse order because we delete values
+    for (candidate_bp, freq) in Iterators.reverse(pairs(splitcounts)) # reverse order because we delete values
         if freq > threshold1
             nsplits += 1
             continue
@@ -248,11 +246,9 @@ function consensus_bipartitions!(
         iscompat = true
         count = 1
         # do not collect keys each time: makes a full copy
-        k  = collect(keys(splitcounts)) 
-
-        for i in length((k)):-1:0 #traverse the dictionary in reverse order
+        for i in Iterators.reverse(keys(splitcounts)) #traverse the dictionary in reverse order
             count > nsplits && break # only compare with previous splits
-            if !treecompatible(candidate_bp, k[i])
+            if !treecompatible(candidate_bp, i)
                 iscompat = false
                 break
             end
