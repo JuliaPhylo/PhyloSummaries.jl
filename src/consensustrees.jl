@@ -236,23 +236,22 @@ function consensus_bipartitions!(
     end
     sort!(splitcounts, rev=false) # works for a Dictionary, but not a Dict
     nsplits = 0
-    # do not reverse(pairs(splitcounts)): makes a full copy of the dictionary
-    for (candidate_bp, freq) in Iterators.reverse(pairs(splitcounts)) # reverse order because we delete values
+    # next: traverse 'splitcounts' in reverse because we will delete items
+    # use the "lazy" Iterators.reverse instead of Base.reverse, to avoid copying
+    splits_mostfrequent = Iterators.reverse(keys(splitcounts)) # create this object once only
+    for (candidate_bp, freq) in Iterators.reverse(pairs(splitcounts))
         if freq > threshold1
             nsplits += 1
             continue
         end
         # freq > threshold2 ensured by previous filtering
         iscompat = true
-        count = 1
-        # do not collect keys each time: makes a full copy
-        for i in Iterators.reverse(keys(splitcounts)) #traverse the dictionary in reverse order
-            count > nsplits && break # only compare with previous splits
-            if !treecompatible(candidate_bp, i)
+        for (i_bp, bp) in enumerate(splits_mostfrequent) # up-to-date because no copy
+            i_bp > nsplits && break # only compare with previous splits
+            if !treecompatible(candidate_bp, bp)
                 iscompat = false
                 break
             end
-            count+=1
         end
         if iscompat # then keep candidate bipartition
             nsplits += 1
@@ -260,8 +259,6 @@ function consensus_bipartitions!(
             delete!(splitcounts, candidate_bp)
         end
     end
-
-
     return splitcounts
 end
 

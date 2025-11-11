@@ -15,7 +15,7 @@ DocMeta.setdocmeta!(
 
 makedocs(;
     modules=[PhyloSummaries],
-    authors="Cecile Ane <cecileane@users.noreply.github.com>, Joshua Justison <jjustison@users.noreply.github.com>, and contributors",
+    authors="Cecile Ane <cecileane@users.noreply.github.com>, Ayush Sharma <ayusharma17@users.noreply.github.com>, Joshua Justison <jjustison@users.noreply.github.com>, and contributors",
     sitename="PhyloSummaries.jl",
     format=Documenter.HTML(;
         canonical="https://JuliaPhylo.github.io/PhyloSummaries.jl",
