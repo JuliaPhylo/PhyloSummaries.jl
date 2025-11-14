@@ -152,7 +152,7 @@ function blobexitnodes(net::PN.HybridNetwork, blob, blob_index::Int)
     @assert start_parent !== nothing "no major parent on the blob's cycle"
 
 
-    push!(res, hn)               # start at the hybrid-clade exit (your assumption)
+    push!(res, hn)               
     prev_node = hn
     cur_node  = start_parent
 
