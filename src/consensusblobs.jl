@@ -7,6 +7,14 @@ warn if one exit node has 2 edge
 ig exit node does not have two try to match the cycle ordering    add a note saying that in the future we will add functionality to maintain circular order if the net is level 1
 =#
 
+#TODO: parse in circular order and store info that way. check funcs after canonicalizepartition
+
+"""
+    consensusblobs(networks; proportion=0)
+
+Construct a consensus network from a collection of networks by identifying common blob structures.
+Returns a single network representing the consensus of the input networks.
+"""
 function consensusblobs(
     networks::AbstractVector{PN.HybridNetwork};
     proportion::Number=0,
@@ -41,17 +49,20 @@ struct BlobFreq{N,P}
     hybrid::Vector{Int}
 end
 
-function ingest_blobs!(
+"""
+    processblobs!(::Val{N}, blobs, net, taxa)
+
+Extract blob information from a network and add it to the blobs collection.
+Processes biconnected components and records partition patterns with their frequencies.
+"""
+function processblobs!(
     ::Val{N},
     blobs::Vector{BlobFreq{N,P} where P},
     net::PN.HybridNetwork,
-    taxa::Vector{String};
-    order_fn::Union{Nothing,Function}=nothing,
-    hybrid_fn::Union{Nothing,Function}=nothing,
-    reflect_invariant::Bool=true,
+    taxa::Vector{String},
 ) where {N}
     PN.directedges!(net)
-    M = PN.descendenceweight(net)              # may reset edge numbers; use after this point
+    M = PN.descendenceweight(net)
     PN.process_biconnectedcomponents!(net)
 
     leafrow = Vector{Int}(undef, N)
@@ -65,7 +76,7 @@ function ingest_blobs!(
     for (ii, blob) in pairs(net.partition)
         PN.istrivial(blob) && continue
 
-        exit_edges = blobexitedges(net, blob, ii)
+        exit_edges = blobexitedges(net, blob, ii)  # already circular; first is the hybrid clade
         @assert !isempty(exit_edges) "blob $ii has no exit edge"
 
         masks_vec = NTuple{N,Bool}[]
@@ -77,41 +88,105 @@ function ingest_blobs!(
         part_tuple, old2new = canonicalizepartition(masks_vec)
         P = length(part_tuple)
 
-        ord_tuple = if order_fn === nothing
-            ntuple(i->i, P)
-        else
-            _canon_cycle(_map_order(order_fn(net, blob, exit_edges, taxa), old2new), reflect_invariant)
-        end
-        hidx = hybrid_fn === nothing ? nothing :
-               _map_hybrid(hybrid_fn(net, blob, exit_edges, taxa), old2new)
+        ord_tuple = NTuple{P,Int}(old2new[i] for i in 1:P)
+        h_new     = old2new[1]
 
-        _upsert_blob!(blobs, part_tuple, ord_tuple, hidx)
+        insertblob!(blobs, part_tuple, ord_tuple, h_new)
     end
     return blobs
 end
 
+"""
+    blobexitedges(net, blob, blob_index)
+
+Get the ordered list of edges exiting a blob, starting with the hybrid clade edge.
+Returns edges in circular order around the blob.
+"""
 function blobexitedges(net::PN.HybridNetwork, blob, blob_index::Int)
-    outs = PN.exitnodes_preindex(blob)
-    eds = PN.Edge[]
-    for ni in outs
-        v = net.vec_node[ni]
-        candidates = PN.Edge[]
-        for e in v.edge
-            if e.inte1 != blob_index && PN.getparent(e) === v
-                push!(candidates, e)
-            end
-        end
+    out_nodes = blobexitnodes(net, blob, blob_index)  
+    res = PN.Edge[]
+
+    for n in out_nodes
+        # edge that goes out of the blob from this exit node
+        candidates = [e for e in n.edge if e.inte1 != blob_index && PN.getparent(e) === n]
         if length(candidates) != 1
-            @warn "exit node $(v.number) has $(length(candidates)) outgoing edges outside blob $blob_index"
+            @warn "exit node $(n.number) has $(length(candidates)) external outgoing edges for blob $blob_index"
         end
-        !isempty(candidates) && push!(eds, candidates[1])
+        if !isempty(candidates)
+            push!(res, candidates[1])
+        end
     end
-    return eds
+    return res
 end
 
-_edge_mask(::Val{N}, net::PN.HybridNetwork, e, taxa::Vector{String}) where {N} =
-    ntuple(i->Bool(PN.hardwiredcluster(e, taxa)[i]), N)
 
+"""
+    blobexitnodes(net, blob, blob_index)
+
+Get the ordered list of nodes that are exit points from a blob.
+Traverses the cycle starting from the hybrid clade exit node.
+"""
+function blobexitnodes(net::PN.HybridNetwork, blob, blob_index::Int)
+    outs = Set(net.vec_node[i] for i in PN.exitnodes_preindex(blob))  # exit nodes (as Nodes)
+    res  = PN.Node[]  # ordered exit nodes
+
+
+    hn = nothing
+    for e in blob.edges
+        if e.hybrid
+            hn = PN.getchild(e)
+            break
+        end
+    end
+    @assert hn !== nothing "no hybrid edge found in blob"
+    @assert hn in outs "assumption violated: hybrid clade is not an exit node"
+
+
+    start_parent = nothing
+    for e in hn.edge
+        if PN.getchild(e) === hn && e.inte1 == blob_index && e.ismajor
+            start_parent = PN.getparent(e)
+            break
+        end
+    end
+    @assert start_parent !== nothing "no major parent on the blob's cycle"
+
+
+    push!(res, hn)               # start at the hybrid-clade exit (your assumption)
+    prev_node = hn
+    cur_node  = start_parent
+
+
+    while cur_node !== hn
+        if cur_node in outs
+            if isempty(res) || res[end] !== cur_node
+                push!(res, cur_node)
+            end
+        end
+
+        next_node = nothing
+        for e in cur_node.edge
+            if e.inte1 == blob_index
+                nb = (PN.getchild(e) === cur_node) ? PN.getparent(e) : PN.getchild(e)
+                if nb !== prev_node
+                    next_node = nb
+                    break
+                end
+            end
+        end
+        @assert next_node !== nothing "broken cycle traversal in blob $blob_index"
+        prev_node, cur_node = cur_node, next_node
+
+    end
+    return res
+end
+
+"""
+    canonicalizepartition(masks)
+
+Canonicalize a partition by sorting masks and returning the sorted partition 
+along with the mapping from old to new positions.
+"""
 function canonicalizepartition(masks::Vector{NTuple{N,Bool}}) where {N}
     @assert all(any, masks) "exit mask with no true taxa"
     idxs = collect(1:length(masks))
@@ -124,32 +199,13 @@ function canonicalizepartition(masks::Vector{NTuple{N,Bool}}) where {N}
 end
 
 
-_map_order(order_vec::AbstractVector{<:Integer}, old2new::Vector{Int}) =
-    NTuple{length(order_vec),Int}(old2new[i] for i in order_vec)
+"""
+    insertblob!(blobs, partition, ord, hybrid_idx)
 
-_map_hybrid(hidx::Integer, old2new::Vector{Int}) = old2new[Int(hidx)]
-
-function _canon_cycle(ord::NTuple{P,Int}, reflect::Bool) where {P}
-    best = _min_rotation(ord)
-    if reflect
-        rev = ntuple(i->ord[P - i + 1], P)
-        best = min(best, _min_rotation(rev))
-    end
-    return best
-end
-
-function _min_rotation(t::NTuple{P,Int}) where {P}
-    best = t
-    for s in 1:P-1
-        rot = ntuple(i->t[(i + s - 1) % P + 1], P)
-        if rot < best
-            best = rot
-        end
-    end
-    return best
-end
-
-function _upsert_blob!(
+Insert or update a blob frequency record in the blobs collection.
+Tracks partition patterns, circular orderings, and hybrid clade positions.
+"""
+function  insertblob!(
     blobs::Vector{BlobFreq{N,P} where P},
     partition::NTuple{P,NTuple{N,Bool}},
     ord::NTuple{P,Int},
@@ -185,44 +241,3 @@ function _upsert_blob!(
     return
 end
 
-function find_hybrid_idx(net::PN.HybridNetwork, blob, exit_edges, taxa)::Int
-    hn = nothing
-    for e in blob.edges
-        if e.hybrid
-            hn = PN.getchild(e)
-            break
-        end
-    end
-    @assert hn !== nothing "no hybrid edge found in blob"
-    clade_edge = nothing
-    for e in hn.edge
-        if PN.getparent(e) === hn
-            clade_edge = e
-            break
-        end
-    end
-    @assert clade_edge !== nothing "no child edge found for hybrid node"
-    hc = PN.hardwiredcluster(clade_edge, taxa)
-    for i in 1:length(exit_edges)
-        if PN.hardwiredcluster(exit_edges[i], taxa) == hc
-            return i
-        end
-    end
-    error("could not match hybrid clade to any exit")
-end
-
-function order_from_major(net::PN.HybridNetwork, blob, exit_edges, taxa)
-    P = length(exit_edges)
-    h = find_hybrid_idx(net, blob, exit_edges, taxa)
-    return vcat(h:P, 1:h-1)
-end
-
-function consensusblobs(networks::AbstractVector{PN.HybridNetwork})
-    taxa = sort!(PN.tiplabels(networks[1]))
-    N = length(taxa)
-    blobs = Vector{BlobFreq{N,P} where P}()
-    for net in networks
-        ingest_blobs!(Val(N), blobs, net, taxa; order_fn=order_from_major, hybrid_fn=find_hybrid_idx, reflect_invariant=false)
-    end
-    return blobs
-end
