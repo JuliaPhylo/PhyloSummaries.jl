@@ -1,4 +1,3 @@
-
 """
     consensustree(trees::AbstractVector{PN.HybridNetwork};
                   rooted=false,

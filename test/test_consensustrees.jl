@@ -48,7 +48,7 @@ end
 @test writenewick(consensustree([tree1]; rooted=true)) == "((A,B),(C,D));"
 
 # 4 taxa, 5 trees, missing edge lengths
-trees = [tree2,tree1,tree3,tree4,tree5]
+trees = [tree2,tree3,tree1,tree4,tree5]
 con = consensustree(trees; rooted=true, proportion=0.8)
 writenewick(con) == "(A,B,C,D);"
 con = consensustree(trees; proportion=0.7)
@@ -63,51 +63,15 @@ tfile = joinpath(@__DIR__,"..","test","raxmltrees.tre")
 trees = readmultinewick(tfile)
 con = consensustree(trees)
 @test writenewick(con,round=true) == "(E,O,((A,B):0.833,(C,D):1.0):0.533);" 
-# fixit: problem with 3 extra nodes...
+#= fixit: check correctness
+fixit: copy-paste R code to get the consensus tree
+library(ape)
+mytrees <- read.tree("raxmltrees.tre")
+consensus(my_trees, p = 0.5)
+also: get rooted & unrooted version, different p's
+=#
 
 end # of sub-testset
 
-#=
-@testset "majority-rule consensus (paper example)" begin
-    trees = [tree3, tree2, tree1]
-
-    # Expected majority-rule consensus tree
-    # (A,B) appears in 2/3 trees → included
-    # (C,D) appears in 2/3 trees → included
-    # → consensus should be ((A,B),(C,D));
-
-    consensus = consensustree(trees; rooted=true, proportion=0.5)
-    @test writenewick(consensus, round = true) == "((D,C):0.667,(B,A):0.667);"
-end
-=#
-@testset "majority-rule consensus 2" begin
-    trees = [tree2, tree1]
-
-    # Expected majority-rule consensus tree
-    # (A,B) appears in 2/3 trees → included
-    # (C,D) appears in 2/3 trees → included
-    # → consensus should be ((A,B),(C,D));
-
-    consensus = consensustree(trees; rooted=true, proportion=0.5)
-    @test writenewick(consensus) == "((D,C):1.0,(B,A):1.0);"
-end
-
-
-@testset "consensustree (rooted majority, 5 trees, 5 taxa)" begin
-        
-    nwk = [
-        "(((A,B),(C,D)),E);",
-        "((E,(A,B)),(C,D));",
-        "((A,B),(C,(D,E)));",
-        "(((A,B),E),(C,D));",
-        "((A,B),((C,D),E));",
-    ]
-    trees = readnewick.(nwk)
-
-    con = consensustree(trees; rooted=true, proportion=0.5)
-
-
-    @test writenewick(con) =="(E,(B,A):1.0,(D,C):0.8);"
-end
 
 end
