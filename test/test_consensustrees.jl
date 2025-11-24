@@ -62,14 +62,18 @@ tfile = joinpath(@__DIR__,"..","test","raxmltrees.tre")
 # tfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","raxmltrees.tre")
 trees = readmultinewick(tfile)
 @test writenewick(consensustree(trees, proportion=1)) == "(A,B,E,O,(D,C));"
-con = consensustree(trees)
-@test writenewick(con,round=true,support=true) == "(E,O,((A,B)::0.833,(C,D)::1.0)::0.533);"
-#= fixit: check correctness
-fixit: copy-paste R code to get the consensus tree
+@test writenewick(consensustree(trees),round=true,support=true) == "(E,O,((A,B)::0.833,(C,D)::1.0)::0.533);"
+con = consensustree(trees; rooted=true, supportaslength=true)
+@test writenewick(con, round=true) == "((O,E):0.033,((A,B):0.767,(C,D):1.0):0.5);"
+#=
+checked correctness with ape::consensus
+```r
 library(ape)
-mytrees <- read.tree("raxmltrees.tre")
-consensus(my_trees, p = 0.5)
-also: get rooted & unrooted version, different p's
+mytrees <- read.tree("test/raxmltrees.tre")
+write.tree(consensus(mytrees, p=0.5)) #  "((E,O)0.533,(A,B)0.833,(C,D)1)1;"
+write.tree(consensus(mytrees, p=0.5, rooted=T)) # "((A,B)0.7667,(C,D)1,E,O)1;"
+also by plotting them: tree #2 has (O,E). 15 trees have A-D: #1,4-7,11,16-17,20-21,25-28,30
+```
 =#
 
 end # of sub-testset
