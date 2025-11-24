@@ -21,7 +21,8 @@ The manual pages contain detailed tutorials on how to use functions in the packa
 
 ```@contents
 Pages = [
-    "man/filename.md", # fixit!
+    "man/installation.md",
+    "man/consensus.md",
 ]
 Depth = 3
 ```

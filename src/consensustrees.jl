@@ -1,7 +1,8 @@
 """
     consensustree(trees::AbstractVector{PN.HybridNetwork};
                   rooted=false,
-                  proportion=0)
+                  proportion=0,
+                  supportaslength=false)
 
 Consensus tree summarizing the bipartitions (or clades) shared by more than
 the required `proportion` of input `trees`.
@@ -9,18 +10,20 @@ An `ArgumentError` is thrown if one input network is not a tree, or the list of
 input trees is empty, or if the input trees do not all have the same tip labels.
 Input trees are not modified.
 
-Output: consensus tree as an object of type `HybridNetwork`, with the
-bipartition (or clade) support values stored as edge length, and also in
-more "hidden" internal fields that should not be relied upon as they may change:
-in each edge `.y` value, and in each node `.fvalue` for the clade descendant
-from that node. Note that storing support values at nodes is *unsafe* for
-unrooted bipartitions, as the bipartition associated with the node's descendants
-given some rooting may become *one* of node's child subclade after re-rooting.
+Output: consensus tree as an object of type `HybridNetwork`.
 
-fixit:
-- in docs/manual: include an example to plot the network with support shown
-  for each edge
-- use edge lengths in input trees...
+The bipartition (or clade) support values are stored
+- as edge length with option `supportaslength=true` (*not* by default).
+- in the field `.y` of each internal edge (as external edges correspond to
+  trivial bipartitions, which must necessarily be in all sampled trees).
+  This field is used by `writenewick` to write edge support, with its option
+  `support=true`. However, this `.y` field is internal, so it can be modified
+  by other functions and should not be relied upon.
+- Support values are also stored in each node `.fvalue` for the clade
+  descendant from that node. Note that storing support values at nodes is
+  *unsafe* for unrooted bipartitions, as the bipartition associated with the
+  node's descendants given some rooting may become *one* of node's child
+  subclade after re-rooting.
 
 By default, input trees are considered unrooted, and bipartitions are considered.
 Use `rooted=true` to consider all input trees as rooted, in which case clades
@@ -39,6 +42,9 @@ assumptions and **warnings**:
   If unsure, run `removedegree2nodes!.(trees, true))` to keep their root even
   of degree 2 or `removedegree2nodes!.(trees, false))` unroot them also.
 
+fixit: make a future version summarize edge lengths in
+input trees and store their average in the consensus tree.
+
 # example
 
 ```jldoctest
@@ -46,22 +52,26 @@ julia> nwk = ["((c,d),((a1,a2),b));", "(((a2,a1),b),c,d);", "(((a1,a2),c),d,b);"
 
 julia> treesample = readnewick.(nwk);
 
-julia> con = consensustree(treesample); writenewick(con, round=true)
-"(c,d,((a2,a1):1.0,b):0.667);"
+julia> con = consensustree(treesample); writenewick(con, round=true, support=true)
+"(c,d,(b,(a1,a2)::1.0)::0.667);"
 
 julia> con = consensustree(treesample; rooted=true); # greedy consensus
 
-julia> writenewick(con, round=true)
-(((a2,a1):1.0,b):0.667,(d,c):0.333);
+julia> writenewick(con, round=true, support=true)
+"((d,c)::0.333,(b,(a1,a2)::1.0)::0.667);"
 
-julia> consensustree(treesample; rooted=true, proportion=0.5) # majority-rule
-HybridNetwork, Semidirected Network
-7 edges
-8 nodes: 5 tips, 0 hybrid nodes, 3 internal tree nodes.
-tip labels: a1, a2, b, c, ...
-"(c,d,(b,(a1,a2):1.0):0.667);"
+julia> [e.number => round(e.y, digits=3) for e in con.edge if !isexternal(e)] # edge number -> support
+3-element Vector{Pair{Int64, Float64}}:
+ 6 => 0.333
+ 7 => 0.667
+ 8 => 1.0
 
-julia> consensustree(treesample; proportion=0.75) |> writenewick
+julia> con = consensustree(treesample; rooted=true, proportion=0.5); # majority-rule
+
+julia> writenewick(con, round=true, support=true)
+"(c,d,(b,(a1,a2)::1.0)::0.667);"
+
+julia> con = consensustree(treesample; proportion=0.75, supportaslength=true) |> writenewick
 "(b,c,d,(a2,a1):1.0);"
 ```
 """
@@ -69,6 +79,7 @@ function consensustree(
     trees::AbstractVector{PN.HybridNetwork};
     rooted::Bool=false,
     proportion::Number=0,
+    supportaslength::Bool=false
 )
     isempty(trees) &&
         throw(ArgumentError("consensustree requires at least one network"))
@@ -77,37 +88,26 @@ function consensustree(
     if length(trees) == 1
         net = deepcopy(trees[1])
         rooted || suppressroot!(net) # requires PN v1.3
-        #= PN v1.3 is currently in branch 'master'.
-        do this in some environment (but not in PhyloSummaries' main folder!)
-        pkg> add PhyloNetworks#master
-        these complications will go away after v1.3.0 is registered. =#
-        # to preserve original lengths, do *not* store support as edge lengths
-        # fixit: this is inconsistent with the case of 2+ input trees
         for e in net.edge
             if !isexternal(e)
                 e.y = 1.0
+                if supportaslength e.length = 1.0; end
                 getchild(e).fvalue = 1.0
             end
         end
         return net
     end
     taxa = sort!(tiplabels(trees[1]))
-    # taxa_set = Set(taxa)
     splitcounts = Dictionary{BitVector,Int}()
     for net in trees
         length(net.leaf) == length(taxa) ||
             throw(ArgumentError("input trees do not share the same taxon set"))
-        #= not needed: will be checked by hardwiredclusters
-        for leaf in net.leaf
-            leaf.name in taxa_set ||
-                throw(ArgumentError("taxon $(leaf.name) not in taxon list"))
-        end
-        =#
+        # hardwiredclusters will error if different taxon sets
         count_bipartitions!(splitcounts, net, taxa, rooted)
     end
     ntrees = length(trees)
     consensus_bipartitions!(splitcounts, proportion, ntrees)
-    return tree_from_bipartitions(taxa, splitcounts, ntrees)
+    return tree_from_bipartitions(taxa, splitcounts, ntrees, supportaslength)
 end
 
 """
@@ -176,22 +176,24 @@ function tuple_from_clustervector(cluster01vector::AbstractVector, rooted::Bool)
 end
 
 """
-    consensus_bipartition!(splitcounts::Dictionary{BitVector,Int},
+    consensus_bipartitions!(splitcounts::Dictionary{BitVector,Int},
         proportion::Number, numtrees::Number)
 
-Filter dictionary `splitcounts` to keep only the entries whose count (value in
-the dictionary) greater than `proportion × numtrees`. Bipartitions with weight
-over 50% must be compatible with each other. Bipartitions are added one by one,
-from most to least frequent, so long as they are compatible with bipartititions
-previously kept.
+Filter dictionary `splitcounts` to keep only the entries whose frequency
+(count value in the dictionary) are greater than `proportion × numtrees`,
+or equal to `numtrees` when `proportion` is 1.
+Bipartitions with frequency weight over 50% must be compatible with each other.
+Bipartitions are retained one by one, from most to least frequent, so long as
+they are compatible with bipartititions previously kept.
 
 The result can be passed to [`tree_from_bipartitions`](@ref) to
 construct the associated consensus tree topology.
+`proportion = 1` corresponds to the strict consensus tree,
 `proportion = 0.5` corresponds to the majority-rule consensus tree and
 `proportion = 0` to a greedy consensus tree.
 
 Output: `splitcounts` modified, with some entries filtered out, and sorted
-by frequency if `proportion<0.5`.
+by frequency (from least to most frequent) if `proportion<0.5`.
 
 Assumption: all counts are positive.
 
@@ -199,35 +201,41 @@ Assumption: all counts are positive.
 ```jldoctest
 julia> using Dictionaries
 
-julia> splitcounts = dictionary([[true,false]=>3, [false,false]=>1, [true,true]=>4])
-3-element Dictionary{Vector{Bool}, Int64}:
+julia> bp = BitVector.([[true,false], [false,false], [true,true]]); freq=(3,1,4);
+
+julia> splitcounts = dictionary(zip(bp, freq))
+3-element Dictionary{BitVector, Int64}:
  Bool[1, 0] │ 3
  Bool[0, 0] │ 1
  Bool[1, 1] │ 4
 
-julia> consensus_bipartition!(splitcounts, 0.5, 4)
-2-element Dictionary{Vector{Bool}, Int64}:
+julia> PhyloSummaries.consensus_bipartitions!(splitcounts, 0.5, 4)
+2-element Dictionary{BitVector, Int64}:
  Bool[1, 0] │ 3
  Bool[1, 1] │ 4
 
-julia> splitcounts = dictionary([[true,false]=>3, [false,false]=>1, [true,true]=>4]);
+julia> splitcounts = dictionary(zip(bp, freq)); # reset as earlier
 
-julia> consensus_bipartition!(splitcounts, 0, 4)
-3-element Dictionary{Vector{Bool}, Int64}:
- Bool[1, 1] │ 4
- Bool[1, 0] │ 3
+julia> PhyloSummaries.consensus_bipartitions!(splitcounts, 0, 4)
+3-element Dictionary{BitVector, Int64}:
  Bool[0, 0] │ 1
+ Bool[1, 0] │ 3
+ Bool[1, 1] │ 4
 ```
 """
 function consensus_bipartitions!(
     splitcounts::Dictionary{BitVector,Int},
     proportion::Number, 
     numtrees::Number,
-) 
+)
     threshold1 = max(0.5, proportion) * numtrees # all above must be compatible
     threshold2 = proportion * numtrees  # applies if proportion < 0.5
     if proportion >= 0.5
-        filter!(v -> v > threshold1, splitcounts)
+        if proportion ≈ 1
+            filter!(v -> v ≈ numtrees, splitcounts)
+        else
+            filter!(v -> v > threshold1, splitcounts)
+        end
         return(splitcounts)
     end
     if threshold2 > 0 # 0 for greedy consensus: frequent case
@@ -286,7 +294,8 @@ end
 """
     tree_from_bipartitions(taxa::Vector{String},
         clusters::Dictionary{BitVector,<:Number},
-        ntrees::Number)
+        ntrees::Number,
+        supportaslength::Bool)
 
 Construct a consensus tree from a compatible set of cluster, as a
 `PhyloNetworks.HybridNetwork` object.
@@ -307,6 +316,7 @@ function tree_from_bipartitions(
     taxa::Vector{String},
     bipartitions::Dictionary{BitVector,<:Number},
     ntrees::Number,
+    supportaslength::Bool
 )
     n = length(taxa)
     net = PN.HybridNetwork()
@@ -361,8 +371,9 @@ function tree_from_bipartitions(
         weight /= ntrees
         newnode.fvalue = weight # store clade support in the clade's MRCA
         node_counter -= 1
-        # new edge: store clade support as edge length and in .y
-        newe = PN.Edge(edge_counter,weight,false,weight,0.0,1.0,
+        # new edge: store clade support in .y, and as edge length if desired
+        elen = (supportaslength ? weight : -1.0)
+        newe = PN.Edge(edge_counter,elen,false,weight,-1.0,1.0, # z=-1, gamma=1
             [newnode,lca], true, # ischild1 is true: to agre with node ordering
             true,-1,true,true,false)
         edge_counter += 1

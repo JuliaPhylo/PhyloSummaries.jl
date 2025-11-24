@@ -52,8 +52,8 @@ trees = [tree2,tree3,tree1,tree4,tree5]
 con = consensustree(trees; rooted=true, proportion=0.8)
 writenewick(con) == "(A,B,C,D);"
 con = consensustree(trees; proportion=0.7)
-writenewick(con,round=true) == "(C,D,(B,A):0.8);"
-con = consensustree(trees; rooted=true) # greedy
+writenewick(con,round=true,support=true) == "(C,D,(B,A)::0.8);"
+con = consensustree(trees; rooted=true, supportaslength=true) # greedy
 @test writenewick(con,round=true) == "((D,C):0.4,(B,A):0.8);"
 @test [n.fvalue for n in con.node if !n.leaf] == [-1,.4,.8]
 @test [e.y for e in con.edge if !isexternal(e)] == [.4,.8]
@@ -61,8 +61,9 @@ con = consensustree(trees; rooted=true) # greedy
 tfile = joinpath(@__DIR__,"..","test","raxmltrees.tre")
 # tfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","raxmltrees.tre")
 trees = readmultinewick(tfile)
+@test writenewick(consensustree(trees, proportion=1)) == "(A,B,E,O,(D,C));"
 con = consensustree(trees)
-@test writenewick(con,round=true) == "(E,O,((A,B):0.833,(C,D):1.0):0.533);" 
+@test writenewick(con,round=true,support=true) == "(E,O,((A,B)::0.833,(C,D)::1.0)::0.533);"
 #= fixit: check correctness
 fixit: copy-paste R code to get the consensus tree
 library(ape)
