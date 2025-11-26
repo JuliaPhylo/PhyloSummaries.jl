@@ -1,3 +1,4 @@
+#TODO: convert from bitvector to tuple
 """
     consensustree(trees::AbstractVector{PN.HybridNetwork};
                   rooted=false,
