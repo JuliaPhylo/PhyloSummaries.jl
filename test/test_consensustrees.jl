@@ -9,12 +9,12 @@ taxa = ["A","B","C","D"]
 
 @testset "count_bipartitions!" begin
 # unrooted
-counts = Dictionary{BitVector,Int}()
+counts = Dictionary{PhyloSummaries.SplitTuple,Int}()
 PhyloSummaries.count_bipartitions!(counts, tree1, taxa, false)
 PhyloSummaries.count_bipartitions!(counts, tree3, taxa, false)
 expected = Dict(
-    BitVector([1, 1, 0, 0]) => 1,
-    BitVector([1, 0, 1, 0]) => 1,
+    (true, true, false, false) => 1,
+    (true, false, true, false) => 1,
 )
 @test length(counts) == length(expected)
 for bp in keys(expected)
@@ -25,10 +25,10 @@ empty!(counts)
 PhyloSummaries.count_bipartitions!(counts, tree1, taxa, true)
 PhyloSummaries.count_bipartitions!(counts, tree3, taxa, true)
 expected = Dict(
-    BitVector([1, 1, 0, 0]) => 1,
-    BitVector([0, 0, 1, 1]) => 1,
-    BitVector([1, 0, 1, 0]) => 1,
-    BitVector([0, 1, 0, 1]) => 1,
+    (true, true, false, false) => 1,
+    (false, false, true, true) => 1,
+    (true, false, true, false) => 1,
+    (false, true, false, true) => 1,
 )
 @test length(counts) == length(expected)
 for bp in keys(expected)

@@ -1,4 +1,5 @@
-#TODO: convert from bitvector to tuple
+const SplitTuple = NTuple{N,Bool} where N # tuple used to represent a bipartition
+ 
 """
     consensustree(trees::AbstractVector{PN.HybridNetwork};
                   rooted=false,
@@ -99,7 +100,7 @@ function consensustree(
         return net
     end
     taxa = sort!(tiplabels(trees[1]))
-    splitcounts = Dictionary{BitVector,Int}()
+    splitcounts = Dictionary{SplitTuple,Int}()
     for net in trees
         length(net.leaf) == length(taxa) ||
             throw(ArgumentError("input trees do not share the same taxon set"))
@@ -130,7 +131,7 @@ If the tip labels in `net` do not match those in `taxa` (as a set), then an
 error will be thrown indirectly (via `PhyloNetworks.hardwiredclusters`).
 """
 function count_bipartitions!(
-    counts::Dictionary{BitVector,Int},
+    counts::Dictionary{SplitTuple,Int},
     net::PN.HybridNetwork,
     taxa::Vector{String},
     rooted::Bool,
@@ -171,13 +172,13 @@ function tuple_from_clustervector(cluster01vector::AbstractVector, rooted::Bool)
         return nothing
     end
     if !rooted && cluster01vector[end] == 1
-        return BitVector(x==0 for x in cluster01vector)
+        return Tuple(x==0 for x in cluster01vector)
     end
-    return BitVector(x==1 for x in cluster01vector)
+    return Tuple(x==1 for x in cluster01vector)
 end
 
 """
-    consensus_bipartitions!(splitcounts::Dictionary{BitVector,Int},
+    consensus_bipartitions!(splitcounts::Dictionary{SplitTuple,Int},
         proportion::Number, numtrees::Number)
 
 Filter dictionary `splitcounts` to keep only the entries whose frequency
@@ -202,30 +203,30 @@ Assumption: all counts are positive.
 ```jldoctest
 julia> using Dictionaries
 
-julia> bp = BitVector.([[true,false], [false,false], [true,true]]); freq=(3,1,4);
+julia> bp = [(true,false), (false,false), (true,true)]; freq=(3,1,4);
 
 julia> splitcounts = dictionary(zip(bp, freq))
-3-element Dictionary{BitVector, Int64}:
- Bool[1, 0] │ 3
- Bool[0, 0] │ 1
- Bool[1, 1] │ 4
+3-element Dictionary{Tuple{Bool, Bool}, Int64}:
+ (true, false) │ 3
+ (false, false) │ 1
+ (true, true) │ 4
 
 julia> PhyloSummaries.consensus_bipartitions!(splitcounts, 0.5, 4)
-2-element Dictionary{BitVector, Int64}:
- Bool[1, 0] │ 3
- Bool[1, 1] │ 4
+2-element Dictionary{Tuple{Bool, Bool}, Int64}:
+ (true, false) │ 3
+ (true, true) │ 4
 
 julia> splitcounts = dictionary(zip(bp, freq)); # reset as earlier
 
 julia> PhyloSummaries.consensus_bipartitions!(splitcounts, 0, 4)
-3-element Dictionary{BitVector, Int64}:
- Bool[0, 0] │ 1
- Bool[1, 0] │ 3
- Bool[1, 1] │ 4
+3-element Dictionary{Tuple{Bool, Bool}, Int64}:
+ (false, false) │ 1
+ (true, false) │ 3
+ (true, true) │ 4
 ```
 """
 function consensus_bipartitions!(
-    splitcounts::Dictionary{BitVector,Int},
+    splitcounts::Dictionary{SplitTuple,Int},
     proportion::Number, 
     numtrees::Number,
 )
@@ -271,7 +272,7 @@ function consensus_bipartitions!(
 end
 
 """
-    treecompatible(a::BitVector, b::BitVector)
+    treecompatible(a::SplitTuple, b::SplitTuple)
 
 true / false if two clusters `a` and `b` are / are not tree-compatible.
 
@@ -280,9 +281,9 @@ if B is the cluster of descendant of `b`, these 2 clusters are tree-compatible
 if there exists some tree that has both clusters.
 This can be checked by the condition: A∩B is empty, or A⊆B, or B⊆A.
 """
-function treecompatible(a::BitVector, b::BitVector)::Bool
+function treecompatible(a::SplitTuple, b::SplitTuple)::Bool
     @assert length(a) == length(b)
-    inter = a .& b
+    inter = ntuple(i -> a[i] & b[i], length(a))
     if !any(inter)
         return true
     end
@@ -294,13 +295,13 @@ end
 
 """
     tree_from_bipartitions(taxa::Vector{String},
-        clusters::Dictionary{BitVector,<:Number},
+        clusters::Dictionary{SplitTuple,<:Number},
         ntrees::Number,
         supportaslength::Bool)
 
 Construct a consensus tree from a compatible set of cluster, as a
 `PhyloNetworks.HybridNetwork` object.
-Each cluster is represented as a `BitVector` key `b`, and is given a weight:
+Each cluster is represented as a tuple key `b`, and is given a weight:
 its value `clusters[b]` divided by `ntrees`.
 For each cluster, a node is added to the consensus tree, whose descendant
 taxa is the set `taxa[i]` for indices `i` such that b[i] is true.
@@ -315,7 +316,7 @@ Used by: [`consensustree`](@ref)
 """
 function tree_from_bipartitions(
     taxa::Vector{String},
-    bipartitions::Dictionary{BitVector,<:Number},
+    bipartitions::Dictionary{SplitTuple,<:Number},
     ntrees::Number,
     supportaslength::Bool
 )

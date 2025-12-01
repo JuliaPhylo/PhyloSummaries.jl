@@ -47,7 +47,7 @@ struct BlobFreq{N,P}
     partition::NTuple{P,NTuple{N,Int}}
     count::Int
     circorder::Dict{NTuple{P,Int},Int}
-    hybrid::Vector{Int}
+    hybrid::Dict{Int,Int}
 end
 
 # array of blob frequencies
@@ -56,24 +56,73 @@ blobs = Vector{BlobFreq{N,P} where P}
 function parseblob(
     blob,
     blobarray,
-    hw_matrix
+    hw_matrix,
+    edge_map,
 )
+
+    splits, hybrids = traverse_blob_splits(
+        net,
+        blob,
+        blob_index,
+        edge_map,
+        hw_matrix,
+        taxa_cols,
+    )
+    # canonicalize splits to get partition
+
+    # check if this partition already exists in blobarray
+    #currently assuming only level 1
+    blob_idx, idxmap = find_matching_blob(blobarray, splits)
+    if blob_idx == -1
+        # new blob
+        circorder = Dict{NTuple{length(partition),Int},Int}()
+        for (i, split) in pairs(splits)
+            circorder[split] = i
+        end
+        hybridmap = Dict{Int,Int}()
+        hybridmap[hybrids[1]] = 1
+        newblob = BlobFreq{length(partition),length(splits)}(
+            partition,
+            1,
+            circorder,
+            hybridmap,
+        )
+        push!(blobarray, newblob)
+    else
+        # existing blob, increment count
+        blobarray[blob_idx].count += 1
+
+        # update circorder and hybrid
+        
+    end
+
 
 end
 function find_matching_blob(blobs, splits)
-    for (i, bf_any) in pairs(blobs)
-        partition = bf_any.partition
-
-        # same number of blocks?
+    for (i, blob) in pairs(blobs)
+        partition = blob.partition
         length(partition) == length(splits) || continue
 
-        # same tuples, ignoring order
-        if Set(partition) == Set(splits)
-            return 
+        idxmap = Vector{Int}(undef, length(splits))
+        used = falses(length(partition))              # tracks which partition slots are taken
+        equalblob = true
+
+        for (k, s) in pairs(splits)
+            pos = findfirst(isequal(s), partition)
+            if pos === nothing || used[pos]
+                equalblob = false
+                break
+            end
+            idxmap[k] = pos
+            used[pos] = true
         end
+
+        equalblob && return i, idxmap
     end
-    return nothing
+    return -1, Int[]
 end
+
+
 """
     traverse_blob_nodes(
         net, blob, blob_index, edge_map, hw_matrix, taxa_cols, rooted
@@ -101,6 +150,7 @@ function traverse_blob_splits(
     visit!(entry_node,blob_index,edge_map,hw_matrix,taxa_cols,splits, hybrids)
     return splits, hybrids
 end
+
 function visit!(
     node::PN.Node,
     blob_index::Int,
@@ -116,7 +166,6 @@ function visit!(
             return
         end
         node.booln5 = true
-
     end
     for e in node.edge
         PN.getparent(e) === node || continue
@@ -134,11 +183,8 @@ function visit!(
         end
     end
 
-
     for e in node.edge
         PN.getparent(e) === node || continue
-
-
         e.inte1 == blob_index || continue
 
         child = PN.getchild(e)
