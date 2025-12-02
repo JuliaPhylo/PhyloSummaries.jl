@@ -22,21 +22,17 @@ function consensusblobs(
 )
     isempty(networks) &&
         throw(ArgumentError("consensusblobs requires at least one network"))
-    
     if length(networks) == 1
         net = deepcopy(networks[1])
         return net
     end
-    
     taxa = sort!(tiplabels(networks[1]))
     blobcounts = Dictionary{Tuple{Vararg{BitSet}},Int}()
-    
     for net in networks
         length(net.leaf) == length(taxa) ||
             throw(ArgumentError("input networks do not share the same taxon set"))
         count_blobs!(blobcounts, net, taxa)
     end
-    
     nnets = length(networks)
     consensus_blobs!(blobcounts, proportion, nnets)
     return network_from_blobs(taxa, blobcounts, nnets)
@@ -50,6 +46,7 @@ struct BlobFreq{N,P}
     hybrid::Dict{Int,Int}
 end
 
+# fixit: problem below, we do not want this global variable in PhyloSummaries' namespace
 # array of blob frequencies
 blobs = Vector{BlobFreq{N,P} where P}
 
@@ -93,7 +90,6 @@ function parseblob(
         blobarray[blob_idx].count += 1
 
         # update circorder and hybrid
-        
     end
 
 
@@ -126,15 +122,15 @@ end
 """
     traverse_blob_nodes(
         net, blob, blob_index, edge_map, hw_matrix, taxa_cols, rooted
-    ) 
+    )
 """
 function traverse_blob_splits(
     net::PN.HybridNetwork,
     blob,
     blob_index::Int,
-    edge_map::Dictionary{Int,Int},  
-    hw_matrix,                      
-    taxa_cols,                      
+    edge_map::Dictionary{Int,Int},
+    hw_matrix,
+    taxa_cols,
 )
 
     for v in net.node
@@ -157,10 +153,9 @@ function visit!(
     edge_map,
     hw_matrix,
     taxa_cols,
-    splits, 
+    splits,
     hybrids,
 )
-    
     if node.hybrid
         if node.booln5
             return

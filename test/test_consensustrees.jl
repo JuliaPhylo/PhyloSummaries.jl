@@ -9,7 +9,7 @@ taxa = ["A","B","C","D"]
 
 @testset "count_bipartitions!" begin
 # unrooted
-counts = Dictionary{PhyloSummaries.SplitTuple,Int}()
+counts = Dictionary{NTuple{4,Bool},Int}()
 PhyloSummaries.count_bipartitions!(counts, tree1, taxa, false)
 PhyloSummaries.count_bipartitions!(counts, tree3, taxa, false)
 expected = Dict(

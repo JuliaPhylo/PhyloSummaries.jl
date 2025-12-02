@@ -1,5 +1,5 @@
 const SplitTuple = NTuple{N,Bool} where N # tuple used to represent a bipartition
- 
+
 """
     consensustree(trees::AbstractVector{PN.HybridNetwork};
                   rooted=false,
@@ -131,11 +131,11 @@ If the tip labels in `net` do not match those in `taxa` (as a set), then an
 error will be thrown indirectly (via `PhyloNetworks.hardwiredclusters`).
 """
 function count_bipartitions!(
-    counts::Dictionary{SplitTuple,Int},
+    counts::Dictionary{<:SplitTuple,Int},
     net::PN.HybridNetwork,
     taxa::Vector{String},
     rooted::Bool,
-) 
+)
     if !rooted
         if length(getroot(net).edge) < 3
             net = deepcopy(net) # re-binds the variable 'net'
@@ -178,7 +178,7 @@ function tuple_from_clustervector(cluster01vector::AbstractVector, rooted::Bool)
 end
 
 """
-    consensus_bipartitions!(splitcounts::Dictionary{SplitTuple,Int},
+    consensus_bipartitions!(splitcounts::Dictionary{<:SplitTuple,Int},
         proportion::Number, numtrees::Number)
 
 Filter dictionary `splitcounts` to keep only the entries whose frequency
@@ -207,26 +207,26 @@ julia> bp = [(true,false), (false,false), (true,true)]; freq=(3,1,4);
 
 julia> splitcounts = dictionary(zip(bp, freq))
 3-element Dictionary{Tuple{Bool, Bool}, Int64}:
- (true, false) │ 3
+  (true, false) │ 3
  (false, false) │ 1
- (true, true) │ 4
+   (true, true) │ 4
 
 julia> PhyloSummaries.consensus_bipartitions!(splitcounts, 0.5, 4)
 2-element Dictionary{Tuple{Bool, Bool}, Int64}:
  (true, false) │ 3
- (true, true) │ 4
+  (true, true) │ 4
 
 julia> splitcounts = dictionary(zip(bp, freq)); # reset as earlier
 
 julia> PhyloSummaries.consensus_bipartitions!(splitcounts, 0, 4)
 3-element Dictionary{Tuple{Bool, Bool}, Int64}:
  (false, false) │ 1
- (true, false) │ 3
- (true, true) │ 4
+  (true, false) │ 3
+   (true, true) │ 4
 ```
 """
 function consensus_bipartitions!(
-    splitcounts::Dictionary{SplitTuple,Int},
+    splitcounts::Dictionary{<:SplitTuple,Int},
     proportion::Number, 
     numtrees::Number,
 )

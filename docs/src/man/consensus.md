@@ -3,6 +3,7 @@ ShareDefaultModule = true
 ```
 ```@setup
 using PhyloSummaries
+using PhyloPlots, RCall # not below because it would generate "precompiling..." output
 figpath = joinpath("..", "assets", "figures"); mkpath(figpath)
 figname(x) = joinpath(figpath, x)
 ```
@@ -29,9 +30,12 @@ treesample[1] # first tree in the list
 To visualize trees and network, we use package
 [PhyloPlots](https://github.com/juliaphylo/PhyloPlots.jl).
 
-```@example
+```julia
 using PhyloPlots
 using RCall            # to tweak our plot within R
+```
+
+```@example
 R"svg"(figname("raxmltree_12.svg"), width=7, height=3) # hide
 R"layout"([1 2])       # figure of 2 panels
 R"par"(mar=[0,0,1,0])  # for smaller margins
