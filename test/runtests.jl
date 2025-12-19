@@ -2,6 +2,7 @@ using PhyloSummaries
 using Test
 using Aqua
 
+using Dictionaries
 using PhyloNetworks
 
 const PN = PhyloNetworks
@@ -18,5 +19,5 @@ const PN = PhyloNetworks
 end
 
 @testset "PhyloSummaries.jl" begin
-    # include("test_file.jl") here
+    include("test_consensustrees.jl")
 end

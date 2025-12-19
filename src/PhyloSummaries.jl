@@ -1,10 +1,13 @@
 module PhyloSummaries
 
+using Dictionaries
 using PhyloNetworks
 
 const PN = PhyloNetworks
 
-# add package code here:
-# import, export, include("file.jl")
+export
+consensustree
+
+include("consensustrees.jl")
 
 end
