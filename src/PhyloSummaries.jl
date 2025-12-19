@@ -6,8 +6,9 @@ using PhyloNetworks
 const PN = PhyloNetworks
 
 export
-consensustree
+consensustree,
+consensus_treeofblobs
 
 include("consensustrees.jl")
-
+include("consensusblobs.jl")
 end

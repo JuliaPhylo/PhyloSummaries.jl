@@ -20,4 +20,5 @@ end
 
 @testset "PhyloSummaries.jl" begin
     include("test_consensustrees.jl")
+    include("test_consensusblobs.jl")
 end
