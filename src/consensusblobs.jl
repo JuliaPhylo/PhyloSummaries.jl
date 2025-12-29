@@ -98,19 +98,18 @@ without any reticulation. These blobs are considered "non-interesting".
 A cut-edge incident to such a polytomy is then non-redundant,
 if the other blob it connects to is also non-intersting.
 
-fixit: explain how chains of 2-blobs are handled to avoid counting non-redundant
-bipartitions correctly in between these 2-blobs.
+A chain of 2-blob leads to multiple cut-edge sharing the same bipartition.
+This bipartition is counted only once (if non-trivial and non-redundant)
+as if 2-blobs had been suppressed in the input network.
 
 By default, a greedy consensus consensus is calculated.
 The majority-rule tree can be obtained by using `proportion=0.5`,
 and the strict consensus using `proportion=1`.
 
-Assumptions:
-- Each blob (2-edge connected component) is a biconnected component.
-  This is true in binary phylogenies, or more generally when each tree node
-  has at most 2 children and each hybrid node has a single child.
+See also: [`count_blobpartitions!`](@ref)
 
 todo:
+- build the consensus tree from the vector of blobs and non-redundant bipartitions
 - create another new function `consensus_level1network` similar to
   `consensus_treeofblobs`, that returns a network built with the same blobs as
   the consensus tree of blobs, but also resolves each blob with a level-1 cycle.
@@ -125,31 +124,37 @@ function consensus_treeofblobs(
     minimumblobdegree ∈ (2,3,4) ||
         throw(ArgumentError("minimumblobdegree should be 2, 3 or 4, not $(minimumblobdegree)"))
     taxa = sort(tiplabels(networks[1]))
-    blobarray = count_blobpartitions(networks, taxa, minimumblobdegree)
-    # fixit: build consensus tree from blobarray using the proportion argument, and return it
+    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
+    # fixit: build consensus tree from these using the proportion argument, and return it
 end
 
 """
     count_blobpartitions!(networks, taxa, minBdegree)
 
-Vector of [`BlobFreq{N}`](@ref) objects with `N` being the number of taxa,
-with one entry for each blob partition: partition of all taxa into taxon blocks.
+`(blob_vec, bipart_vec)` where `blob_vec` is a vector of [`BlobFreq{ntax}`](@ref)
+object and `bipart_vec` is a vector of [`BipartFreq{ntax}`](@ref) objects,
+`ntax` being the number of taxa.
+All input networks must have the same set of `taxa`.
+
+In `blob_vec`, each entry is for a non-trivial blob multi-partition:
+a partition of all taxa into ≥ 3 taxon blocks.
 Each part, or taxon block, in each partition, is represented by a 0/1 tuple
 with 1 at index `i` to indicate if `taxa[i]` is part of the block (0 if not).
+In `bipart_vec`, each entry is a bipartition (2 taxon blocs), counted if it
+was not redundant with a non-trivial blob multi-partition.
 
-Each object also has information about the frequency of the blob partition
-in `networks`, the frequency of each circular order for that partition,
-and frequency with which each taxon blob is hybrid for the blob.
+Each object also has information about the frequency of the blob multi-partition
+or non-redundant bipartition in `networks`. Each blob object also stores the
+frequency of each circular order for that partition,
+and the frequency with which each taxon blob is hybrid for the blob.
 
 A blob is a 2-edge connected component. In a non-binary network, a blob may
 be the union of several biconnected components.
 
-Special cases:
-- Cut edges are trivial biconnected components, associated with a bipartition.
-  A cut edge in some input network N contributes a `BlobFreq` entry if it is
-  *not redundant* with a non-trivial blob of N, that is, if one of its two
-  taxon blocks is not also a taxon block of a non-trivial blob in N.
-- fixit: polytomies...
+A non-redundant bipartition comes from a cut-edge in an input network N.
+A cut edge contributes and entry and is counted in a `bipart_vec` if it is
+*not redundant* with a non-trivial blob of N, that is, if one of its two
+taxon blocks is not also a taxon block of a non-trivial blob in N.
 
 Side effects and internal fields:
 - the node field `.intn1` stores 0 if the node is a singleton blob, and
@@ -168,22 +173,24 @@ function count_blobpartitions(
     all(n.numtaxa == ntaxa for n in networks) ||
         throw(ArgumentError("input networks have different numbers of taxa"))
     # hardwiredclusters will error if different taxon sets
-    blobarray = BlobFreq{ntaxa}[]
+    blobvec = BlobFreq{ntaxa}[]
+    bpvec = BipartFreq{ntaxa}[]
     for net in networks
-        count_blobpartitions!(blobarray, net, taxa, minBdegree)
+        count_blobpartitions!(blobvec, bpvec, net, taxa, minBdegree)
     end
-    return blobarray
+    return blobvec, bpvec
 end
 
 """
-    count_blobpartitions!(blobarray, net, taxa, minBdegree)
-    count_blobpartitions!(blobarray, visitedbcc, net, taxaindex, minBdegree, blob, bidx, hwmatrix, edgemap)
+    count_blobpartitions!(blobs, biparts, net, taxa, minBdegree)
 
 Helper for [`count_blobpartitions`](@ref).
-Update the entry of `blobarray` corresponding to the partition defined by
-all blobs in one network `net`, or one `blob` in one network `net`.
-If a new blob partition if found, that was absent from `blobarray`,
-a new entry is created in the `blobarray` vector.
+Update the entries in the vector of `blobs` and in the vector of `biparts`
+corresponding to the multi-partitions defined by all "interesting" blobs
+and non-redundant bipartitions defined by cut-edges non-adjacent to some
+interesting blob, in one network `net`.
+If a new blob partition or non-redundant bipartition if found, that was absent
+from `blobs` or `biparts` respectively, a new entry is created in the vector.
 
 Notes:
 - A "blob" here means a non-trivial blob with at least 1 hybrid node.
@@ -197,15 +204,10 @@ Notes:
 - A chain of 2-blob leads to multiple cut-edge sharing the same bipartition.
   This bipartition is counted only one (or not counted if it is trivial or
   adjacent to an interesting blob); as if 2-blobs had been suppressed.
-
-todo:
-- store non-redundant bipartitions in a new vector `bipartarray`, similar to
-  `blobarray` for non-trivial blobs.
-- finish count_nonredundantbipartitions!, to finish storage of 0/1 bipartition
-  for each chain of 2-blobs. Perhaps break it into several functions.
 """
 function count_blobpartitions!(
-    blobarray::Vector{BlobFreq{N}}, # shared number of taxa
+    blobvec::Vector{BlobFreq{N}}, # shared number of taxa
+    bpvec::Vector{BipartFreq{N}},
     net::PN.HybridNetwork,
     taxa::AbstractVector{<:String},
     minBdegree::Int,
@@ -240,16 +242,26 @@ function count_blobpartitions!(
     for (bidx, bc) in pairs(net.partition)
         bidx ∈ visitedbcc && continue # bicomponent was already traversed
         PN.istrivial(bc) && continue
-        blobdegree[bidx] = count_blobpartitions!(blobarray, visitedbcc,
+        blobdegree[bidx] = count_blobpartitions!(blobvec, visitedbcc,
             net, taxaindex, minBdegree, bc, bidx, hwmatrix, edgemap)
     end
-    # gather non-redundant cut-edges: from trivial bicomponents
-    count_nonredundantbipartitions!(blobarray, blobdegree,
+    #= gather non-redundant cut-edges: from trivial bicomponents. uses:
+    - nodes' .intn1 to know which 2 blobs are adjacent to a cut edge
+    - blobdegree to know if either of these blobs is "interesting" =#
+    count_nonredundantbipartitions!(bpvec, blobdegree,
             net, taxaindex, minBdegree, hwmatrix, edgemap)
     return nothing
 end
+
+"""
+    count_blobpartitions!(blobs, visitedbcc, net, taxaindex, minBdegree, blob, bidx, hwmatrix, edgemap)
+
+Update the vector of `blobs` frequencies, and `visitedbcc` (to track
+biconnected components already visited) for a single potentially interesting
+non-trivial blob, starting from the `bidx`-th biconnected component in `net`.
+"""
 function count_blobpartitions!(
-    blobarray::Vector{BlobFreq{N}}, # shared number of taxa
+    blobvec::Vector{BlobFreq{N}}, # shared number of taxa
     visitedbcc::Set{Int}, # bicomponent reached & visited from an earlier one
     net::PN.HybridNetwork,
     taxaindex::Dict{String,Int},
@@ -269,9 +281,9 @@ function count_blobpartitions!(
     isempty(hybrids) && error("non-trivial blob without any hybrid.")
     partition = Tuple(splits)
     nparts = length(partition)
-    # check if this partition already exists in blobarray
+    # check if this partition already exists in blobvec
     # currently assuming only level 1
-    matchidx, idxmap = findmatchingblob(blobarray, splits)
+    matchidx, idxmap = findmatchingblob(blobvec, splits)
     if matchidx == -1
         # new blob
         defaultorder = ntuple(identity, nparts)
@@ -286,10 +298,10 @@ function count_blobpartitions!(
             hybridmap,
             false,
         )
-        push!(blobarray, newblob)
+        push!(blobvec, newblob)
     else
         # existing blob, increment freq
-        bf = blobarray[matchidx]
+        bf = blobvec[matchidx]
 
         @assert length(hybrids) == 1 "expected a single hybrid index per blob"
         hybridpos = hybrids[1]
@@ -412,8 +424,11 @@ Also:
   then the indices of these other bicomponents are added to `visitedbcc`.
 - `blobdegree` is incremented by the number of taxon blocks found.
 
-Warning: field `.booln5` is used to track if a hybrid node has (or not) been
-visited yet. Should be initialized earlier.
+Warning: used internal node fields
+- `.booln5` to track if a hybrid node has (or not) been visited yet.
+- `.intn1` to track an index for the node's blob (which may contain more than 1
+  bicomponent).
+Both should be initialized earlier.
 """
 function blobtaxonsetpartition!(
     visitedbcc::Set{Int},
@@ -441,7 +456,8 @@ end
     blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, entrynode, bidx, edgemap, hwmatrix, taxaindex, net)
 
 Helper for `blobtaxonsetpartition` to accumulate entries in `splits` and `hybrids`.
-The node field `.booln5` is used, to visit each hybrid node only once.
+The node field `.booln5` is used to visit each hybrid node only once,
+and `.intn1` is updated to store the blob index that visited nodes are in.
 """
 function blobtaxonsetpartition!(
     splits::Vector{NTuple{N,Bool}},
@@ -521,8 +537,17 @@ function blobtaxonsetpartition!(
     return nothing
 end
 
+"""
+    count_nonredundantbipartitions!()
+
+gather non-redundant cut-edges: from trivial bicomponents
+
+todo:
+- finish the storage of 0/1 bipartition for each chain of 2-blobs.
+- Perhaps break it into several functions.
+"""
 function count_nonredundantbipartitions!(
-    blobarray::Vector{BlobFreq{N}},
+    bpvec::Vector{BlobFreq{N}},
     blobdegree::Vector{Int},
     net::PN.HybridNetwork,
     taxaindex::Dict{String,Int},
@@ -530,14 +555,13 @@ function count_nonredundantbipartitions!(
     hwmatrix::AbstractMatrix,
     edgemap::Dict{<:Integer,<:Integer},
 ) where N
-    splits = NTuple{2,NTuple{N,Bool}}[]
-    bip_inchain = Dict{Int,Bool}
+    inchain_store = Dict{Int,Bool}()
+    inchain_leaf = Dict{Int,Union{String,Nothing}}()
     #= edge number => store?, for cut-edges at some end of a 2-blob chain:
     blobs of degree {d1,d2} = {2,d} with d≠2. If B is the blob of degree ≠2:
     false: B is interesting or d=1 (do not store the split)
     true:  B is not interesting (store the split if the other end agrees)
     =#
-    # gather non-redundant cut-edges: from trivial bicomponents
     for bc in net.partition
         PN.istrivial(bc)  || continue
         e = bc.edge[1] # edge from blob B1 -> blob B2
@@ -547,12 +571,18 @@ function count_nonredundantbipartitions!(
         d2 = (n2.intn1 == 0 ? length(n2.edge) : blobdegree[n2.intn1])
         if d1 == 2 # edge in a 2-blob chain
             d2 == 2 && continue # inside the chain: skip
-            bip_inchain[e.number] = (1 < d2 < minBdegree) # bottom end: remember
+            inchain_store[e.number] = (1 < d2 < minBdegree) # bottom end: remember
+            if d2 == 1
+                inchain_leaf[e.number] = n2.name
+            end
             continue # no storing decision yet
         end
         d2 == 1 && continue # trivial split (not end of 2-blob chain)
         if d2 == 2 # top end in a 2-blob chain
-            bip_inchain[e.number] = (1 < d1 < minBdegree) # top end: remember
+            inchain_store[e.number] = (1 < d1 < minBdegree) # top end: remember
+            if d1 == 1
+                inchain_leaf[e.number] = (n1.intn1 == 0 ? n1.name : nothing)
+            end
             continue # no storing decision yet
         end
         d1 == 1 && continue # can occur if root = leaf or ≠ LSA
@@ -561,13 +591,36 @@ function count_nonredundantbipartitions!(
         rowidx = get(edgemap, e.number, nothing)
         isnothing(rowidx) && error("unmapped non-external edge $(e.number)")
         split = Tuple(Bool(hwmatrix[rowidx,i]) for i in taxacols)
-        push!(splits, (split, Tuple(!x for x in split)))
+        add_bipartition!(bpvec, split)
     end
-    ei_inchain = keys(bip_inchain)
-    for ei in ei_inchain
+    ei_inchain = keys(inchain_store)
+    for e1 in ei_inchain
+        row1 = get(edgemap, e1, nothing)
+        if isnothing(row1) # trivial bipartition: find it
+            haskey(inchain_leaf, e1) || error("trivial bp but not leaf name stored")
+            ti = get(taxaindex, inchain_leaf[e1], nothing)
+            split = ( isnothing(ti) ? Tuple(true for _ in 1:N) : Tuple(j == ti for j in 1:N) )
+        else
+            split = Tuple(Bool(hwmatrix[row1,i]) for i in taxacols)
+        end
+        splitmatch(v) = v == split || all(v .!== split)
+        row2 = findfirst(i -> i != row1 && splitmatch(view(hwmatrix, i, taxacols)),
+            axes(hwmatrix,1))
+        isnothing(row2) && error("blob of 2 chains without an(other) internal edge")
+        e2 = hwmatrix[row2, 1]
+        haskey(inchain_store, e2) || error("2-blob chain: edge $e2 was not detected")
+        # fixit: find split in hwmatrix[ej,taxacols]
+        # fixit:
         # fixit: store 0 or 1 bipartition for each chain of 2-blobs.
     end
-    # fixit: find each split in blobarray, and increment count
+    # fixit: find each split in bpvec, and increment count
+end
+
+function add_bipartition!(bpvec::Vector{BipartFreq{N}}, split) where N
+    (split, Tuple(!x for x in split))
+    # fixit: todo.
+    # push new entry if split not there yet,
+    # increment its frequency otherwise
 end
 
 # fixit: delete below? no longer used.
