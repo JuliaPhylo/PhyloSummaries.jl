@@ -6,11 +6,11 @@ nwk_strings = [
 ]
 net = readnewick.(nwk_strings)
 # sanity-check canonical order helper
-@testset "canonical_orders" begin
+@testset "canonicalorders" begin
     idxmap = [5, 1, 3, 2, 4]
     start_idx = 2 # position of partition[1] in idxmap
     hybrid_idx = 2
-    cw, ccw = PhyloSummaries.canonical_orders(idxmap, start_idx, hybrid_idx)
+    cw, ccw = PhyloSummaries.canonicalorders(idxmap, start_idx, hybrid_idx)
     @test cw == (1, 3, 2, 4, 5)
     @test ccw == (1, 5, 4, 2, 3)
 end
