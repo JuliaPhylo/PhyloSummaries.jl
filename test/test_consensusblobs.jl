@@ -22,17 +22,25 @@ end
     @test any(b.freq == length(net) for b in blobs)
 end
 
-@testset "consensus blobs with chains of 2-blobs" begin
+@testset "blobs & bipartitions with chains of 2-blobs" begin
 chainnwk = "(((((((((e)#H3,(#H3,d)),c,b))#H2),#H2))#H1,#H1),a);"
 net = readnewick.([chainnwk, chainnwk, chainnwk])
 suppressroot!(net[1]); net[1].rooti = 14 # to root at leaf "a"
 removedegree2nodes!(net[2]); # suppress root & another node
 PN.deletehybridedge!(net[3], net[3].edge[3]) # shrinks the 3-cycle
-blobs, bps = consensus_treeofblobs(net)
+taxa = sort(tiplabels(net[1]))
+blobs, bps = PhyloSummaries.count_blobpartitions(net, taxa, 4)
 @test isempty(blobs)
 @test length(bps) == 1
 @test bps[1].split == (true, true, true, false, false)
 @test PhyloSummaries.freq(bps[1]) == 3
+blobs, bps = PhyloSummaries.count_blobpartitions(net, taxa, 3)
+@test length(blobs) == 1
+# fixit: check correct 3-way partition, hybrid and circular order
+@test PhyloSummaries.freq(blobs[1]) == 2
+@test length(bps) == 1
+@test bps[1].split == (true, true, true, false, false)
+@test PhyloSummaries.freq(bps[1]) == 1
 end
 
 # fixit: get consensus ToB etc. & test
