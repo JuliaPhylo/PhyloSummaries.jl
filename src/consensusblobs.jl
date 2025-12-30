@@ -298,16 +298,14 @@ function count_blobpartitions!(
         hybmap = Dict(hybrids[1] => 1)
         newblob = BlobFreq{N,nparts}(Tuple(splits), Ref(1), cofreq, hybmap)
         push!(blobvec, newblob)
-    else # existing blob, increment freq
+    else # existing blob: increment frequencies of canonical partition slots
         bf = blobvec[matchidx]
-
-        @assert length(hybrids) == 1 "expected a single hybrid index per blob"
-        hybridpos = hybrids[1]
-
-        # update hybrid frequency according to canonical partition slot
-        canonhidx = idxmap[hybridpos]
-        bf.hybrid[canonhidx] = get(bf.hybrid, canonhidx, 0) + 1
-
+        length(hybrids) == 1 || @warn "expected a single hybrid exit per blob"
+        hybridpos = hybrids[1] # use the first to find circular order
+        for k in hybrids       # but count all
+            canonk = idxmap[k]
+            bf.hybrid[canonk] = get(bf.hybrid, canonk, 0) + 1
+        end
         # canonicalize circular orders using the split matched to partition entry 1
         startidx = findfirst(==(1), idxmap)
         startidx === nothing && return blobdegree[]
@@ -594,8 +592,9 @@ function count_nonredundantbipartitions!(
         d1 == 1 && continue # can occur if root = leaf or ≠ LSA
         # by now, both d1>2 and d2>2
         (s1 && s2) || continue # skip if redundant with B1 or B2
-        haskey(edgemap, e.number) || error("unmapped non-external edge $(e.number)")
-        split = split_fromHmatrix(hwmatrix, edgemap[e.number], N)
+        row = get(edgemap, e.number, nothing)
+        isnothing(row) && error("unmapped non-external edge $(e.number)")
+        split = split_fromHmatrix(hwmatrix, row, N)
         add_bipartition!(bpvec, split)
     end
     # add 0 or 1 biparts for each 2-blob chain: match the 2 end edges for each
@@ -616,8 +615,8 @@ function count_nonredundantbipartitions!(
     # 2. chains with internal edges at both ends: both in hwmatrix
     while !isempty(inchain_store)
         e1, store1 = pop!(inchain_store)
-        haskey(edgemap, e1) || error("edge $e1 not in hw matrix")
-        row1 = edgemap[e1]
+        row1 = get(edgemap, e1, nothing)
+        isnothing(row1) && error("edge $e1 not in hw matrix")
         split = split_fromHmatrix(hwmatrix, row1, N)
         vsplitmatch(v) = v == split || all(v .!== split)
         isplitmatch(i) = i != row1 && vsplitmatch(view(hwmatrix,i,2:(N+1)))
