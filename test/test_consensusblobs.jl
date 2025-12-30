@@ -25,6 +25,8 @@ blobs, bps = @test_logs (:warn, r"^non-binary articulation") PS.count_blobpartit
  ((0,0,1,0,0), (0,1,0,0,0), (1,0,0,0,0), (0,0,0,1,1)),
  ((0,1,0,0,0), (0,0,1,0,0), (0,0,0,0,1), (1,0,0,1,0)) ]
 @test [PS.freq(b) for b in blobs] == [4,1]
+@test_broken [b.circorder for b in blobs] == [Dict((1,2,3,4)=>4), Dict((1,2,3,4)=>1)]
+@test [b.hybrid for b in blobs] == [Dict(1=>2, 2=>2), Dict(2=>1)]
 end
 
 @testset "blobs & bipartitions with chains of 2-blobs" begin

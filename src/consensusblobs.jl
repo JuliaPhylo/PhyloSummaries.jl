@@ -288,27 +288,17 @@ function count_blobpartitions!(
     end
     isempty(splits)  && error("non-trivial blob without any split.")
     isempty(hybrids) && error("non-trivial blob without any hybrid.")
-    partition = Tuple(splits)
-    nparts = length(partition)
+    nparts = length(splits)
     # check if this partition already exists in blobvec
     # currently assuming only level 1
     matchidx, idxmap = findmatchingblob(blobvec, splits)
-    if isnothing(matchidx)
-        # new blob
+    if isnothing(matchidx) # add new blob to blobvec
         defaultorder = ntuple(identity, nparts)
-        circorder = Dict{typeof(defaultorder),Int}()
-        circorder[defaultorder] = 1
-        hybridmap = Dict{Int,Int}()
-        hybridmap[hybrids[1]] = 1
-        newblob = BlobFreq{N,nparts}(
-            partition,
-            Ref(1),
-            circorder,
-            hybridmap,
-        )
+        cofreq = Dict(defaultorder => 1)
+        hybmap = Dict(hybrids[1] => 1)
+        newblob = BlobFreq{N,nparts}(Tuple(splits), Ref(1), cofreq, hybmap)
         push!(blobvec, newblob)
-    else
-        # existing blob, increment freq
+    else # existing blob, increment freq
         bf = blobvec[matchidx]
 
         @assert length(hybrids) == 1 "expected a single hybrid index per blob"
