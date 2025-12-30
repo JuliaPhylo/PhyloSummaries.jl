@@ -279,7 +279,7 @@ function count_blobpartitions!(
     hwmatrix::AbstractMatrix,
     edgemap::Dict{<:Integer,<:Integer},
 ) where N
-    blobdegree = Ref(0)
+    blobdegree = (bidx==1 ? Ref(0) : Ref(1)) # parent edge: 0 if root, 1 ow
     splits, hybrids = blobtaxonsetpartition!(visitedbcc, blobdegree,
         net, blob, bidx, edgemap, hwmatrix, taxaindex, N)
     if blobdegree[] < minBdegree
@@ -598,10 +598,10 @@ function count_nonredundantbipartitions!(
         end
         d1 == 1 && continue # can occur if root = leaf or ≠ LSA
         # by now, both d1>2 and d2>2
-        (d1 < minBdegree && d2 < minBdegree) || continue # then e is non-redundant
-        rowidx = get(edgemap, e.number, nothing)
-        isnothing(rowidx) && error("unmapped non-external edge $(e.number)")
-        split = ntuple(i-> Bool(hwmatrix[rowidx,i+1]), N)
+        n1.intn1 == 0 || d1 < minBdegree || continue # skip if redundant with B1
+        n2.intn1 == 0 || d2 < minBdegree || continue
+        haskey(edgemap, e.number) || error("unmapped non-external edge $(e.number)")
+        split = split_fromHmatrix(hwmatrix, edgemap[e.number], N)
         add_bipartition!(bpvec, split)
     end
     # add 0 or 1 biparts for each 2-blob chain: match the 2 end edges for each
@@ -611,9 +611,10 @@ function count_nonredundantbipartitions!(
         ti = taxaindex[tax1]
         split = ntuple(isequal(ti), N)
         vsplitmatch(v) = v == split || all(v .!== split)
-        row2 = findfirst(vsplitmatch, axes(hwmatrix,1))
-        isnothing(row2) && error("blob of 2 chains without an internal edge")
-        e2 = hwmatrix[row2, 1]
+        rows = findall(vsplitmatch, axes(hwmatrix,1))
+        k = findfirst(r -> hwmatrix[r,1] != e1 && haskey(inchain_store, hwmatrix[r,1]), rows)
+        isnothing(k) && error("blob of 2 chains without an internal edge")
+        e2 = hwmatrix[rows[k], 1]
         haskey(inchain_store, e2) || error("2-blob chain: edge $e2 was not detected")
         pop!(inchain_store, e1)
         pop!(inchain_store, e2)
@@ -626,9 +627,10 @@ function count_nonredundantbipartitions!(
         split = split_fromHmatrix(hwmatrix, row1, N)
         vsplitmatch(v) = v == split || all(v .!== split)
         isplitmatch(i) = i != row1 && splitmatch(view(hwmatrix,i,taxacols))
-        row2 = findfirst(isplitmatch, axes(hwmatrix,1))
-        isnothing(row2) && error("2-blob chains without 2 internal edges")
-        e2 = hwmatrix[row2, 1]
+        rows = findall(isplitmatch, axes(hwmatrix,1))
+        k = findfirst(r -> haskey(inchain_store, hwmatrix[r,1]), rows)
+        isnothing(k) && error("2-blob chains without 2 internal edges")
+        e2 = hwmatrix[rows[k], 1]
         haskey(inchain_store, e2) || error("2-blob chain: edge $e2 was not detected")
         store2 = pop!(inchain_store, e2)
         if store1 && store2

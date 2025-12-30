@@ -21,6 +21,20 @@ end
     @test reduce(+, b.freq for b in blobs) == length(net)
     @test any(b.freq == length(net) for b in blobs)
 end
+
+@testset "consensus blobs with chains of 2-blobs" begin
+chainnwk = "(((((((((e)#H3,(#H3,d)),c,b))#H2),#H2))#H1,#H1),a);"
+net = readnewick.([chainnwk, chainnwk, chainnwk])
+suppressroot!(net[1]); net[1].rooti = 14 # to root at leaf "a"
+removedegree2nodes!(net[2]); # suppress root & another node
+PN.deletehybridedge!(net[3], net[3].edge[3]) # shrinks the 3-cycle
+blobs, bps = consensus_treeofblobs(net)
+@test isempty(blobs)
+@test length(bps) == 1
+@test bps[1].split == (true, true, true, false, false)
+@test PhyloSummaries.freq(bps[1]) == 3
+end
+
 # fixit: get consensus ToB etc. & test
 #= to look at these networks locally:
 using RCall, PhyloNetworks, PhyloPlots
