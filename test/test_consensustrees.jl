@@ -10,8 +10,8 @@ taxa = ["A","B","C","D"]
 @testset "count_bipartitions!" begin
 # unrooted
 counts = Dictionary{NTuple{4,Bool},Int}()
-PhyloSummaries.count_bipartitions!(counts, tree1, taxa, false)
-PhyloSummaries.count_bipartitions!(counts, tree3, taxa, false)
+PS.count_bipartitions!(counts, tree1, taxa, false)
+PS.count_bipartitions!(counts, tree3, taxa, false)
 expected = Dict(
     (true, true, false, false) => 1,
     (true, false, true, false) => 1,
@@ -22,8 +22,8 @@ for bp in keys(expected)
 end
 # rooted
 empty!(counts)
-PhyloSummaries.count_bipartitions!(counts, tree1, taxa, true)
-PhyloSummaries.count_bipartitions!(counts, tree3, taxa, true)
+PS.count_bipartitions!(counts, tree1, taxa, true)
+PS.count_bipartitions!(counts, tree3, taxa, true)
 expected = Dict(
     (true, true, false, false) => 1,
     (false, false, true, true) => 1,

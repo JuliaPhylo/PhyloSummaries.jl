@@ -84,6 +84,11 @@ function split_fromHmatrix(hwm, row::Int, N::Int)
     return res
 end
 
+function splitcomplement(splitvec::AbstractVector{NTuple{N,Bool}}) where N
+    isoutgroup(i) = !any(t[i] for t in splitvec)
+    return ntuple(isoutgroup, N)
+end
+
 """
     consensus_treeofblobs(networks; proportion=0, minimumblobdegree=4)
 
@@ -166,11 +171,10 @@ A cut edge contributes and entry and is counted in a `bipart_vec` if it is
 *not redundant* with a non-trivial blob of N, that is, if one of its two
 taxon blocks is not also a taxon block of a non-trivial blob in N.
 
-Side effects and internal fields:
-- the node field `.intn1` stores 0 if the node is a singleton blob, and
-  the node's blob index otherwise. This index is the index of the first
-  bicomponent in the blob (which are pre-ordered).
-- the node field `.booln5` is used for intermediate calculations.
+Side effect:
+the internal node field `.intn1` stores 0 if the node is a singleton blob, and
+the node's blob index otherwise. This index is the index of the first
+bicomponent in the blob (which are pre-ordered).
 
 See also: [`consensus_treeofblobs`](@ref)
 """
@@ -239,12 +243,9 @@ function count_blobpartitions!(
         end
     end
     visitedbcc = Set{Int}() # bicomponent already visited, from an earlier same blob
-    # initialize node fields used by count_blobpartitions! before traversal
-    for v in net.hybrid
-        v.booln5 = false # visited earlier during current bicomponent traversal?
-    end
+    # initialize node field used by count_blobpartitions! before traversal
     for v in net.node
-        v.intn1 = 0 # index of the node's blob, if non-trivial
+        v.intn1 = 0 # index of the node's blob. will remain 0 if {v} = trivial blob
     end
     # 'interesting' blobs will have blobdegree >= minBdegree
     blobdegree = zeros(Int, length(net.partition))
@@ -437,11 +438,9 @@ Also:
   then the indices of these other bicomponents are added to `visitedbcc`.
 - `blobdegree` is incremented by the number of taxon blocks found.
 
-Warning: used internal node fields
-- `.booln5` to track if a hybrid node has (or not) been visited yet.
-- `.intn1` to track an index for the node's blob (which may contain more than 1
-  bicomponent).
-Both should be initialized earlier.
+Warning: used internal node field `.intn1` to track an index for the
+node's blob (which may contain more than 1 bicomponent).
+It should be initialized earlier (to a value ≤ 0).
 """
 function blobtaxonsetpartition!(
     visitedbcc::Set{Int},
@@ -462,6 +461,12 @@ function blobtaxonsetpartition!(
     # traverse the blob starting at entrynode of the biconnected component
     blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree,
         entrynode, bidx, edgemap, hwmatrix, taxaindex, net)
+    if bidx > 1 # entry ≠ root: add split from the unique entry cut-edge
+        outgroupsplit = splitcomplement(splits)
+        if any(outgroupsplit) # empty if entry is at or above LSA (≠ root)
+            push!(splits, outgroupsplit)
+        end
+    end
     return splits, hybrids
 end
 
@@ -469,8 +474,12 @@ end
     blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, entrynode, bidx, edgemap, hwmatrix, taxaindex, net)
 
 Helper for `blobtaxonsetpartition` to accumulate entries in `splits` and `hybrids`.
-The node field `.booln5` is used to visit each hybrid node only once,
-and `.intn1` is updated to store the blob index that visited nodes are in.
+The node field `.intn1` is updated to store the blob index that a visited node
+is in: index of the first biconnected component in this blob.
+
+In `splits`, only the *children* taxon blocks are gathered, from exit cut-edges,
+but recursively across all bicomponents in the blob (which may occur in
+non-binary networks).
 """
 function blobtaxonsetpartition!(
     splits::Vector{NTuple{N,Bool}},
@@ -484,11 +493,6 @@ function blobtaxonsetpartition!(
     taxaindex::Dict{String,Int},
     net::PN.HybridNetwork,
 ) where N
-    if node.hybrid # only visit a hybrid once
-        node.booln5 && return nothing
-        node.booln5 = true
-    end
-    taxacols = 2:(N + 1)
     # gather splits from 'node' *before* continuing the traversal
     ne_sp = 0 # number of edges giving a split: child cut-edges
     ne_go = 0 # number of edges to go through next: child edges in blob
@@ -496,6 +500,7 @@ function blobtaxonsetpartition!(
     bcc = net.partition
     for e in node.edge
         isparentof(node,e) || continue
+        e.ismajor || continue # to visit each hybrid node only once
         if e.inte1 == bidx # skip e if e ∈ this bicomponent
             ne_go += 1
             continue
@@ -520,8 +525,6 @@ function blobtaxonsetpartition!(
             push!(hybrids, length(splits))
         end
     end
-    # fixit: add 1 more partition for the complement of all others (associated with entry node).
-    # not needed if the root is the blob's entry node (= when bidx==1), needed otherwise.
     if ne_sp > 1 || atotherBC
         msg = "non-binary articulation node $(node.number): if its blob has a circular order, is is" *
             (ne_sp > 1 ? "" : " probably") * " not unique."
@@ -531,16 +534,16 @@ function blobtaxonsetpartition!(
     ne_go == 0 && return nothing # next loop not needed
     for e in node.edge
         isparentof(node,e) || continue
+        e.ismajor || continue
         ei = e.inte1
         if ei == bidx
             cn = PN.getchild(e)
             cn.intn1 = node.intn1 # may be different from bidx
             blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree,
                 cn, bidx, edgemap, hwmatrix, taxaindex, net)
-        elseif atotherBC && !PN.istrivial(bcc[ei])
+        elseif atotherBC && !PN.istrivial(bcc[ei]) && !(ei ∈ visitedbcc)
             push!(visitedbcc, ei)
             otherBCentry = net.vec_node[PN.entrynode_preindex(bcc[ei])]
-            otherBCentry.booln5 = false # reset: will go down (not back up)
             otherBCentry.intn1 = node.intn1
             blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree,
                 otherBCentry,   ei,   edgemap, hwmatrix, taxaindex, net)
@@ -578,11 +581,13 @@ function count_nonredundantbipartitions!(
         e = bc.edges[1] # edge from blob B1 -> blob B2
         n1 = getparent(e) # should be net.vec_node[p.cycle[1]]
         d1 = (n1.intn1 == 0 ? length(n1.edge) : blobdegree[n1.intn1])
+        s1 = n1.intn1 == 0 || d1 < minBdegree # B1 not interesting: store e (perhaps)
         n2 = getchild(e)
         d2 = (n2.intn1 == 0 ? length(n2.edge) : blobdegree[n2.intn1])
+        s2 = n2.intn1 == 0 || d2 < minBdegree
         if d1 == 2 # edge in a 2-blob chain
             d2 == 2 && continue # inside the chain: skip
-            inchain_store[e.number] = (1 < d2 < minBdegree) # bottom end: remember
+            inchain_store[e.number] = s2 && d2 > 1 # bottom end: remember
             if d2 == 1
                 inchain_leaf[e.number] = n2.name
             end
@@ -590,7 +595,7 @@ function count_nonredundantbipartitions!(
         end
         d2 == 1 && continue # trivial split (not end of 2-blob chain)
         if d2 == 2 # top end in a 2-blob chain
-            inchain_store[e.number] = (1 < d1 < minBdegree) # top end: remember
+            inchain_store[e.number] = s1 && d1 > 1 # top end: remember
             if d1 == 1 && n1.intn1 == 0
                 inchain_leaf[e.number] = n1.name
             end
@@ -598,8 +603,7 @@ function count_nonredundantbipartitions!(
         end
         d1 == 1 && continue # can occur if root = leaf or ≠ LSA
         # by now, both d1>2 and d2>2
-        n1.intn1 == 0 || d1 < minBdegree || continue # skip if redundant with B1
-        n2.intn1 == 0 || d2 < minBdegree || continue
+        (s1 && s2) || continue # skip if redundant with B1 or B2
         haskey(edgemap, e.number) || error("unmapped non-external edge $(e.number)")
         split = split_fromHmatrix(hwmatrix, edgemap[e.number], N)
         add_bipartition!(bpvec, split)
@@ -626,7 +630,7 @@ function count_nonredundantbipartitions!(
         row1 = edgemap[e1]
         split = split_fromHmatrix(hwmatrix, row1, N)
         vsplitmatch(v) = v == split || all(v .!== split)
-        isplitmatch(i) = i != row1 && splitmatch(view(hwmatrix,i,taxacols))
+        isplitmatch(i) = i != row1 && vsplitmatch(view(hwmatrix,i,2:(N+1)))
         rows = findall(isplitmatch, axes(hwmatrix,1))
         k = findfirst(r -> haskey(inchain_store, hwmatrix[r,1]), rows)
         isnothing(k) && error("2-blob chains without 2 internal edges")

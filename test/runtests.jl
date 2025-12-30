@@ -6,6 +6,7 @@ using Dictionaries
 using PhyloNetworks
 
 const PN = PhyloNetworks
+const PS = PhyloSummaries
 
 @testset "PhyloSummaries Code quality (Aqua.jl)" begin
     Aqua.test_all(PhyloSummaries)
