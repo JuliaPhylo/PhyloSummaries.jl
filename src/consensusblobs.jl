@@ -16,8 +16,8 @@ const BlobSplit = NTuple{N,Bool} where N
 """
     BlobFreq{N,P}
 
-Frequency of one blob partition, and frequency of its circular orders and
-taxon blocks whose parent in the blob is a hybrid node.
+Frequency of one non-trivial blob partition, and frequency of its circular orders
+and taxon blocks whose parent in the blob is a hybrid node.
 
 - The partition associated with a blob in a network is the partition into
   taxon blocks from the connected component of the network after the blob
@@ -27,8 +27,8 @@ taxon blocks whose parent in the blob is a hybrid node.
 - For each part in the partition, this part is a "hybrid" for this blob if it is
   adjacent to the blob at a hybrid node.
 
-`P` is the number of parts (taxon blocks) in the partition.
-`N` is the number of leaves (taxa) in the network.
+`P` is the number of parts (taxon blocks) in the partition; 3 or more.
+`N` is the number of leaves (taxa) in the network. 3 or more.
 """
 struct BlobFreq{N,P}
     "blob partition: P parts, each described as a tuple of of size N"
@@ -40,15 +40,6 @@ struct BlobFreq{N,P}
     "frequencies of the different hybrid parts for blobs with this partition"
     hybrid::Dict{Int,Int}
 end
-freq(obj::BlobFreq) = obj.freq[]
-function freq!(obj::BlobFreq, n)
-    obj.freq[] = n
-    return obj
-end
-function incrementfreq!(obj::BlobFreq)
-    obj.freq[] += 1
-    return obj
-end
 
 """
     BipartFreq{N}
@@ -58,20 +49,39 @@ by a cut-edge, not trivial, and not redundant with some interesting blob
 (meaning: not adjacent to any interesting blob).
 """
 struct BipartFreq{N}
-    "biartition: P=2 parts, each described as a tuple of of size N"
-    partition::NTuple{P,NTuple{N,Bool}}
+    """bipartition: block 1 contains the last taxon, block 2 does not.
+    The bipartition is described by 1 tuple of size N for membership in block 1:
+    `split[i]` is `true` is taxon `i` is in block 1, `false` if it's in block 2.
+    """
+    split::NTuple{N,Bool}
     "frequency of the bipartition as a non-redundant. mutable: use freq and freq! to get/set this value."
     freq::Base.RefValue{Int}
-    "frequencies of the different hybrid parts for blobs with this partition"
 end
-freq(obj::BlobFreq) = obj.freq[]
-function freq!(obj::BlobFreq, n)
+
+freq(obj::Union{BipartFreq,BlobFreq}) = obj.freq[]
+function freq!(obj::Union{BipartFreq,BlobFreq}, n)
     obj.freq[] = n
     return obj
 end
-function incrementfreq!(obj::BlobFreq)
+function incrementfreq!(obj::Union{BipartFreq,BlobFreq})
     obj.freq[] += 1
     return obj
+end
+
+"""
+    split_fromHmatrix(M, i, N)
+
+Tuple of booleans from row `i` of the hardwired-cluster matrix `M` on `N` taxa,
+considering the phylogeny as unrooted: 0/1 values are switched if necessary,
+to make sure that the last entry is `false`.
+
+Equivalent to `tuple_from_clustervector(M[i,2:(N+1)], false)`.
+"""
+function split_fromHmatrix(hwm, row::Int, N::Int)
+    res = (hwm[row,N+1] == 1 ?
+        ntuple(j -> !Bool(hwm[row, j+1]), N) :
+        ntuple(j ->  Bool(hwm[row, j+1]), N)  )
+    return res
 end
 
 """
@@ -245,9 +255,7 @@ function count_blobpartitions!(
         blobdegree[bidx] = count_blobpartitions!(blobvec, visitedbcc,
             net, taxaindex, minBdegree, bc, bidx, hwmatrix, edgemap)
     end
-    #= gather non-redundant cut-edges: from trivial bicomponents. uses:
-    - nodes' .intn1 to know which 2 blobs are adjacent to a cut edge
-    - blobdegree to know if either of these blobs is "interesting" =#
+    # gather non-redundant cut-edges: from trivial bicomponents
     count_nonredundantbipartitions!(bpvec, blobdegree,
             net, taxaindex, minBdegree, hwmatrix, edgemap)
     return nothing
@@ -284,7 +292,7 @@ function count_blobpartitions!(
     # check if this partition already exists in blobvec
     # currently assuming only level 1
     matchidx, idxmap = findmatchingblob(blobvec, splits)
-    if matchidx == -1
+    if isnothing(matchidx)
         # new blob
         defaultorder = ntuple(identity, nparts)
         circorder = Dict{typeof(defaultorder),Int}()
@@ -296,7 +304,6 @@ function count_blobpartitions!(
             Ref(1),
             circorder,
             hybridmap,
-            false,
         )
         push!(blobvec, newblob)
     else
@@ -329,34 +336,40 @@ function count_blobpartitions!(
 end
 
 """
-    findmatchingblob(blobs, splits)
+    findmatchingblob(blobs::Vector{BlobFreq{N}}, splits) where N
 
-Return the index of the blob in `blobs` whose partition matches `splits`,
-along with the permutation vector `idxmap`. Returns `(-1, Int[])` if no
-match is found.
+Index in `blobs` and permutation to match the blob partition of `splits`.
+Output:
+- `(i,idxmap)` if `blobs[i]` matches `splits` using permutation vector `idxmap`,
+  that is: `splits[k]` is `blobs[i].partition[idxmap[k]]` for all `k`.
+- `(nothing, nothing)` if no match is found.
+
+Assumption: the splits partition the full set of `N` taxa, and so do the
+taxon blocks of each blob. In particular, splits are distinct from one another,
+and taxon blocks from a given partition are also distinct.
 """
-function findmatchingblob(blobs::Vector{BlobFreq{N}}, splits::AbstractVector) where N
+function findmatchingblob(
+    blobs::Vector{BlobFreq{N}},
+    splits::AbstractVector
+) where N
     for (i, blob) in pairs(blobs)
         partition = blob.partition
-        length(partition) == length(splits) || continue
-
-        idxmap = Vector{Int}(undef, length(splits))
-        used = falses(length(partition))
+        P = length(splits)
+        length(partition) == P || continue
+        idxmap = Vector{Int}(undef, P)
+        # used = falses(length(partition)) ## removed because blocks are distincts
         equalblob = true
-
         for (k, s) in pairs(splits)
             pos = findfirst(isequal(s), partition)
-            if pos === nothing || used[pos]
+            if pos === nothing
                 equalblob = false
                 break
             end
             idxmap[k] = pos
-            used[pos] = true
         end
-
-        equalblob && return i, idxmap
+        equalblob && return (i, idxmap)
     end
-    return -1, Int[]
+    return (nothing, nothing)
 end
 
 """
@@ -495,13 +508,12 @@ function blobtaxonsetpartition!(
         ne_sp += 1
         if getchild(e).leaf # trivial split, not in hwmatrix, but needed here
             i0 = taxaindex[getchild(e).name]
-            split = Tuple(i == i0 for i in 1:N)
+            split = ntuple(isequal(i0), N)
         else
             rowidx = get(edgemap, e.number, nothing)
             isnothing(rowidx) && error("unmapped non-external edge $(e.number)")
             # if good reason, then: split = descendants_bitvec(e, taxaindex)
-            # split = Tuple(view(hwmatrix, rowidx, taxacols)) # tuple of Int
-            split = Tuple(Bool(hwmatrix[rowidx,i]) for i in taxacols)
+            split = ntuple(i -> Bool(hwmatrix[rowidx,i+1]), N)
         end
         push!(splits, split)
         if node.hybrid
@@ -538,16 +550,15 @@ function blobtaxonsetpartition!(
 end
 
 """
-    count_nonredundantbipartitions!()
+    count_nonredundantbipartitions!(bipart_vec, blobdegree, net, ...)
 
-gather non-redundant cut-edges: from trivial bicomponents
-
-todo:
-- finish the storage of 0/1 bipartition for each chain of 2-blobs.
-- Perhaps break it into several functions.
+Gather non-redundant cut-edges from `net` and add them to `bipart_vec`
+(or increment their frequency).
+The field `.intn1` is used to know which blobs are adjacent to a cut edge,
+and `blobdegree` to know if either of these blobs is "interesting"
 """
 function count_nonredundantbipartitions!(
-    bpvec::Vector{BlobFreq{N}},
+    bpvec::Vector{BipartFreq{N}},
     blobdegree::Vector{Int},
     net::PN.HybridNetwork,
     taxaindex::Dict{String,Int},
@@ -564,7 +575,7 @@ function count_nonredundantbipartitions!(
     =#
     for bc in net.partition
         PN.istrivial(bc)  || continue
-        e = bc.edge[1] # edge from blob B1 -> blob B2
+        e = bc.edges[1] # edge from blob B1 -> blob B2
         n1 = getparent(e) # should be net.vec_node[p.cycle[1]]
         d1 = (n1.intn1 == 0 ? length(n1.edge) : blobdegree[n1.intn1])
         n2 = getchild(e)
@@ -580,8 +591,8 @@ function count_nonredundantbipartitions!(
         d2 == 1 && continue # trivial split (not end of 2-blob chain)
         if d2 == 2 # top end in a 2-blob chain
             inchain_store[e.number] = (1 < d1 < minBdegree) # top end: remember
-            if d1 == 1
-                inchain_leaf[e.number] = (n1.intn1 == 0 ? n1.name : nothing)
+            if d1 == 1 && n1.intn1 == 0
+                inchain_leaf[e.number] = n1.name
             end
             continue # no storing decision yet
         end
@@ -590,37 +601,50 @@ function count_nonredundantbipartitions!(
         (d1 < minBdegree && d2 < minBdegree) || continue # then e is non-redundant
         rowidx = get(edgemap, e.number, nothing)
         isnothing(rowidx) && error("unmapped non-external edge $(e.number)")
-        split = Tuple(Bool(hwmatrix[rowidx,i]) for i in taxacols)
+        split = ntuple(i-> Bool(hwmatrix[rowidx,i+1]), N)
         add_bipartition!(bpvec, split)
     end
-    ei_inchain = keys(inchain_store)
-    for e1 in ei_inchain
-        row1 = get(edgemap, e1, nothing)
-        if isnothing(row1) # trivial bipartition: find it
-            haskey(inchain_leaf, e1) || error("trivial bp but not leaf name stored")
-            ti = get(taxaindex, inchain_leaf[e1], nothing)
-            split = ( isnothing(ti) ? Tuple(true for _ in 1:N) : Tuple(j == ti for j in 1:N) )
-        else
-            split = Tuple(Bool(hwmatrix[row1,i]) for i in taxacols)
-        end
-        splitmatch(v) = v == split || all(v .!== split)
-        row2 = findfirst(i -> i != row1 && splitmatch(view(hwmatrix, i, taxacols)),
-            axes(hwmatrix,1))
-        isnothing(row2) && error("blob of 2 chains without an(other) internal edge")
+    # add 0 or 1 biparts for each 2-blob chain: match the 2 end edges for each
+    # 1. edges that have no entry in hwmatrix. trivial: don't store them
+    while !isempty(inchain_leaf)
+        e1, tax1 = pop!(inchain_leaf)
+        ti = taxaindex[tax1]
+        split = ntuple(isequal(ti), N)
+        vsplitmatch(v) = v == split || all(v .!== split)
+        row2 = findfirst(vsplitmatch, axes(hwmatrix,1))
+        isnothing(row2) && error("blob of 2 chains without an internal edge")
         e2 = hwmatrix[row2, 1]
         haskey(inchain_store, e2) || error("2-blob chain: edge $e2 was not detected")
-        # fixit: find split in hwmatrix[ej,taxacols]
-        # fixit:
-        # fixit: store 0 or 1 bipartition for each chain of 2-blobs.
+        pop!(inchain_store, e1)
+        pop!(inchain_store, e2)
     end
-    # fixit: find each split in bpvec, and increment count
+    # 2. chains with internal edges at both ends: both in hwmatrix
+    while !isempty(inchain_store)
+        e1, store1 = pop!(inchain_store)
+        haskey(edgemap, e1) || error("edge $e1 not in hw matrix")
+        row1 = edgemap[e1]
+        split = split_fromHmatrix(hwmatrix, row1, N)
+        vsplitmatch(v) = v == split || all(v .!== split)
+        isplitmatch(i) = i != row1 && splitmatch(view(hwmatrix,i,taxacols))
+        row2 = findfirst(isplitmatch, axes(hwmatrix,1))
+        isnothing(row2) && error("2-blob chains without 2 internal edges")
+        e2 = hwmatrix[row2, 1]
+        haskey(inchain_store, e2) || error("2-blob chain: edge $e2 was not detected")
+        store2 = pop!(inchain_store, e2)
+        if store1 && store2
+            add_bipartition!(bpvec, split)
+        end
+    end
+    return nothing
 end
 
 function add_bipartition!(bpvec::Vector{BipartFreq{N}}, split) where N
-    (split, Tuple(!x for x in split))
-    # fixit: todo.
-    # push new entry if split not there yet,
-    # increment its frequency otherwise
+    i = findfirst(bp -> bp.split == split, bpvec)
+    if isnothing(i)
+        push!(bpvec, BipartFreq{N}(split,Ref(1)))
+    else
+        incrementfreq!(bpvec[i])
+    end
 end
 
 # fixit: delete below? no longer used.

@@ -16,10 +16,10 @@ net = readnewick.(nwk_strings)
 end
 
 @testset "consensusblobs basics" begin
-    blobs = consensus_treeofblobs(net)
+    blobs, bps = consensus_treeofblobs(net)
     @test !isempty(blobs)
-    @test reduce(+, b.count for b in blobs) == length(net)
-    @test any(b.count == length(net) for b in blobs)
+    @test reduce(+, b.freq for b in blobs) == length(net)
+    @test any(b.freq == length(net) for b in blobs)
 end
 # fixit: get consensus ToB etc. & test
 #= to look at these networks locally:

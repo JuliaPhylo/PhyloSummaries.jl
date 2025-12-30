@@ -1,6 +1,20 @@
 const SplitTuple = NTuple{N,Bool} where N # tuple used to represent a bipartition
 
 """
+    istrivialsplit(v)
+
+true/false if `v` does / does not represent a trivial split. `v` should contain
+booleans or 0/1 values. A split is trivial if it has:
+all 0s, or all 1s, or a single 0, or a single 1.
+"""
+function istrivialsplit(v)
+    N = length(v)
+    n1 = sum(v)
+    n0 = N - n1
+    return n1 <= 1 || n0 <= 1
+end
+
+"""
     consensustree(trees::AbstractVector{PN.HybridNetwork};
                   rooted=false,
                   proportion=0,
@@ -143,11 +157,12 @@ function count_bipartitions!(
         end
     end
     hw_matrix = hardwiredclusters(net, taxa)
-
-    taxa_cols = 2:(length(taxa) + 1)
+    N = length(taxa)
+    taxa_cols = 2:(N + 1)
     for row_idx in axes(hw_matrix, 1)
-        split = tuple_from_clustervector(view(hw_matrix, row_idx, taxa_cols), rooted)
-        isnothing(split) && continue
+        splitv = view(hw_matrix, row_idx, taxa_cols)
+        istrivialsplit(splitv) && continue
+        split = tuple_from_clustervector(splitv, rooted)
         set!(counts, split, get(counts, split, 0) + 1)
     end
     return counts
@@ -166,15 +181,11 @@ For example, clusters `0011` and `1100` represent the same bipartition, and
 both would return tuple `(true,true,false,false)`.
 """
 function tuple_from_clustervector(cluster01vector::AbstractVector, rooted::Bool)
-    n1 = sum(cluster01vector)
-    n0 = length(cluster01vector)-n1
-    if n1 <= 1 || n0 <= 1 # trivial clusters
-        return nothing
+    N = length(cluster01vector)
+    if !rooted && cluster01vector[N] == 1
+        return ntuple(i -> !Bool(cluster01vector[i]), N)
     end
-    if !rooted && cluster01vector[end] == 1
-        return Tuple(x==0 for x in cluster01vector)
-    end
-    return Tuple(x==1 for x in cluster01vector)
+    return ntuple(i -> Bool(cluster01vector[i]), N)
 end
 
 """
