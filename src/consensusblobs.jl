@@ -171,10 +171,11 @@ A cut edge contributes and entry and is counted in a `bipart_vec` if it is
 *not redundant* with a non-trivial blob of N, that is, if one of its two
 taxon blocks is not also a taxon block of a non-trivial blob in N.
 
-Side effect:
-the internal node field `.intn1` stores 0 if the node is a singleton blob, and
-the node's blob index otherwise. This index is the index of the first
-bicomponent in the blob (which are pre-ordered).
+Side effects and internal fields:
+- `.inte1` set by `process_biconnectedcomponents!` is used (and not modified)
+- `.intn1` stores 0 if a node is a singleton blob, and the node's blob index
+  otherwise: index of the first bicomponent in the blob (which are pre-ordered).
+- `.boole1` of edges, to visit hybrid nodes once and in "half" circular order.
 
 See also: [`consensus_treeofblobs`](@ref)
 """
@@ -243,7 +244,10 @@ function count_blobpartitions!(
         end
     end
     visitedbcc = Set{Int}() # bicomponent already visited, from an earlier same blob
-    # initialize node field used by count_blobpartitions! before traversal
+    # initialize fields used by count_blobpartitions! before traversal
+    for e in net.edge
+        e.boole1 = true # may be traversed?
+    end
     for v in net.node
         v.intn1 = 0 # index of the node's blob. will remain 0 if {v} = trivial blob
     end
@@ -412,12 +416,14 @@ to a cut-edge `uv` adjacent to the blob, with `u ∈ B` in the blob and `v ∉
 The taxon block for `uv` is reprented by an `N`-tuple of 0/1 values with 1 at
 index `i = taxaindex[label]` if the taxon named `label` is a descendant of
 `uv`, and 0 otherwise.
-If `u ∈ B` is a hybrid node, then the taxon block associated with `uv` is
-considered "hybrid" for this blob.
+If `u ∈ B` is a hybrid node incident to some exit edge `uv`, then the taxon
+block associated with this edge is considered "hybrid" for this blob.
 
 Output: `(splits,hybrid)` where
-- `splits` is the blob's partition as a tuple of N-tuples, and
-- `hybrid` is the (sorted) vector of indices in `splits`, of taxon blocks
+- `splits` is the blob's partition as a tuple of N-tuples, listed in a "half"
+  circular order if the blob is level-1: from highest to lowest along one side
+  then along the other side.
+- `hybrid` is the vector of indices in `splits`, of taxon blocks
   that are hybrid for the blob.
 
 Also:
@@ -426,9 +432,13 @@ Also:
   then the indices of these other bicomponents are added to `visitedbcc`.
 - `blobdegree` is incremented by the number of taxon blocks found.
 
-Warning: used internal node field `.intn1` to track an index for the
-node's blob (which may contain more than 1 bicomponent).
-It should be initialized earlier (to a value ≤ 0).
+Warning: used internal fields
+- `.inte1` set by `process_biconnectedcomponents!` is used (not modified)
+- `.intn1` is modified to track to store the node's blob, if non-trivial
+  (a blob may contain more than 1 bicomponent). This field should be
+  initialized earlier (to a value ≤ 0).
+- `.boole1` is modified to track if a hybrid edge may be traversed, still;
+  should be initialized earlier (to true).
 """
 function blobtaxonsetpartition!(
     visitedbcc::Set{Int},
@@ -452,7 +462,9 @@ function blobtaxonsetpartition!(
     if bidx > 1 # entry ≠ root: add split from the unique entry cut-edge
         outgroupsplit = splitcomplement(splits)
         if any(outgroupsplit) # empty if entry is at or above LSA (≠ root)
-            push!(splits, outgroupsplit)
+            # first to get circular order later: treat a node before its children
+            pushfirst!(splits, outgroupsplit)
+            hybrids .+= 1
         end
     end
     return splits, hybrids
@@ -462,8 +474,12 @@ end
     blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, entrynode, bidx, edgemap, hwmatrix, taxaindex, net)
 
 Helper for `blobtaxonsetpartition` to accumulate entries in `splits` and `hybrids`.
-The node field `.intn1` is updated to store the blob index that a visited node
-is in: index of the first biconnected component in this blob.
+Internal fields:
+- `.inte1` used but not modified: should store the index of an edge's
+  biconnected component.
+- `.intn1` updated to store the blob index that a visited node is in:
+  index of the first biconnected component in this blob.
+-`.boole1` set to `false` for all partners of an edge that will be traverered.
 
 In `splits`, only the *children* taxon blocks are gathered, from exit cut-edges,
 but recursively across all bicomponents in the blob (which may occur in
@@ -488,7 +504,7 @@ function blobtaxonsetpartition!(
     bcc = net.partition
     for e in node.edge
         isparentof(node,e) || continue
-        e.ismajor || continue # to visit each hybrid node only once
+        e.boole1 || continue # hybrid node already visited
         if e.inte1 == bidx # skip e if e ∈ this bicomponent
             ne_go += 1
             continue
@@ -522,10 +538,17 @@ function blobtaxonsetpartition!(
     ne_go == 0 && return nothing # next loop not needed
     for e in node.edge
         isparentof(node,e) || continue
-        e.ismajor || continue
+        e.boole1 || continue
         ei = e.inte1
         if ei == bidx
             cn = PN.getchild(e)
+            if e.hybrid # then partner edges should be skipped later
+                for pe in cn.edge
+                    if pe.hybrid && pe !== e && ischildof(cn,pe)
+                        pe.boole1 = false
+                    end
+                end
+            end
             cn.intn1 = node.intn1 # may be different from bidx
             blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree,
                 cn, bidx, edgemap, hwmatrix, taxaindex, net)
