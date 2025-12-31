@@ -322,7 +322,7 @@ function count_blobpartitions!(
             bf.hybrid[canonk] = get(bf.hybrid, canonk, 0) + 1
         end
         # canonicalize circular orders using the split matched to partition entry 1
-        @show indexin(1:nparts, idxmap)
+        startidx = findfirst(==(1), idxmap)
         startidx === nothing && return blobdegree[]
         # fixit: why not throw an error above? 1 should always be found.
         # we should always have that Set() == Set(1:nparts)
