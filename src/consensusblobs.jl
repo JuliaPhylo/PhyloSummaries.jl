@@ -298,24 +298,39 @@ function count_blobpartitions!(
     matchidx, idxmap = findmatchingblob(blobvec, splits)
     if isnothing(matchidx) # add new blob to blobvec
         defaultorder = ntuple(identity, nparts)
+        #= fixit: 'identity' wrong if 2+ blocks on both sides of the hybrid.
+        ihyb = hybrids[1]
+        side1 = 1:ihyh; side2 = nparts:-1:(ihyb+1)
+        defaultorder = Tuple(vcat(side1, side2))
+        or something more efficient?
+        downstream problems with changing the default order?
+        Alternative: build the Tuple of splits with this order instead?
+        co = vcat(side1, side2) # or collect(Iterators.flatten((side1, side2)))
+        partition = ntuple(i -> split[co[i]], nparts)
+        newblob = BlobFreq{N,nparts}(partition, Ref(1), cofreq, hybmap)
+        =#
         cofreq = Dict(defaultorder => 1)
         hybmap = Dict(hybrids[1] => 1)
         newblob = BlobFreq{N,nparts}(Tuple(splits), Ref(1), cofreq, hybmap)
         push!(blobvec, newblob)
     else # existing blob: increment frequencies of canonical partition slots
         bf = blobvec[matchidx]
-        length(hybrids) == 1 || @warn "expected a single hybrid exit per blob"
+        length(hybrids) == 1 || @warn "expected a single exit hybrid per blob"
         hybridpos = hybrids[1] # use the first to find circular order
         for k in hybrids       # but count all
             canonk = idxmap[k]
             bf.hybrid[canonk] = get(bf.hybrid, canonk, 0) + 1
         end
         # canonicalize circular orders using the split matched to partition entry 1
-        startidx = findfirst(==(1), idxmap)
+        @show indexin(1:nparts, idxmap)
         startidx === nothing && return blobdegree[]
-
+        # fixit: why not throw an error above? 1 should always be found.
+        # we should always have that Set() == Set(1:nparts)
+        # also, could this help: indexin(1:nparts, idxmap)
+        # first value = startidx
         circorderkey, reversekey = canonicalorders(idxmap, startidx, hybridpos)
         isempty(circorderkey) && return blobdegree[]
+        # fixit: why not throw an error above?
         if haskey(bf.circorder, circorderkey)
             bf.circorder[circorderkey] += 1
         elseif haskey(bf.circorder, reversekey)
