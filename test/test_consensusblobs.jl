@@ -61,7 +61,7 @@ bb, bp = @test_logs (:warn, r"single exit hybrid") PS.count_blobpartitions(net, 
 @test_broken isempty(bb[1].circorder)
 # fixit: we should turn off calculation of the circular order
 # for blobs with a biconnected component of level >1
-@test bb[1].hybrid == Dict(
+@test bb[1].hybrid == Dict( # NOTE: 6 but only 5 networks because one has 2 hybrids
   3 => 5,  # h hybrid in all 5 nets,
   5 => 1) # b2 hybrid in net[5] only
 end

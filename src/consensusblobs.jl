@@ -5,7 +5,7 @@ add a note saying that in the future we will add functionality to maintain circu
 =#
 
 #TODO: parse in circular order and store info that way. check funcs after canonicalizepartition
-
+#TODO: getlevel forr network: https://github.com/JuliaPhylo/PhyloNetworks.jl/blob/c4973f9893b54de2594cdac0e403f9249f948860/src/graph_components.jl#L429. throw a warning once
 #= In a network with N leaves, the partition of taxa (leaves) defined by a blob
 is represented as a tuple of N integers.
 Taxa sharing the same integer are in the same taxon block (part of the partition).
@@ -298,6 +298,7 @@ function count_blobpartitions!(
     matchidx, idxmap = findmatchingblob(blobvec, splits)
     if isnothing(matchidx) # add new blob to blobvec
         defaultorder = ntuple(identity, nparts)
+
         #= fixit: 'identity' wrong if 2+ blocks on both sides of the hybrid.
         ihyb = hybrids[1]
         side1 = 1:ihyh; side2 = nparts:-1:(ihyb+1)
@@ -323,14 +324,13 @@ function count_blobpartitions!(
         end
         # canonicalize circular orders using the split matched to partition entry 1
         startidx = findfirst(==(1), idxmap)
-        startidx === nothing && return blobdegree[]
-        # fixit: why not throw an error above? 1 should always be found.
+        startidx === nothing && error("blob partition: 1 not found in idxmap. Expected Set(idxmap) == Set(1:nparts)")
+        #fixit:
         # we should always have that Set() == Set(1:nparts)
         # also, could this help: indexin(1:nparts, idxmap)
         # first value = startidx
         circorderkey, reversekey = canonicalorders(idxmap, startidx, hybridpos)
-        isempty(circorderkey) && return blobdegree[]
-        # fixit: why not throw an error above?
+        isempty(circorderkey) && error("blob partition: empty circular order key")
         if haskey(bf.circorder, circorderkey)
             bf.circorder[circorderkey] += 1
         elseif haskey(bf.circorder, reversekey)
@@ -571,13 +571,14 @@ function blobtaxonsetpartition!(
             push!(visitedbcc, ei)
             otherBCentry = net.vec_node[PN.entrynode_preindex(bcc[ei])]
             otherBCentry.intn1 = node.intn1
+            #check if ei is level 1? store highest blob level. add this to blob degree array 
             blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree,
                 otherBCentry,   ei,   edgemap, hwmatrix, taxaindex, net)
         end
     end
     return nothing
 end
-
+#Tstore the edge that connects blobs we dont count
 """
     count_nonredundantbipartitions!(bipart_vec, blobdegree, net, ...)
 
