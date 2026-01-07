@@ -285,7 +285,7 @@ function count_blobpartitions!(
     edgemap::Dict{<:Integer,<:Integer},
 ) where N
     blobdegree = (bidx==1 ? Ref(0) : Ref(1)) # parent edge: 0 if root, 1 ow
-    splits, hybrids = blobtaxonsetpartition!(visitedbcc, blobdegree,
+    splits, hybrids, islevel1 = blobtaxonsetpartition!(visitedbcc, blobdegree,
         net, blob, bidx, edgemap, hwmatrix, taxaindex, N)
     if blobdegree[] < minBdegree
         return blobdegree[]
@@ -294,23 +294,26 @@ function count_blobpartitions!(
     isempty(hybrids) && error("non-trivial blob without any hybrid.")
     nparts = length(splits)
     # check if this partition already exists in blobvec
-    # currently assuming only level 1
     matchidx, idxmap = findmatchingblob(blobvec, splits)
     if isnothing(matchidx) # add new blob to blobvec
-        defaultorder = ntuple(identity, nparts)
-
-        #= fixit: 'identity' wrong if 2+ blocks on both sides of the hybrid.
-        ihyb = hybrids[1]
-        side1 = 1:ihyh; side2 = nparts:-1:(ihyb+1)
-        defaultorder = Tuple(vcat(side1, side2))
-        or something more efficient?
-        downstream problems with changing the default order?
-        Alternative: build the Tuple of splits with this order instead?
-        co = vcat(side1, side2) # or collect(Iterators.flatten((side1, side2)))
-        partition = ntuple(i -> split[co[i]], nparts)
-        newblob = BlobFreq{N,nparts}(partition, Ref(1), cofreq, hybmap)
-        =#
-        cofreq = Dict(defaultorder => 1)
+        if islevel1
+            defaultorder = ntuple(identity, nparts)
+            #= fixit: 'identity' wrong if 2+ blocks on both sides of the hybrid.
+            ihyb = hybrids[1]
+            side1 = 1:ihyh; side2 = nparts:-1:(ihyb+1)
+            defaultorder = Tuple(vcat(side1, side2))
+            or something more efficient?
+            downstream problems with changing the default order?
+            Alternative: build the Tuple of splits with this order instead?
+            co = vcat(side1, side2) # or collect(Iterators.flatten((side1, side2)))
+            partition = ntuple(i -> split[co[i]], nparts)
+            newblob = BlobFreq{N,nparts}(partition, Ref(1), cofreq, hybmap)
+            =#
+            cofreq = Dict(defaultorder => 1)
+        else
+            # level > 1: do not store circular order
+            cofreq = Dict{NTuple{nparts,Int},Int}()
+        end
         hybmap = Dict(hybrids[1] => 1)
         newblob = BlobFreq{N,nparts}(Tuple(splits), Ref(1), cofreq, hybmap)
         push!(blobvec, newblob)
@@ -322,21 +325,24 @@ function count_blobpartitions!(
             canonk = idxmap[k]
             bf.hybrid[canonk] = get(bf.hybrid, canonk, 0) + 1
         end
-        # canonicalize circular orders using the split matched to partition entry 1
-        startidx = findfirst(==(1), idxmap)
-        startidx === nothing && error("blob partition: 1 not found in idxmap. Expected Set(idxmap) == Set(1:nparts)")
-        #fixit:
-        # we should always have that Set() == Set(1:nparts)
-        # also, could this help: indexin(1:nparts, idxmap)
-        # first value = startidx
-        circorderkey, reversekey = canonicalorders(idxmap, startidx, hybridpos)
-        isempty(circorderkey) && error("blob partition: empty circular order key")
-        if haskey(bf.circorder, circorderkey)
-            bf.circorder[circorderkey] += 1
-        elseif haskey(bf.circorder, reversekey)
-            bf.circorder[reversekey] += 1
-        else
-            bf.circorder[circorderkey] = 1
+        # only calculate and store circular order for level-1 blobs
+        if islevel1
+            # canonicalize circular orders using the split matched to partition entry 1
+            startidx = findfirst(==(1), idxmap)
+            startidx === nothing && error("blob partition: 1 not found in idxmap. Expected Set(idxmap) == Set(1:nparts)")
+            #fixit:
+            # we should always have that Set() == Set(1:nparts)
+            # also, could this help: indexin(1:nparts, idxmap)
+            # first value = startidx
+            circorderkey, reversekey = canonicalorders(idxmap, startidx, hybridpos)
+            isempty(circorderkey) && error("blob partition: empty circular order key")
+            if haskey(bf.circorder, circorderkey)
+                bf.circorder[circorderkey] += 1
+            elseif haskey(bf.circorder, reversekey)
+                bf.circorder[reversekey] += 1
+            else
+                bf.circorder[circorderkey] = 1
+            end
         end
         incrementfreq!(bf)
     end
@@ -471,8 +477,10 @@ function blobtaxonsetpartition!(
     entrynode.intn1 = bidx # blob index: index of first bicomponent
     splits = NTuple{ntaxa,Bool}[]
     hybrids = Int[]
+    # bloblevel: true if all biconnected components in this blob are level-1
+    bloblevel = Ref(PN.getlevel(bicomp) <= 1)
     # traverse the blob starting at entrynode of the biconnected component
-    blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree,
+    blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, bloblevel,
         entrynode, bidx, edgemap, hwmatrix, taxaindex, net)
     if bidx > 1 # entry ≠ root: add split from the unique entry cut-edge
         outgroupsplit = splitcomplement(splits)
@@ -482,11 +490,11 @@ function blobtaxonsetpartition!(
             hybrids .+= 1
         end
     end
-    return splits, hybrids
+    return splits, hybrids, bloblevel[]
 end
 
 """
-    blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, entrynode, bidx, edgemap, hwmatrix, taxaindex, net)
+    blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, bloblevel, entrynode, bidx, edgemap, hwmatrix, taxaindex, net)
 
 Helper for `blobtaxonsetpartition` to accumulate entries in `splits` and `hybrids`.
 Internal fields:
@@ -505,6 +513,7 @@ function blobtaxonsetpartition!(
     hybrids::Vector{Int},
     visitedbcc::Set{Int},
     blobdegree::Base.RefValue{Int},
+    bloblevel::Base.RefValue{Bool},
     node::PN.Node,
     bidx::Int,
     edgemap::Dict{<:Integer,<:Integer},
@@ -565,14 +574,17 @@ function blobtaxonsetpartition!(
                 end
             end
             cn.intn1 = node.intn1 # may be different from bidx
-            blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree,
+            blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, bloblevel,
                 cn, bidx, edgemap, hwmatrix, taxaindex, net)
         elseif atotherBC && !PN.istrivial(bcc[ei]) && !(ei ∈ visitedbcc)
             push!(visitedbcc, ei)
             otherBCentry = net.vec_node[PN.entrynode_preindex(bcc[ei])]
             otherBCentry.intn1 = node.intn1
-            #check if ei is level 1? store highest blob level. add this to blob degree array 
-            blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree,
+            # check if other BCC is level > 1: if so, blob is not level-1
+            if PN.getlevel(bcc[ei]) > 1
+                bloblevel[] = false
+            end
+            blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, bloblevel,
                 otherBCentry,   ei,   edgemap, hwmatrix, taxaindex, net)
         end
     end
