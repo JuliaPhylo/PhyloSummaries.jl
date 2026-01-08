@@ -5,7 +5,8 @@ add a note saying that in the future we will add functionality to maintain circu
 =#
 
 #TODO: parse in circular order and store info that way. check funcs after canonicalizepartition
-#TODO: getlevel forr network: https://github.com/JuliaPhylo/PhyloNetworks.jl/blob/c4973f9893b54de2594cdac0e403f9249f948860/src/graph_components.jl#L429. throw a warning once
+#TODO: add compatibility checking for blobs
+
 #= In a network with N leaves, the partition of taxa (leaves) defined by a blob
 is represented as a tuple of N integers.
 Taxa sharing the same integer are in the same taxon block (part of the partition).
