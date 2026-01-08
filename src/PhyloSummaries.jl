@@ -9,6 +9,7 @@ export
 consensustree,
 consensus_treeofblobs
 
+include("utils.jl")
 include("consensustrees.jl")
 include("consensusblobs.jl")
 end

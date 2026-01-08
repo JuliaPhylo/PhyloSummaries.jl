@@ -40,7 +40,7 @@ by a cut-edge, not trivial, and not redundant with some interesting blob
 (meaning: not adjacent to any interesting blob).
 """
 struct BipartFreq{N}
-    """bipartition: block 1 contains the last taxon, block 2 does not.
+    """bipartition: block 1 does *not* contain the last taxon, block 2 does.
     The bipartition is described by 1 tuple of size N for membership in block 1:
     `split[i]` is `true` is taxon `i` is in block 1, `false` if it's in block 2.
     """
@@ -79,6 +79,13 @@ function splitcomplement(splitvec::AbstractVector{NTuple{N,Bool}}) where N
     isoutgroup(i) = !any(t[i] for t in splitvec)
     return ntuple(isoutgroup, N)
 end
+
+iscompatible(b1::BipartFreq{N}, b2::BipartFreq{N}) where N =
+    treecompatible(b1.split, b2.split) # in utils.jl
+iscompatible(b1::BlobFreq{N}, b2::BipartFreq{N}) where N =
+    blobcompatible(b1.partition, b2.split)
+iscompatible(b1::BlobFreq{N}, b2::BlobFreq{N}) where N =
+    blobcompatible(b1.partition, b2.partition)
 
 """
     consensus_treeofblobs(networks; proportion=0, minimumblobdegree=4)
@@ -124,6 +131,7 @@ function consensus_treeofblobs(
     networks::AbstractVector{PN.HybridNetwork};
     proportion::Number=0,
     minimumblobdegree::Int=4,
+    supportaslength::Bool=false,
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot get a consensus"))
@@ -131,7 +139,10 @@ function consensus_treeofblobs(
         throw(ArgumentError("minimumblobdegree should be 2, 3 or 4, not $(minimumblobdegree)"))
     taxa = sort(tiplabels(networks[1]))
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
-    # fixit: build consensus tree from these using the proportion argument, and return it
+    nnets = length(networks)
+    filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
+    tob = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
+    return tob
 end
 
 """
@@ -731,18 +742,8 @@ function descendants_bitvec!(
     return nothing
 end
 
-# fixit: move these in a new file, along with treecompatible()
-# and write code for blobcompatible
-iscompabible(b1::BipartFreq{N}, b2::BipartFreq{N}) where N =
-    treecompatible(b1.split, b2.split)
-iscompatible(b1::BlobFreq{N}, b2::BipartFreq{N}) where N =
-    blobcompatible(b1.partition, b2.split)
-iscompatible(b1::BlobFreq{N}, b2::BlobFreq{N}) where N =
-    blobcompatible(b1.partition, b2.partition)
-blobcompatible(p1,p2) = true
-
 """
-    filter_sort_compatible_partitions!(blobpartitions, bipartitions, ntrees, proportion)
+    filter_sort_compatible_partitions!(blobpartitions, bipartitions, nnets, proportion)
 
 Filter out blob- and bi-partitions with frequency ≤ proportion;
 sort each vector of `blobpartitions` and `bipartitions` by frequency
@@ -750,18 +751,18 @@ sort each vector of `blobpartitions` and `bipartitions` by frequency
 compatible with another of higher frequency. Blob-compatibility is used,
 which reduces to tree-compatibility when both partitions are bipartitions.
 
-fixit: not fully written yet
+todo / fixit: not fully written yet
 """
 function filter_sort_compatible_partitions!(
     blobparts::Vector{BlobFreq{N}},
     biparts::Vector{BipartFreq{N}},
-    ntrees::Number,
+    nnets::Number,
     proportion::Number,
 ) where N
-    threshold2 = proportion * ntrees
+    threshold2 = proportion * nnets
     if proportion ≈ 1 # strict consensu
-        filter!(v -> freq(v) ≈ ntrees, blobparts)
-        filter!(v -> freq(v) ≈ ntrees, biparts)
+        filter!(v -> freq(v) ≈ nnets, blobparts)
+        filter!(v -> freq(v) ≈ nnets, biparts)
     elseif threshold2 > 0 # 0 for greedy consensus: frequent case
         filter!(v -> freq(v) > threshold2, blobparts)
         filter!(v -> freq(v) > threshold2, biparts)
@@ -796,50 +797,46 @@ end
 """
     tree_from_blobpartitions
 
-Assumes that blob partitions and bipartitions are all compatible with each other:
-- any 2 blobs from `blobpartitions` are blob-compatible
-- any blob from `blobpartitions` and split from `bipartitions` are blob-compatible
-- any 2 splits from `bipartitions` are tree-compatible.
+Tree summarizing the input partitions: with a node for each input blob
+and an edge (if not redundant) for each input bipartition.
+This tree should be considered unrooted, in part because blob partitions
+do not have root information (all their taxon blocks are listed).
 
-fixit
+Assumptions:
+1. each bipartition is represented by the taxon block that does not contain
+   the last taxon
+2. blob partitions and bipartitions are all compatible with each other:
+   any 2 blobs from `blobpartitions` are blob-compatible;
+   any 2 splits from `bipartitions` are tree-compatible; and
+   any blob and split are blob-compatible.
+
+fixit: code & test
 """
 function tree_from_blobpartitions(
     taxa::Vector{String},
     blobparts::Vector{BlobFreq{N}},
     biparts::Vector{BipartFreq{N}},
-    ntrees::Number,
+    nnets::Number,
     supportaslength::Bool
 ) where N
     N == length(taxa) || error("N ($N) != number of taxa $(length(taxa))")
-    net = PN.HybridNetwork()
-    root = PN.Node(-2,false) # root has number -2
-    # push leaves first, numbered 1:N. we will have taxa[i] = label of net.node[i]
-    for (i,t) in enumerate(taxa)
-        edge = PN.Edge(i,-1.0) # ischild1 is true by default. length=-1 for NA
-        leaf = PN.Node(i,true,false, # true: leaf
-            -1.,[edge],false,false,false,false,false,false,-1,nothing,-1,-1,t)
-        PN.pushNode!(net, leaf)
-        edge.node = [leaf, root] # to match ischild1 is true
-        PN.pushEdge!(net, edge)
-        push!(root.edge, edge)
-    end
-    PN.pushNode!(net, root)
-    net.rooti = N+1
-    # internal nodes: numbered -3,-4 etc., as done by readnewick
-    ni = Ref(-3)
-    ei = Ref(n+1)
+    net = startree(taxa) # root numbered -2
+    ni = Ref(-3) # internal nodes: numbered -3,-4 etc., as done by readnewick
+    ei = Ref(N+1)
     for bpart in blobparts
-        weight = freq(bpart)/ntrees
+        weight = freq(bpart)/nnets
         for bp in bpart.partition
-            # fixit: skip the part that includes the outgroup = last taxon
+            bp[N] || continue # skip the part that contains the last taxon ("outgroup")
             newnode = add_bipartitionnode!(net, ni, ei, bp, weight, supportaslength)
             # fixit: add weight to some node attribute?
             # fixit: add proportion that each taxon block is hybrid to some node attribute?
         end
     end
     for bpart in biparts
-        weight = freq(bpart)/ntrees
+        bpart.split[N] && error("bipartition side that contains the last taxon")
+        weight = freq(bpart)/nnets
         newnode = add_bipartitionnode!(net, ni, ei, bpart.split, weight, supportaslength)
+        # fixit: make sure that no extra edge is added if a blob already implied this bipartition
         # fixit: also set some node attribute(s)?
     end
     return net
