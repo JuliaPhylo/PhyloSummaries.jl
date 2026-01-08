@@ -406,6 +406,10 @@ function canonicalorders(idxmap::AbstractVector{Int}, startidx::Int, hybridpos::
         if hybridpos + 1 <= startidx - 1
             append!(order, idxmap[(hybridpos+1):(startidx-1)])
         end
+    elseif startidx == hybridpos
+        append!(order, idxmap[startidx:end])
+        append!(order, reverse(idxmap[1:hybridpos-1]))
+
     else
         append!(order, idxmap[startidx:hybridpos])
         if hybridpos < n
