@@ -1,18 +1,5 @@
-#= treeofblobs
-warn if one exit node has 2 edge
-ig exit node does not have two try to match the cycle ordering
-add a note saying that in the future we will add functionality to maintain circular order if the net is level 1
-=#
-
 #TODO: parse in circular order and store info that way. check funcs after canonicalizepartition
 #TODO: add compatibility checking for blobs
-
-#= In a network with N leaves, the partition of taxa (leaves) defined by a blob
-is represented as a tuple of N integers.
-Taxa sharing the same integer are in the same taxon block (part of the partition).
-This immutable type can serve as key is sets or dictionaries.
-=#
-const BlobSplit = NTuple{N,Bool} where N
 
 """
     BlobFreq{N,P}
@@ -21,8 +8,10 @@ Frequency of one non-trivial blob partition, and frequency of its circular order
 and taxon blocks whose parent in the blob is a hybrid node.
 
 - The partition associated with a blob in a network is the partition into
-  taxon blocks from the connected component of the network after the blob
+  taxon blocks from the connected components of the network after the blob
   (nodes and edges) is removed from the network.
+  Each part is represented by an `N`-tuple of booleans, where entry `i` says
+  if taxon number `i` is in or out of this part.
 - Different blobs with the same partition can have different circular orders
   of their taxon blocks. A blob does not necessarily admits a circular order.
 - For each part in the partition, this part is a "hybrid" for this blob if it is
@@ -32,7 +21,8 @@ and taxon blocks whose parent in the blob is a hybrid node.
 `N` is the number of leaves (taxa) in the network. 3 or more.
 """
 struct BlobFreq{N,P}
-    "blob partition: P parts, each described as a tuple of of size N"
+    """blob partition: P parts, each described as a tuple of of size N
+    (an immutable type, so partitions can be keys in sets or dictionaries)"""
     partition::NTuple{P,NTuple{N,Bool}}
     "frequency of the blob partition. mutable: use freq and freq! to get/set this value."
     freq::Base.RefValue{Int}
