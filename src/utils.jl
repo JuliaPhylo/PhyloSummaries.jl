@@ -37,6 +37,15 @@ function istrivialsplit(v)
 end
 
 """
+    isredundantsplit(v, b)
+
+true/false if `v` does / does not represent one taxon block of blob
+(or multi-partition) `b`.
+"""
+isredundantsplit(v, b) = v ∈ b # any(isequal(v), b)
+
+
+"""
     treecompatible(a::NTuple{N,Bool}, b::NTuple{N,Bool})
 
 true / false if two clusters `a` and `b` are / are not tree-compatible.

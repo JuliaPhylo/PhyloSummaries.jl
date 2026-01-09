@@ -747,11 +747,13 @@ end
 
 Filter out blob- and bi-partitions with frequency ≤ proportion;
 sort each vector of `blobpartitions` and `bipartitions` by frequency
-(from smallest to largest); then filter out any partition that is not
-compatible with another of higher frequency. Blob-compatibility is used,
-which reduces to tree-compatibility when both partitions are bipartitions.
+(from smallest to largest);
+filter out any partition not compatible with another of higher frequency
+(giving preference to a blob over a bipartition if tied);
+and filter out any bipartition redundant with a retained blob.
 
-todo / fixit: not fully written yet
+Blob-compatibility is used, which reduces to tree-compatibility when both
+partitions are bipartitions.
 """
 function filter_sort_compatible_partitions!(
     blobparts::Vector{BlobFreq{N}},
@@ -773,24 +775,55 @@ function filter_sort_compatible_partitions!(
         # then: no need to check for compatibilitiy
         return nothing
     end
+    threshold1 = max(0.5, proportion) * nnets
+    # filter for within-list compatibility
     for bparts in (blobparts, biparts)
         nB = length(bparts)
-        for i_cb in 1:nB
-            candidateb = bparts[i_cb]
+        for j_cb in nB:-1:1
+            candidateb = bparts[j_cb]
             freq(candidateb) > threshold1 && continue
             iscompat = true
-            for i_kb in (i_cb+1):length(bparts)
-                if !iscompatible(candidateb, bparts[i_kb])
+            for j_kb in (j_cb+1):length(bparts)
+                if !iscompatible(candidateb, bparts[j_kb])
                     iscompat = false
                     break
                 end
             end
-            iscompat || delete!(bparts, i_cb)
+            iscompat || deleteat!(bparts, j_cb)
         end
     end
-    # fixit: also filter blobparts & biparts to keep those blob-tree compatible
-    nBb = length(blobparts)
-    nBi = length(biparts)
+    # filter for between-list compatibility
+    nbb_j = length(blobparts) # Next BloB / BIpartition index to check:
+    nbi_j = length(biparts)   # from most to least frequent
+    while nbb_j>0 && nbi_j>0
+        nbb_f = freq(blobparts[nbb_j])
+        nbi_f = freq(biparts[nbi_j])
+        # if equally frequent: favor keeping the blob
+        if nbi_f > nbb_f # decide to keep or filter out the next bipart
+            cb = biparts[nbi_j] # Candidate Blob/Bipartition
+            keep = true
+            for j_kb in (nbb_j+1):length(blobparts)
+                kb = blobparts[j_kb] # Kept Blob
+                if isredundantsplit(cb, kb) || !iscompatible(cb, kb)
+                    keep = false
+                    break
+                end
+            end
+            keep || deleteat!(biparts, nbi_j)
+            nbi_j -= 1
+        else # decide to keep or filter out the next blob
+            cb = blobparts[nbb_j]
+            iscompat = true
+            for j_kb in (nbi_j+1):length(biparts)
+                if !iscompatible(cb, biparts[j_kb])
+                    iscompat = false
+                    break
+                end
+            end
+            iscompat || deleteat!(blobparts, nbb_j)
+            nbb_j -= 1
+        end
+    end
     return nothing
 end
 
@@ -802,6 +835,11 @@ and an edge (if not redundant) for each input bipartition.
 This tree should be considered unrooted, in part because blob partitions
 do not have root information (all their taxon blocks are listed).
 
+A blob's weight is stored in the corresponding node's `.fvalue`.
+A bipartition's weight is stored in the corresponding edge's field `.y`.
+With option `supportaslength=true`, this weight is also stored in
+the bipartition edge's `.length`.
+
 Assumptions:
 1. each bipartition is represented by the taxon block that does not contain
    the last taxon
@@ -809,6 +847,9 @@ Assumptions:
    any 2 blobs from `blobpartitions` are blob-compatible;
    any 2 splits from `bipartitions` are tree-compatible; and
    any blob and split are blob-compatible.
+
+Calls [`add_bipartitionnode!`](@ref), which uses internal fields `.booln2`
+and `.booln3`.
 
 fixit: code & test
 """
@@ -826,18 +867,51 @@ function tree_from_blobpartitions(
     for bpart in blobparts
         weight = freq(bpart)/nnets
         for bp in bpart.partition
-            bp[N] || continue # skip the part that contains the last taxon ("outgroup")
-            newnode = add_bipartitionnode!(net, ni, ei, bp, weight, supportaslength)
-            # fixit: add weight to some node attribute?
-            # fixit: add proportion that each taxon block is hybrid to some node attribute?
+            newnode = add_blobnode!(net, ni, ei, bp, weight)
         end
     end
     for bpart in biparts
         bpart.split[N] && error("bipartition side that contains the last taxon")
+        # fixit: do we need to check if the bipartition is already in the blob tree?
+        # given that "redundant" bipartitions were already filtered out?
+        # Are there any bipartition implied by more than 1 blob,
+        # but not implied by a single blob?
         weight = freq(bpart)/nnets
-        newnode = add_bipartitionnode!(net, ni, ei, bpart.split, weight, supportaslength)
-        # fixit: make sure that no extra edge is added if a blob already implied this bipartition
-        # fixit: also set some node attribute(s)?
+        add_bipartitionnode!(net, ni, ei, bpart.split, weight, supportaslength)
     end
     return net
+end
+
+"""
+    add_blobnode!(tree, ni, ei, blobpartition, weight)
+
+Add nodes (numbered `ni` etc.) and edges (numbered `ei` etc.) in `tree`
+to add `blobpartition`, assumed compatible with edges already in `tree`.
+The node index `ni` is decremented, and the edge index `ei` is incremented.
+Output: newly created node whose removal disconnects the taxon set into
+the input blob partition.
+
+If the blob has P ≥ 3 taxon blocks, these blocks are assumed to form a
+partition of the full taxon set. If it is blob-compatible with all blobs
+already in `tree`, then k nodes and k edges are added, with k=P or k=P-1.
+Otherwise, fewer nodes and edges are added.
+
+fixit: make sure that degree-2 nodes are not added
+
+The blob's weight is stored in the corresponding node's `.fvalue`.
+
+As blob partitions are agnostic about the root, the output tree should be
+considered unrooted. The added edges correspond to using the last taxon as
+outgroup: an edge's cluster of descendants does not contain the last taxon.
+
+Assumptions: `tree` is a tree (not checked), and P ≥ 3.
+
+See also [`add_bipartitionnode!`](@ref), which add a single node & edge,
+and does so even if the new node is of degree 2.
+
+fixit: add proportion that each taxon block is hybrid to some edge or node attribute?
+"""
+function add_blobnode!(net, ni, ei, blobpartition, weight)
+    # fixit: write this
+    # newnode.fvalue = weight
 end

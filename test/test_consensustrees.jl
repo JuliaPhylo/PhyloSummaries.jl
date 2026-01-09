@@ -55,7 +55,7 @@ con = consensustree(trees; proportion=0.7)
 writenewick(con,round=true,support=true) == "(C,D,(B,A)::0.8);"
 con = consensustree(trees; rooted=true, supportaslength=true) # greedy
 @test writenewick(con,round=true) == "((D,C):0.4,(B,A):0.8);"
-@test [n.fvalue for n in con.node if !n.leaf] == [-1,.4,.8]
+@test all(n.fvalue == -1 for n in con.node)
 @test [e.y for e in con.edge if !isexternal(e)] == [.4,.8]
 
 tfile = joinpath(@__DIR__,"..","test","raxmltrees.tre")

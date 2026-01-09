@@ -21,11 +21,6 @@ The bipartition (or clade) support values are stored
   This field is used by `writenewick` to write edge support, with its option
   `support=true`. However, this `.y` field is internal, so it can be modified
   by other functions and should not be relied upon.
-- Support values are also stored in each node `.fvalue` for the clade
-  descendant from that node. Note that storing support values at nodes is
-  *unsafe* for unrooted bipartitions, as the bipartition associated with the
-  node's descendants given some rooting may become *one* of node's child
-  subclade after re-rooting.
 
 By default, input trees are considered unrooted, and bipartitions are considered.
 Use `rooted=true` to consider all input trees as rooted, in which case clades
@@ -94,7 +89,6 @@ function consensustree(
             if !isexternal(e)
                 e.y = 1.0
                 if supportaslength e.length = 1.0; end
-                getchild(e).fvalue = 1.0
             end
         end
         return net
@@ -274,15 +268,15 @@ end
         ntrees::Number,
         supportaslength::Bool)
 
-Construct a consensus tree from a compatible set of cluster, as a
+Construct a tree from a compatible set of cluster, as a
 `PhyloNetworks.HybridNetwork` object.
 Each cluster is represented as a tuple key `b`, and is given a weight:
 its value `clusters[b]` divided by `ntrees`.
-For each cluster, a node is added to the consensus tree, whose descendant
-taxa is the set `taxa[i]` for indices `i` such that b[i] is true.
-The cluster's weight is stored in the node's `.fvalue` ---which is fragile,
-if clusters are to be considered as unrooted bipartitions. The weight is also
-stored in fields of the node's parent edge: `.length` and `.y`.
+For each cluster, a node `n` and its parent edge `e` are added to the tree,
+whose descendant taxa is the set `taxa[i]` for indices `i` such that b[i] is true.
+
+The cluster's weight is stored in `e.y`.
+With option `supportaslength=true`, the cluster weight is also in `e.length`.
 
 Assumption: the input clusters are pairwise tree-compatible, which is the
 condition for them to be the clusters of a valid rooted tree.
@@ -308,7 +302,7 @@ end
 """
     add_bipartitionnode!(net, ni, ei, bipartition, weight, supportaslength)
 
-Add a node (numbered `ni`) and edges (numbered `ei` etc.) in `net`
+Add a node (numbered `ni`) and its parent edge (numbered `ei`) in `net`
 to add `bipartition`, assumed compatible with edges already in `net`.
 The node index `ni` is decremented, and the edge `ei` is incremented.
 Output: newly created node.
@@ -323,6 +317,9 @@ To do so: `.booln2` and `.booln3` are used to store, for each node
 
 Then, the answer to Q1 is the lowest node such that `.booln2 && !.booln3`,
 and the answer to Q2 is all `lca`'s children with `.booln2 && .booln3`.
+
+Warning: if `bipartition` is already present in `net`, then the resulting
+new node will be of degree 2.
 """
 function add_bipartitionnode!(
     net::PN.HybridNetwork,
@@ -354,7 +351,6 @@ function add_bipartitionnode!(
     end
     # create a new node and new edge
     newnode = PN.Node(ni[],false)
-    newnode.fvalue = weight # store clade support in the clade's MRCA
     ni[] -= 1
     # new edge: store clade support in .y, and as edge length if desired
     elen = (supportaslength ? weight : -1.0)
