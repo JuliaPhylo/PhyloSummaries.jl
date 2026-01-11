@@ -341,9 +341,28 @@ function add_clusternode!(
         @warn("will skip trivial clade: $bv") # fixit: remove?
         return nothing
     end
-    node2clade_intersection_initialize(net, bv)  # initialize .booln{2,3}
-    node2clade_intersection_update(getroot(net)) # post-order
     # solve Q1: find lowest node with .booln2 && !.booln3
+    lca, nchildren = _lca_newcluster(net, bv)
+    if nchildren == 1
+        @warn "clade already in tree (or incompatible?): will do nothing"
+        return nothing
+    end
+    nchildren > 0 ||
+        error("would not connect the new clade node to any children")
+    # create a new node and new edge and
+    # solve Q2: find all the lca's children with .booln2 && .booln3
+    newnode = _resolveclade_belowlca(net, lca, ni, ei, weight, supportaslength)
+    return newnode
+end
+
+#= LCA of cluster v, if it is not already in tree; parent of LCA otherwise.
+uses .booln2: does a node has ≥1 descendants in v?
+and  .booln3: are the nodes' descendants all in v?
+LCA: lowest node with .booln2 && !.booln3
+=#
+@inline function _lca_newcluster(net, v)
+    node2clade_intersection_initialize(net, v)   # initialize .booln{2,3}
+    node2clade_intersection_update(getroot(net)) # post-order
     lca = getroot(net)
     (lca.booln2 && !lca.booln3) ||
         error("incorrect clade-intersection data at root, or trivial 1...1 clade")
@@ -360,25 +379,31 @@ function add_clusternode!(
         end
         foundlca && break # of while loop
     end
+    nchildren = _lca_newcluster_nchildren(lca)
+    return lca, nchildren
+end
+@inline function _lca_newcluster_nchildren(lca)
     nchildren = 0
     for e in lca.edge
         cn = getchild(e)
-        if cn !== lca && cn.booln2 && cn.booln3
+        if cn !== lca && cn.booln2
+            cn.booln3 || error("cn.booln3 should have been true")
             nchildren += 1
         end
     end
-    if nchildren == 1
-        @warn "clade already in tree (or incompatible?): will do nothing"
-        return nothing
-    end
-    nchildren > 0 ||
-        error("would not connect the new clade node to any children")
-    # create a new node and new edge
+    return nchildren
+end
+
+#= create a new node and new edge below lca, whose descendants is the cluster
+used to compute the nodes' .booln2 and .booln3.
+To be called after _lca_newcluster()
+=#
+@inline function _resolveclade_belowlca(net, lca, ni, ei, wgt, supportaslength)
     newnode = PN.Node(ni[],false)
     ni[] -= 1
     # new edge: store clade support in .y, and as edge length if desired
-    elen = (supportaslength ? weight : -1.0)
-    newe = PN.Edge(ei[],elen,false,weight,-1.0,1.0, # z=-1, gamma=1
+    elen = (supportaslength ? wgt : -1.0)
+    newe = PN.Edge(ei[],elen,false,wgt,-1.0,1.0, # z=-1, gamma=1
         [newnode,lca], true, # ischild1 is true: to agre with node ordering
         true,-1,true,true,false)
     ei[] += 1

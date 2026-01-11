@@ -898,8 +898,9 @@ As blob partitions are agnostic about the root, the output tree should be
 considered unrooted. The added edges correspond to using the last taxon as
 outgroup: an edge's cluster of descendants does not contain the last taxon.
 
-Assumptions: `tree` is a tree (not checked), P ≥ 3, and assumptions in
-[`add_clusternode!`](@ref).
+Assumptions (none are checked): `tree` is a tree, P ≥ 3, taxon blocks are
+non-empty and do form a partition, and
+assumptions in [`add_clusternode!`](@ref).
 
 fixit: add proportion that each taxon block is hybrid to some edge or node attribute?
 """
@@ -908,12 +909,38 @@ function add_blobnode!(
     ni::Base.RefValue{Int},
     ei::Base.RefValue{Int},
     blobpartition::NTuple{P,NTuple{N,Bool}},
-    weight::Number
-) where {N,P}
-    outcluster_i = findfirst(v -> v[N], blobpartition) # last taxon N = outgroup
-    outcluster = .!blobpartition[outcluster_i]
-    # find LCA of the P-1 ingroup taxon blocks
-    # except if
-    # fixit: write this
-    # newnode.fvalue = weight
+    weight::Number,
+) where {P,N} # 2026-01: Aqua has a problem with this. "Unbound type parameters"
+    # 1. create (or find) blob node: its clade is the complement of the
+    #    taxon block containing the outgroup (last taxon N)
+    outcluster_i = findfirst(v -> v[N], blobpartition)
+    if sum(blobpartition[outcluster_i]) == 1 # trivial cluster
+        lca = getroot(net)
+        blobnode = lca
+    else # non-trivial because P ≥ 3
+        outcluster = .!blobpartition[outcluster_i]
+        lca, nc = _lca_newcluster(net, outcluster)
+        nc == 1 && @warn("outgroup clade already in tree (or incompatible?): $outcluster")
+        if nc > 1
+            blobnode = _resolveclade_belowlca(net, lca, ni, ei, -1, false)
+        end
+    end
+    blobnode.fvalue = weight
+    # 2. create a child node below blobnode for each taxon block
+    for i in 1:P
+        i == outcluster_i && continue
+        v = blobpartition[i]
+        sum(v) == 1 && continue # skip trivial blocks of a single taxon
+        node2clade_intersection_initialize(net, v)  # update .booln{2,3} for v
+        node2clade_intersection_update(getroot(net))
+        blobnode.booln2  || error("hmm, blob node has no taxa from the clade")
+        !blobnode.booln3 || error("hmm, blob node has no taxa outside the clade")
+        nc = _lca_newcluster_nchildren(blobnode)
+        nc == 1 && @warn("taxon block already in tree (or incompatible?): $v")
+        if nc > 1
+            _resolveclade_belowlca(net, blobnode, ni, ei, -1, false)
+        end
+    end
+    # fixit: finish this
+    return blobnode
 end
