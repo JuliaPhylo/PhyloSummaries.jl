@@ -85,8 +85,24 @@ blobs, bps = PS.count_blobpartitions(net, taxa, 3)
 @test length(bps) == 1
 @test bps[1].split == (true, true, true, false, false)
 @test PS.freq(bps[1]) == 1
+
+#= fixit: find out why warnings are thrown: why redundant clades or blobs after filtering?
+@test_nowarn consensus_treeofblobs(net, minimumblobdegree=3)
+┌ Warning: clade already in tree (or incompatible?): will do nothing
+└ @ PhyloSummaries ~/.julia/dev/PhyloSummaries/src/consensustrees.jl:347
+┌ Warning: bipartition already implied by previous blobs
+└ @ PhyloSummaries ~/.julia/dev/PhyloSummaries/src/consensusblobs.jl:875
+=#
 end
 
+@testset "consensus ToB" begin
+# fixit: nets 1,2,4,5 all have the same blob, same hybrid, same circular order.
+# change to more complex test with net 3 after blobcompatible() works
+net = readnewick.(nwk)
+tob = @test_logs (:warn, r"^non-binary") consensus_treeofblobs(net[[1,2,4,5]])
+@test writenewick(tob) == "(A,E,(D,C,B));"
+@test tob.node[7].fvalue == 1 # blob in 100% of input nets
+end
 # fixit: get consensus ToB etc. & test
 #= to look at these networks locally:
 using RCall, PhyloNetworks, PhyloPlots
