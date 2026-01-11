@@ -848,8 +848,8 @@ Assumptions:
    any 2 splits from `bipartitions` are tree-compatible; and
    any blob and split are blob-compatible.
 
-Calls [`add_bipartitionnode!`](@ref), which uses internal fields `.booln2`
-and `.booln3`.
+Calls [`add_blobnode!`](@ref) and [`add_clusternode!`](@ref), which use
+internal fields `.booln2` and `.booln3`.
 
 fixit: code & test
 """
@@ -866,18 +866,13 @@ function tree_from_blobpartitions(
     ei = Ref(N+1)
     for bpart in blobparts
         weight = freq(bpart)/nnets
-        for bp in bpart.partition
-            newnode = add_blobnode!(net, ni, ei, bp, weight)
-        end
+        nn = add_blobnode!(net, ni, ei, bpart.partition, weight)
     end
     for bpart in biparts
         bpart.split[N] && error("bipartition side that contains the last taxon")
-        # fixit: do we need to check if the bipartition is already in the blob tree?
-        # given that "redundant" bipartitions were already filtered out?
-        # Are there any bipartition implied by more than 1 blob,
-        # but not implied by a single blob?
         weight = freq(bpart)/nnets
-        add_bipartitionnode!(net, ni, ei, bpart.split, weight, supportaslength)
+        nn = add_clusternode!(net, ni, ei, bpart.split, weight, supportaslength)
+        isnothing(nn) && @warn("bipartition already implied by previous blobs")
     end
     return net
 end
@@ -895,8 +890,7 @@ If the blob has P ≥ 3 taxon blocks, these blocks are assumed to form a
 partition of the full taxon set. If it is blob-compatible with all blobs
 already in `tree`, then k nodes and k edges are added, with k=P or k=P-1.
 Otherwise, fewer nodes and edges are added.
-
-fixit: make sure that degree-2 nodes are not added
+fixit: check, and make sure degree-2 nodes are not added.
 
 The blob's weight is stored in the corresponding node's `.fvalue`.
 
@@ -904,14 +898,18 @@ As blob partitions are agnostic about the root, the output tree should be
 considered unrooted. The added edges correspond to using the last taxon as
 outgroup: an edge's cluster of descendants does not contain the last taxon.
 
-Assumptions: `tree` is a tree (not checked), and P ≥ 3.
-
-See also [`add_bipartitionnode!`](@ref), which add a single node & edge,
-and does so even if the new node is of degree 2.
+Assumptions: `tree` is a tree (not checked), P ≥ 3, and assumptions in
+[`add_clusternode!`](@ref).
 
 fixit: add proportion that each taxon block is hybrid to some edge or node attribute?
 """
-function add_blobnode!(net, ni, ei, blobpartition, weight)
+function add_blobnode!(
+    net::PN.HybridNetwork,
+    ni::Base.RefValue{Int},
+    ei::Base.RefValue{Int},
+    blobpartition::NTuple{P,NTuple{N,Bool}},
+    weight::Number
+)
     # fixit: write this
     # newnode.fvalue = weight
 end

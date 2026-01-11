@@ -36,6 +36,20 @@ for bp in keys(expected)
 end
 end
 
+@testset "add_clusternode!" begin
+t = PS.startree(["t1","t2","t3"])
+ni = Ref(-30); ei = Ref(4)
+nn = @test_logs (:warn, r"^will skip trivial clade") PS.add_clusternode!(t,ni,ei,(true,true,true),10,false)
+@test isnothing(nn)
+nn = @test_logs (:warn, r"^clade already in tree") PS.add_clusternode!(t,ni,ei,(true,false,false),10,false)
+@test isnothing(nn)
+nn = PS.add_clusternode!(t,ni,ei,(true,true,false),10,false)
+@test nn.number == -30
+@test t.edge[4].y == 10
+## only warning from an incompatible cluster:
+# PS.add_clusternode!(t,ni,ei,(false,true,true),0,false)
+end
+
 @testset "consensustree" begin
 
 @test_throws ArgumentError consensustree(PN.HybridNetwork[])

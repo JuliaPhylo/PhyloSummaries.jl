@@ -294,22 +294,33 @@ function tree_from_bipartitions(
     ni = Ref(-3) # internal nodes: numbered -3,-4 etc., as done by readnewick
     ei = Ref(n+1)
     for (bv,weight) in pairs(bipartitions)
-        add_bipartitionnode!(net, ni, ei, bv, weight/ntrees, supportaslength)
+        add_clusternode!(net, ni, ei, bv, weight/ntrees, supportaslength)
     end
     return net
 end
 
 """
-    add_bipartitionnode!(net, ni, ei, bipartition, weight, supportaslength)
+    add_clusternode!(tree, ni, ei, cluster, weight, supportaslength)
 
-Add a node (numbered `ni`) and its parent edge (numbered `ei`) in `net`
-to add `bipartition`, assumed compatible with edges already in `net`.
+Add a node (numbered `ni`) and its parent edge (numbered `ei`) in `tree`,
+whose set of descendants is `cluster`, described by a 0/1 vector.
 The node index `ni` is decremented, and the edge `ei` is incremented.
-Output: newly created node.
 
-Algorithm: the network is traversed *before* being modified, to find:
-- Q1: which node 'lca' should be the parent of the new node, and
-- Q2: which children of 'lca' should become children of the new node.
+Output: newly created node if successful, nothing otherwise.
+
+The node addition is unsuccessul if the cluster is empty, or is the full
+taxon set, or if it is already present in `tree`. Adding it a second time
+would result in a new node of degree 2, which is avoided.
+
+Assumptions:
+- `tree` is a tree (not checked)
+- `cluster` is compatible with `tree` (considered rooted)
+- leaf `j`, whose cluster membership is `cluster[j]`, is the node number `j` in
+  the tree, that is, is it node `n = tree.node[i]` such that `n.number` is `j`.
+
+Algorithm: the tree is traversed *before* being modified, to find:
+- Q1: which node `lca` should be the parent of the new node, and
+- Q2: which children of `lca` should become children of the new node.
 
 To do so: `.booln2` and `.booln3` are used to store, for each node
 * `.booln2`: Does 1+ descendant(s) of node ∈ clade ?
@@ -317,11 +328,8 @@ To do so: `.booln2` and `.booln3` are used to store, for each node
 
 Then, the answer to Q1 is the lowest node such that `.booln2 && !.booln3`,
 and the answer to Q2 is all `lca`'s children with `.booln2 && .booln3`.
-
-Warning: if `bipartition` is already present in `net`, then the resulting
-new node will be of degree 2.
 """
-function add_bipartitionnode!(
+function add_clusternode!(
     net::PN.HybridNetwork,
     ni::Base.RefValue{Int},
     ei::Base.RefValue{Int},
@@ -329,7 +337,10 @@ function add_bipartitionnode!(
     weight::Number,
     supportaslength::Bool,
 )
-    all(bv) || all(.!bv) && @warn("will skip trivial clade: $bv")
+    if all(bv) || all(.!bv)
+        @warn("will skip trivial clade: $bv") # fixit: remove?
+        return nothing
+    end
     node2clade_intersection_initialize(net, bv)  # initialize .booln{2,3}
     node2clade_intersection_update(getroot(net)) # post-order
     # solve Q1: find lowest node with .booln2 && !.booln3
@@ -349,6 +360,19 @@ function add_bipartitionnode!(
         end
         foundlca && break # of while loop
     end
+    nchildren = 0
+    for e in lca.edge
+        cn = getchild(e)
+        if cn !== lca && cn.booln2 && cn.booln3
+            nchildren += 1
+        end
+    end
+    if nchildren == 1
+        @warn "clade already in tree (or incompatible?): will do nothing"
+        return nothing
+    end
+    nchildren > 0 ||
+        error("would not connect the new clade node to any children")
     # create a new node and new edge
     newnode = PN.Node(ni[],false)
     ni[] -= 1
@@ -359,22 +383,18 @@ function add_bipartitionnode!(
         true,-1,true,true,false)
     ei[] += 1
     # solve Q2: find all the lca's children with .booln2 && .booln3
-    nchildren = 0
     nedges = length(lca.edge)
     for i in nedges:-1:1 # delete elements in lca.edge from the end
         ce = lca.edge[i] # don't add new edge to lca.edge yet
         cn = getchild(ce)
         cn === lca && continue
         if cn.booln2 && cn.booln3 # then cn should become a child of newnode
-            nchildren += 1
             deleteat!(lca.edge,i) # disconnect lca-ce, connect newnode-ce
             push!(newnode.edge, ce)
             ce.node[2] = newnode # replaces lca, because ischil1 true and lca was parent
             # ischild1=true still agrees with newnode being the parent
         end
     end
-    nchildren > 0 ||
-        error("could not connect the new clade node to any children")
     # now we can modify lca.edge and net
     push!(lca.edge, newe)
     push!(newnode.edge, newe)

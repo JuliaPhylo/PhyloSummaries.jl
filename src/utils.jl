@@ -1,8 +1,10 @@
 """
     startree(taxa)
 
-Star tree `t` such that `t.node` lists all leaves named after the `n` `taxa`
-(in that order), numbered 1 through `n`, then the root node, numbered `-2`.
+Star tree `t` such that `t.node` lists all leaves named after the N `taxa`
+in that order: for `i` in 1 through N: node `n = t.node[i]` has `n.number = i`
+and `n.name = taxa[i]`.
+The root node is last, `t.node[N+1]`, and has number `-2`.
 """
 function startree(taxa::Vector{String})
     net = PN.HybridNetwork()
@@ -40,9 +42,11 @@ end
     isredundantsplit(v, b)
 
 true/false if `v` does / does not represent one taxon block of blob
-(or multi-partition) `b`.
+(or multi-partition) `b`, with `v` considered as unrooted.
 """
-isredundantsplit(v, b) = v ∈ b # any(isequal(v), b)
+function isredundantsplit(v, b)
+    return (v ∈ b || .!v ∈ b) # any(isequal(v), b) || ...
+end
 
 
 """
