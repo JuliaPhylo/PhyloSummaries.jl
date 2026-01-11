@@ -909,7 +909,11 @@ function add_blobnode!(
     ei::Base.RefValue{Int},
     blobpartition::NTuple{P,NTuple{N,Bool}},
     weight::Number
-)
+) where {N,P}
+    outcluster_i = findfirst(v -> v[N], blobpartition) # last taxon N = outgroup
+    outcluster = .!blobpartition[outcluster_i]
+    # find LCA of the P-1 ingroup taxon blocks
+    # except if
     # fixit: write this
     # newnode.fvalue = weight
 end
