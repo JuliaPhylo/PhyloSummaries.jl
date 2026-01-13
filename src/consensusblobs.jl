@@ -82,10 +82,12 @@ end
 
 iscompatible(b1::BipartFreq{N}, b2::BipartFreq{N}) where N =
     treecompatible(b1.split, b2.split) # in utils.jl
-iscompatible(b1::BlobFreq{N}, b2::BipartFreq{N}) where N =
-    blobcompatible(b1.partition, b2.split)
+iscompatible(b1::BipartFreq{N}, b2::BlobFreq{N}) where N =
+    blobcompatible(b1.split, b2.partition)
 iscompatible(b1::BlobFreq{N}, b2::BlobFreq{N}) where N =
     blobcompatible(b1.partition, b2.partition)
+isredundantsplit(b1::BipartFreq{N}, b2::BlobFreq{N}) where N =
+    isredundantsplit(b1.split, b2.partition)
 
 """
     consensus_treeofblobs(networks; proportion=0, minimumblobdegree=4)
@@ -795,12 +797,12 @@ function filter_sort_compatible_partitions!(
     # filter for between-list compatibility
     nbb_j = length(blobparts) # Next BloB / BIpartition index to check:
     nbi_j = length(biparts)   # from most to least frequent
-    while nbb_j>0 && nbi_j>0
-        nbb_f = freq(blobparts[nbb_j])
-        nbi_f = freq(biparts[nbi_j])
+    nbb_f = (nbb_j>0 ? freq(blobparts[nbb_j]) : 0)
+    nbi_f = (nbi_j>0 ? freq(biparts[nbi_j])   : 0)
+    while nbb_j>0 || nbi_j>0
         # if equally frequent: favor keeping the blob
         if nbi_f > nbb_f # decide to keep or filter out the next bipart
-            cb = biparts[nbi_j] # Candidate Blob/Bipartition
+            cb = biparts[nbi_j] # Candidate Bipartition
             keep = true
             for j_kb in (nbb_j+1):length(blobparts)
                 kb = blobparts[j_kb] # Kept Blob
@@ -811,17 +813,20 @@ function filter_sort_compatible_partitions!(
             end
             keep || deleteat!(biparts, nbi_j)
             nbi_j -= 1
+            nbi_f = (nbi_j>0 ? freq(biparts[nbi_j]) : 0)
         else # decide to keep or filter out the next blob
             cb = blobparts[nbb_j]
             iscompat = true
             for j_kb in (nbi_j+1):length(biparts)
-                if !iscompatible(cb, biparts[j_kb])
+                if !iscompatible(biparts[j_kb], cb) # okay if redundant
                     iscompat = false
                     break
                 end
             end
+            # but: a bipartition added earlier might be redundant with this new blob?
             iscompat || deleteat!(blobparts, nbb_j)
             nbb_j -= 1
+            nbb_f = (nbb_j>0 ? freq(blobparts[nbb_j]) : 0)
         end
     end
     return nothing
@@ -848,7 +853,7 @@ Assumptions:
    any 2 splits from `bipartitions` are tree-compatible; and
    any blob and split are blob-compatible.
 
-Calls [`add_blobnode!`](@ref) and [`add_clusternode!`](@ref), which use
+Calls [`add_blobnode!`](@ref) and [`add_clusteredge!`](@ref), which use
 internal fields `.booln2` and `.booln3`.
 
 fixit: code & test
@@ -866,13 +871,12 @@ function tree_from_blobpartitions(
     ei = Ref(N+1)
     for bpart in blobparts
         weight = freq(bpart)/nnets
-        nn = add_blobnode!(net, ni, ei, bpart.partition, weight)
+        add_blobnode!(net, ni, ei, bpart.partition, weight)
     end
     for bpart in biparts
         bpart.split[N] && error("bipartition side that contains the last taxon")
         weight = freq(bpart)/nnets
-        nn = add_clusternode!(net, ni, ei, bpart.split, weight, supportaslength)
-        isnothing(nn) && @warn("bipartition already implied by previous blobs")
+        add_clusteredge_weight!(net, ni, ei, bpart.split, weight, supportaslength)
     end
     return net
 end
@@ -900,7 +904,7 @@ outgroup: an edge's cluster of descendants does not contain the last taxon.
 
 Assumptions (none are checked): `tree` is a tree, P ≥ 3, taxon blocks are
 non-empty and do form a partition, and
-assumptions in [`add_clusternode!`](@ref).
+assumptions in [`add_clusteredge!`](@ref).
 
 fixit: add proportion that each taxon block is hybrid to some edge or node attribute?
 """
@@ -919,10 +923,11 @@ function add_blobnode!(
         blobnode = lca
     else # non-trivial because P ≥ 3
         outcluster = .!blobpartition[outcluster_i]
-        lca, nc = _lca_newcluster(net, outcluster)
-        nc == 1 && @warn("outgroup clade already in tree (or incompatible?): $outcluster")
-        if nc > 1
-            blobnode = _resolveclade_belowlca(net, lca, ni, ei, -1, false)
+        lca, ci = _lca_newcluster(net, outcluster)
+        length(ci) == 1 && @warn("outgroup clade already in tree (or incompatible?): $outcluster")
+        if length(ci) > 1
+            ne = _resolveclade_belowlca(net, lca, ci, ni, ei, -1, false)
+            blobnode = getchild(ne)
         end
     end
     blobnode.fvalue = weight
@@ -935,12 +940,47 @@ function add_blobnode!(
         node2clade_intersection_update(getroot(net))
         blobnode.booln2  || error("hmm, blob node has no taxa from the clade")
         !blobnode.booln3 || error("hmm, blob node has no taxa outside the clade")
-        nc = _lca_newcluster_nchildren(blobnode)
-        nc == 1 && @warn("taxon block already in tree (or incompatible?): $v")
-        if nc > 1
-            _resolveclade_belowlca(net, blobnode, ni, ei, -1, false)
+        ci = _lca_newcluster_children(blobnode)
+        length(ci) == 1 && @warn("taxon block already in tree (or incompatible?): $v")
+        if length(ci) > 1
+            _resolveclade_belowlca(net, blobnode, ni, ci, ei, -1, false)
         end
     end
     # fixit: finish this
     return blobnode
+end
+
+"""
+    add_clusteredge_weight!
+
+Find or create an edge `e` whose descendant taxa is the input cluster,
+and stores the input weight in the edge's field `.y`, and as its length
+with option `supportaslength=true`. Output: edge `e`.
+
+The input cluster may already exists in the input tree.
+Unlike [`add_clusteredge!`](@ref), no warning is thrown. The appropriate
+edge is found, its fields (`.y` and perhaps length) are modified to store the
+weight, and this edge is returned.
+"""
+function add_clusteredge_weight!(
+    net::PN.HybridNetwork,
+    ni::Base.RefValue{Int},
+    ei::Base.RefValue{Int},
+    bv::SplitTuple,
+    weight::Number,
+    supportaslength::Bool,
+)
+    lca, ci = _lca_newcluster(net, bv)
+    length(ci) > 0 ||
+        error("would not connect the new clade node to any children")
+    if length(ci) == 1
+        e = lca.edge[ci]
+        e.y = weight
+        if supportaslength
+            e.length = weight
+        end
+    else
+        e = _resolveclade_belowlca(net, lca, ci, ni, ei, weight, supportaslength)
+    end
+    return e
 end

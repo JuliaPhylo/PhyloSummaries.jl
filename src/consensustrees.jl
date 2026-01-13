@@ -294,21 +294,22 @@ function tree_from_bipartitions(
     ni = Ref(-3) # internal nodes: numbered -3,-4 etc., as done by readnewick
     ei = Ref(n+1)
     for (bv,weight) in pairs(bipartitions)
-        add_clusternode!(net, ni, ei, bv, weight/ntrees, supportaslength)
+        add_clusteredge!(net, ni, ei, bv, weight/ntrees, supportaslength)
     end
     return net
 end
 
 """
-    add_clusternode!(tree, ni, ei, cluster, weight, supportaslength)
+    add_clusteredge!(tree, ni, ei, cluster, weight, supportaslength)
 
 Add a node (numbered `ni`) and its parent edge (numbered `ei`) in `tree`,
 whose set of descendants is `cluster`, described by a 0/1 vector.
 The node index `ni` is decremented, and the edge `ei` is incremented.
 
-Output: newly created node if successful, nothing otherwise.
+Output: newly created edge if successful (whose child node is the newly
+created node), nothing otherwise.
 
-The node addition is unsuccessul if the cluster is empty, or is the full
+The edge & node addition is unsuccessul if the cluster is empty, or is the full
 taxon set, or if it is already present in `tree`. Adding it a second time
 would result in a new node of degree 2, which is avoided.
 
@@ -329,7 +330,7 @@ To do so: `.booln2` and `.booln3` are used to store, for each node
 Then, the answer to Q1 is the lowest node such that `.booln2 && !.booln3`,
 and the answer to Q2 is all `lca`'s children with `.booln2 && .booln3`.
 """
-function add_clusternode!(
+function add_clusteredge!(
     net::PN.HybridNetwork,
     ni::Base.RefValue{Int},
     ei::Base.RefValue{Int},
@@ -342,23 +343,27 @@ function add_clusternode!(
         return nothing
     end
     # solve Q1: find lowest node with .booln2 && !.booln3
-    lca, nchildren = _lca_newcluster(net, bv)
-    if nchildren == 1
+    lca, children_i = _lca_newcluster(net, bv)
+    if length(children_i) == 1
         @warn "clade already in tree (or incompatible?): will do nothing"
         return nothing
     end
-    nchildren > 0 ||
+    length(children_i) > 0 ||
         error("would not connect the new clade node to any children")
     # create a new node and new edge and
     # solve Q2: find all the lca's children with .booln2 && .booln3
-    newnode = _resolveclade_belowlca(net, lca, ni, ei, weight, supportaslength)
-    return newnode
+    newedge = _resolveclade_belowlca(net, lca, children_i, ni, ei, weight, supportaslength)
+    return newedge
 end
 
-#= LCA of cluster v, if it is not already in tree; parent of LCA otherwise.
-uses .booln2: does a node has ≥1 descendants in v?
-and  .booln3: are the nodes' descendants all in v?
-LCA: lowest node with .booln2 && !.booln3
+#= (lca, ci) where `lca` solves Q1 and `ci` solves Q2:
+- lca: LCA of cluster v, if it is not already in tree; parent of LCA otherwise.
+  uses .booln2: does a node has ≥1 descendants in v?
+  and  .booln3: are the nodes' descendants all in v?
+  LCA: lowest node with .booln2 && !.booln3
+- ci: indices in lca.edge of children of LCA whose descendants are all in v:
+  children with .booln2 && .booln3, to solve Q2.
+  These indices are sorted in reverse.
 =#
 @inline function _lca_newcluster(net, v)
     node2clade_intersection_initialize(net, v)   # initialize .booln{2,3}
@@ -379,26 +384,27 @@ LCA: lowest node with .booln2 && !.booln3
         end
         foundlca && break # of while loop
     end
-    nchildren = _lca_newcluster_nchildren(lca)
-    return lca, nchildren
+    children_i = _lca_newcluster_children(lca)
+    return lca, children_i
 end
-@inline function _lca_newcluster_nchildren(lca)
-    nchildren = 0
-    for e in lca.edge
-        cn = getchild(e)
+# solve Q2
+@inline function _lca_newcluster_children(lca)
+    children_i = Int[]
+    for i in length(lca.edge):-1:1
+        cn = getchild(lca.edge[i])
         if cn !== lca && cn.booln2
             cn.booln3 || error("cn.booln3 should have been true")
-            nchildren += 1
+            push!(children_i, i)
         end
     end
-    return nchildren
+    return children_i
 end
 
 #= create a new node and new edge below lca, whose descendants is the cluster
 used to compute the nodes' .booln2 and .booln3.
 To be called after _lca_newcluster()
 =#
-@inline function _resolveclade_belowlca(net, lca, ni, ei, wgt, supportaslength)
+@inline function _resolveclade_belowlca(net, lca,ci, ni,ei, wgt, supportaslength)
     newnode = PN.Node(ni[],false)
     ni[] -= 1
     # new edge: store clade support in .y, and as edge length if desired
@@ -407,25 +413,22 @@ To be called after _lca_newcluster()
         [newnode,lca], true, # ischild1 is true: to agre with node ordering
         true,-1,true,true,false)
     ei[] += 1
-    # solve Q2: find all the lca's children with .booln2 && .booln3
-    nedges = length(lca.edge)
-    for i in nedges:-1:1 # delete elements in lca.edge from the end
+    # Q2: loop over lca's children with .booln2 && .booln3
+    for i in ci
         ce = lca.edge[i] # don't add new edge to lca.edge yet
-        cn = getchild(ce)
-        cn === lca && continue
-        if cn.booln2 && cn.booln3 # then cn should become a child of newnode
-            deleteat!(lca.edge,i) # disconnect lca-ce, connect newnode-ce
-            push!(newnode.edge, ce)
-            ce.node[2] = newnode # replaces lca, because ischil1 true and lca was parent
-            # ischild1=true still agrees with newnode being the parent
-        end
+        # cn = getchild(ce)
+        # cn !== lca && cn.booln2 && cn.booln3 || error("oops")
+        deleteat!(lca.edge,i) # disconnect lca-ce, connect newnode-ce
+        push!(newnode.edge, ce)
+        ce.node[2] = newnode # replaces lca, because ischil1 true and lca was parent
+        # ischild1=true still agrees with newnode being the parent
     end
     # now we can modify lca.edge and net
     push!(lca.edge, newe)
     push!(newnode.edge, newe)
     PN.pushEdge!(net, newe)
     PN.pushNode!(net, newnode)
-    return newnode
+    return newe
 end
 
 # assumes: bv[j] corresponds to the node numbered j: j=net.node[i].number
