@@ -33,28 +33,35 @@ struct BlobFreq{N,P}
 end
 
 """
-    BipartFreq{N}
+    SplitFreq{N}
 
-Same as [`BlobFreq`](@ref), but for a bipartition (P=2 parts) that is defined
-by a cut-edge, not trivial, and not redundant with some interesting blob
-(meaning: not adjacent to any interesting blob).
+Frequency of one non-trivial taxon block, typically considered as describing an
+unrooted bipartition (or split) of the `N` taxa into P=2 parts.
+
+It is non-trivial if each part have at least 2 taxa, that is: the block is
+not empty, not full, does not contain a single taxa, or all but a single taxon.
+
+The taxon block is represented by an `N`-tuple of booleans, where entry `i`
+says whether taxon number `i` is in or out of this block.
+The canonical taxon block used to describe an unrooted bipartition is the block
+that does not contain the last taxa, such that its last entry `N` is false.
 """
-struct BipartFreq{N}
+struct SplitFreq{N}
     """bipartition: block 1 does *not* contain the last taxon, block 2 does.
     The bipartition is described by 1 tuple of size N for membership in block 1:
     `split[i]` is `true` is taxon `i` is in block 1, `false` if it's in block 2.
     """
     split::NTuple{N,Bool}
-    "frequency of the bipartition as a non-redundant. mutable: use freq and freq! to get/set this value."
+    "frequency of the bipartition. mutable: use freq and freq! to get/set this value."
     freq::Base.RefValue{Int}
 end
 
-freq(obj::Union{BipartFreq,BlobFreq}) = obj.freq[]
-function freq!(obj::Union{BipartFreq,BlobFreq}, n)
+freq(obj::Union{SplitFreq,BlobFreq}) = obj.freq[]
+function freq!(obj::Union{SplitFreq,BlobFreq}, n)
     obj.freq[] = n
     return obj
 end
-function incrementfreq!(obj::Union{BipartFreq,BlobFreq})
+function incrementfreq!(obj::Union{SplitFreq,BlobFreq})
     obj.freq[] += 1
     return obj
 end
@@ -80,13 +87,13 @@ function splitcomplement(splitvec::AbstractVector{NTuple{N,Bool}}) where N
     return ntuple(isoutgroup, N)
 end
 
-iscompatible(b1::BipartFreq{N}, b2::BipartFreq{N}) where N =
+iscompatible(b1::SplitFreq{N}, b2::SplitFreq{N}) where N =
     treecompatible(b1.split, b2.split) # in utils.jl
-iscompatible(b1::BipartFreq{N}, b2::BlobFreq{N}) where N =
+iscompatible(b1::SplitFreq{N}, b2::BlobFreq{N}) where N =
     blobcompatible(b1.split, b2.partition)
 iscompatible(b1::BlobFreq{N}, b2::BlobFreq{N}) where N =
     blobcompatible(b1.partition, b2.partition)
-isredundantsplit(b1::BipartFreq{N}, b2::BlobFreq{N}) where N =
+isredundantsplit(b1::SplitFreq{N}, b2::BlobFreq{N}) where N =
     isredundantsplit(b1.split, b2.partition)
 
 """
@@ -155,7 +162,7 @@ end
     count_blobpartitions!(networks, taxa, minBdegree)
 
 `(blob_vec, bipart_vec)` where `blob_vec` is a vector of [`BlobFreq{ntax}`](@ref)
-object and `bipart_vec` is a vector of [`BipartFreq{ntax}`](@ref) objects,
+object and `bipart_vec` is a vector of [`SplitFreq{ntax}`](@ref) objects,
 `ntax` being the number of taxa.
 All input networks must have the same set of `taxa`.
 
@@ -197,7 +204,7 @@ function count_blobpartitions(
         throw(ArgumentError("input networks have different numbers of taxa"))
     # hardwiredclusters will error if different taxon sets
     blobvec = BlobFreq{ntaxa}[]
-    bpvec = BipartFreq{ntaxa}[]
+    bpvec = SplitFreq{ntaxa}[]  # bipartitions, frequency: if non-redundant
     for net in networks
         count_blobpartitions!(blobvec, bpvec, net, taxa, minBdegree)
     end
@@ -230,7 +237,7 @@ Notes:
 """
 function count_blobpartitions!(
     blobvec::Vector{BlobFreq{N}}, # shared number of taxa
-    bpvec::Vector{BipartFreq{N}},
+    bpvec::Vector{SplitFreq{N}},
     net::PN.HybridNetwork,
     taxa::AbstractVector{<:String},
     minBdegree::Int,
@@ -612,7 +619,7 @@ The field `.intn1` is used to know which blobs are adjacent to a cut edge,
 and `blobdegree` to know if either of these blobs is "interesting"
 """
 function count_nonredundantbipartitions!(
-    bpvec::Vector{BipartFreq{N}},
+    bpvec::Vector{SplitFreq{N}},
     blobdegree::Vector{Int},
     net::PN.HybridNetwork,
     taxaindex::Dict{String,Int},
@@ -696,10 +703,10 @@ function count_nonredundantbipartitions!(
     return nothing
 end
 
-function add_bipartition!(bpvec::Vector{BipartFreq{N}}, split) where N
+function add_bipartition!(bpvec::Vector{SplitFreq{N}}, split) where N
     i = findfirst(bp -> bp.split == split, bpvec)
     if isnothing(i)
-        push!(bpvec, BipartFreq{N}(split,Ref(1)))
+        push!(bpvec, SplitFreq{N}(split,Ref(1)))
     else
         incrementfreq!(bpvec[i])
     end
@@ -764,7 +771,7 @@ Bipartitions redundant with a retained blob are *not* filtered out.
 """
 function filter_sort_compatible_partitions!(
     blobparts::Vector{BlobFreq{N}},
-    biparts::Vector{BipartFreq{N}},
+    biparts::Vector{SplitFreq{N}},
     nnets::Number,
     proportion::Number,
 ) where N
@@ -865,7 +872,7 @@ internal fields `.booln2` and `.booln3`.
 function tree_from_blobpartitions(
     taxa::Vector{String},
     blobparts::Vector{BlobFreq{N}},
-    biparts::Vector{BipartFreq{N}},
+    biparts::Vector{SplitFreq{N}},
     nnets::Number,
     supportaslength::Bool
 ) where N

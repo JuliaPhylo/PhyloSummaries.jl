@@ -300,14 +300,15 @@ function tree_from_bipartitions(
 end
 
 """
-    add_clusteredge!(tree, ni, ei, cluster, weight, supportaslength)
+    add_clusteredge!(tree, ni, ei, cluster, weight, supportaslength;
+        nowarning=false)
 
 Add a node (numbered `ni`) and its parent edge (numbered `ei`) in `tree`,
 whose set of descendants is `cluster`, described by a 0/1 vector.
 The node index `ni` is decremented, and the edge `ei` is incremented.
 
 Output: newly created edge if successful (whose child node is the newly
-created node), nothing otherwise.
+created node), otherwise `nothing` with a warning unless `nowarning=true`.
 
 The edge & node addition is unsuccessul if the cluster is empty, or is the full
 taxon set, or if it is already present in `tree`. Adding it a second time
@@ -336,16 +337,17 @@ function add_clusteredge!(
     ei::Base.RefValue{Int},
     bv::SplitTuple,
     weight::Number,
-    supportaslength::Bool,
+    supportaslength::Bool;
+    nowarning::Bool=false
 )
     if all(bv) || all(.!bv)
-        @warn("will skip trivial clade: $bv") # fixit: remove?
+        nowarning || @warn("will skip trivial clade: $bv")
         return nothing
     end
     # solve Q1: find lowest node with .booln2 && !.booln3
     lca, children_i = _lca_newcluster(net, bv)
     if length(children_i) == 1
-        @warn "clade already in tree (or incompatible?): will do nothing"
+        nowarning || @warn "clade already in tree (or incompatible?): will do nothing"
         return nothing
     end
     length(children_i) > 0 ||

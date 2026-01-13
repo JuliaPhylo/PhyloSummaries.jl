@@ -104,10 +104,13 @@ net = readnewick.(nwk)
 tob = @test_logs (:warn, r"^non-binary") consensus_treeofblobs(net[[1,2,4,5]])
 @test writenewick(tob) == "(A,E,(D,C,B));"
 @test tob.node[7].fvalue == 1 # blob in 100% of input nets
-end
-# fixit: get consensus ToB etc. & test
-#= to look at these networks locally:
-using RCall, PhyloNetworks, PhyloPlots
+
+# fixit: add tests on level-1 nets
+nfile = joinpath(@__DIR__,"..","test","bootstrapnets_h1.nwk")
+# nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","bootstrapnets_h1.nwk")
+net = readmultinewick(nfile)
+#= to look at networks locally:
+using RCall, PhyloPlots
 R"layout"([1 2 3 4 5; 6 7 8 9 10]);
 R"par"(mar=[0,0,0,0])
 for i in 1:10
@@ -115,4 +118,6 @@ for i in 1:10
     R"mtext"("net $i", side=1, line=-1)
 end
 =#
+end
+
 end
