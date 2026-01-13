@@ -86,13 +86,15 @@ blobs, bps = PS.count_blobpartitions(net, taxa, 3)
 @test bps[1].split == (true, true, true, false, false)
 @test PS.freq(bps[1]) == 1
 
-#= fixit: find out why warnings are thrown: why redundant clades or blobs after filtering?
-@test_nowarn consensus_treeofblobs(net, minimumblobdegree=3)
-┌ Warning: clade already in tree (or incompatible?): will do nothing
-└ @ PhyloSummaries ~/.julia/dev/PhyloSummaries/src/consensustrees.jl:347
-┌ Warning: bipartition already implied by previous blobs
-└ @ PhyloSummaries ~/.julia/dev/PhyloSummaries/src/consensusblobs.jl:875
-=#
+tob = consensus_treeofblobs(net, minimumblobdegree=3)
+@test writenewick(tob) == "(d,e,(c,b,a));"
+@test [n.fvalue for n in tob.node] ≈ [-1,-1,-1,-1,-1, 2/3, -1]
+@test [e.y for e in tob.edge] ≈ [-1,-1,-1,-1,-1, 1/3]
+
+tob = consensus_treeofblobs(net)
+@test writenewick(tob) == "(d,e,(c,b,a));"
+@test all(n.fvalue == -1 for n in tob.node)
+@test [e.y for e in tob.edge] ≈ [-1,-1,-1,-1,-1, 1]
 end
 
 @testset "consensus ToB" begin

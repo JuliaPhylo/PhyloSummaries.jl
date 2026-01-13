@@ -142,6 +142,10 @@ function consensus_treeofblobs(
     taxa = sort(tiplabels(networks[1]))
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
     nnets = length(networks)
+    # fixit: before filtering blobs out, extract the taxon block's hybrid frequencies.
+    # problem: the same taxon block, say (1,1,0,0,0), may be "hybrid" in
+    # different networks, each time in a different blob. Its hybrid frequency
+    # as part of a specific blob could be low, but could be high overall.
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
     tob = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
     return tob
@@ -757,8 +761,6 @@ Blob-compatibility is used, which reduces to tree-compatibility when both
 partitions are bipartitions.
 
 Bipartitions redundant with a retained blob are *not* filtered out.
-
-fixit: add test for isredundantsplit
 """
 function filter_sort_compatible_partitions!(
     blobparts::Vector{BlobFreq{N}},
@@ -847,18 +849,18 @@ A bipartition's weight is stored in the corresponding edge's field `.y`.
 With option `supportaslength=true`, this weight is also stored in
 the bipartition edge's `.length`.
 
-Assumptions:
-1. each bipartition is represented by the taxon block that does not contain
+Assumptions (not checked):
+1. each bipartition is represented by the taxon block that does *not* contain
    the last taxon
-2. blob partitions and bipartitions are all compatible with each other:
+2. bipartititions are not trivial: they separate at least 2 taxa from at 2 other
+3. blobs are correct partitions, with P ≥ 3 parts at least
+4. blob partitions and bipartitions are all *compatible* with each other:
    any 2 blobs from `blobpartitions` are blob-compatible;
    any 2 splits from `bipartitions` are tree-compatible; and
    any blob and split are blob-compatible.
 
 Calls [`add_blobnode!`](@ref) and [`add_clusteredge!`](@ref), which use
 internal fields `.booln2` and `.booln3`.
-
-fixit: code & test
 """
 function tree_from_blobpartitions(
     taxa::Vector{String},
@@ -894,9 +896,10 @@ the input blob partition.
 
 If the blob has P ≥ 3 taxon blocks, these blocks are assumed to form a
 partition of the full taxon set. If it is blob-compatible with all blobs
-already in `tree`, then k nodes and k edges are added, with k=P or k=P-1.
-Otherwise, fewer nodes and edges are added.
-fixit: check, and make sure degree-2 nodes are not added.
+already in `tree`, then k nodes and k edges are added, where k is the number
+of non-trivial taxon blocks.
+If the blob is tree-compatible but not blob-compatible with the `tree`,
+then fewer nodes and edges are added with a warning, or an error is thrown.
 
 The blob's weight is stored in the corresponding node's `.fvalue`.
 
@@ -919,24 +922,25 @@ function add_blobnode!(
 ) where {P,N} # 2026-01: Aqua has a problem with this. "Unbound type parameters"
     # 1. create (or find) blob node: its clade is the complement of the
     #    taxon block containing the outgroup (last taxon N)
-    outcluster_i = findfirst(v -> v[N], blobpartition)
-    if sum(blobpartition[outcluster_i]) == 1 # trivial cluster
+    outcluster_j = findfirst(v -> v[N], blobpartition)
+    if sum(blobpartition[outcluster_j]) == 1 # trivial cluster
         lca = getroot(net)
         blobnode = lca
+        # e_outj = net.edge[N] because net initialized with startree()
     else # non-trivial because P ≥ 3
-        outcluster = .!blobpartition[outcluster_i]
+        outcluster = .!blobpartition[outcluster_j]
         lca, ci = _lca_newcluster(net, outcluster)
         length(ci) == 1 && @warn("outgroup clade already in tree (or incompatible?): $outcluster")
         if length(ci) > 1
-            ne = _resolveclade_belowlca(net, lca, ci, ni, ei, -1, false)
-            blobnode = getchild(ne)
+            e_outj = _resolveclade_belowlca(net, lca, ci, ni, ei, -1, false)
+            blobnode = getchild(e_outj)
         end
     end
     blobnode.fvalue = weight
     # 2. create a child node below blobnode for each taxon block
-    for i in 1:P
-        i == outcluster_i && continue
-        v = blobpartition[i]
+    for j in 1:P
+        j == outcluster_j && continue
+        v = blobpartition[j]
         sum(v) == 1 && continue # skip trivial blocks of a single taxon
         node2clade_intersection_initialize(net, v)  # update .booln{2,3} for v
         node2clade_intersection_update(getroot(net))
@@ -945,7 +949,7 @@ function add_blobnode!(
         ci = _lca_newcluster_children(blobnode)
         length(ci) == 1 && @warn("taxon block already in tree (or incompatible?): $v")
         if length(ci) > 1
-            _resolveclade_belowlca(net, blobnode, ni, ci, ei, -1, false)
+            e_j = _resolveclade_belowlca(net, blobnode, ci, ni, ei, -1, false)
         end
     end
     return blobnode
@@ -975,7 +979,7 @@ function add_clusteredge_weight!(
     length(ci) > 0 ||
         error("would not connect the new clade node to any children")
     if length(ci) == 1
-        e = lca.edge[ci]
+        e = lca.edge[ci[1]]
         e.y = weight
         if supportaslength
             e.length = weight

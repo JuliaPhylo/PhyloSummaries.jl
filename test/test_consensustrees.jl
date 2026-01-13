@@ -36,7 +36,7 @@ for bp in keys(expected)
 end
 end
 
-@testset "add_clusteredge!" begin
+@testset "utilities" begin
 t = PS.startree(["t1","t2","t3"])
 ni = Ref(-30); ei = Ref(4)
 ne = @test_logs (:warn, r"^will skip trivial clade") PS.add_clusteredge!(t,ni,ei,(true,true,true),10,false)
@@ -48,6 +48,9 @@ ne = PS.add_clusteredge!(t,ni,ei,(true,true,false),10,false)
 @test t.edge[4].y == 10
 ## only warning from an incompatible cluster:
 # PS.add_clusteredge!(t,ni,ei,(false,true,true),0,false)
+
+@test PS.isredundantsplit((true,true,true,false),
+  ((false,false,false,true), (true,true,false,false), (false,false,true,false)))
 end
 
 @testset "consensustree" begin
