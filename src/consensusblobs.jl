@@ -751,11 +751,14 @@ Filter out blob- and bi-partitions with frequency ≤ proportion;
 sort each vector of `blobpartitions` and `bipartitions` by frequency
 (from smallest to largest);
 filter out any partition not compatible with another of higher frequency
-(giving preference to a blob over a bipartition if tied);
-and filter out any bipartition redundant with a retained blob.
+(giving preference to a blob over a bipartition if tied).
 
 Blob-compatibility is used, which reduces to tree-compatibility when both
 partitions are bipartitions.
+
+Bipartitions redundant with a retained blob are *not* filtered out.
+
+fixit: add test for isredundantsplit
 """
 function filter_sort_compatible_partitions!(
     blobparts::Vector{BlobFreq{N}},
@@ -806,7 +809,7 @@ function filter_sort_compatible_partitions!(
             keep = true
             for j_kb in (nbb_j+1):length(blobparts)
                 kb = blobparts[j_kb] # Kept Blob
-                if isredundantsplit(cb, kb) || !iscompatible(cb, kb)
+                if !iscompatible(cb, kb)
                     keep = false
                     break
                 end
@@ -823,7 +826,6 @@ function filter_sort_compatible_partitions!(
                     break
                 end
             end
-            # but: a bipartition added earlier might be redundant with this new blob?
             iscompat || deleteat!(blobparts, nbb_j)
             nbb_j -= 1
             nbb_f = (nbb_j>0 ? freq(blobparts[nbb_j]) : 0)
@@ -946,7 +948,6 @@ function add_blobnode!(
             _resolveclade_belowlca(net, blobnode, ni, ci, ei, -1, false)
         end
     end
-    # fixit: finish this
     return blobnode
 end
 
