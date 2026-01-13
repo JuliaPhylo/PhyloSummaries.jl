@@ -62,6 +62,15 @@ bb, bp = @test_logs (:warn, r"single exit hybrid") PS.count_blobpartitions(net, 
 @test bb[1].hybrid == Dict( # NOTE: 6 but only 5 networks because one has 2 hybrids
   3 => 5,  # h hybrid in all 5 nets,
   5 => 1) # b2 hybrid in net[5] only
+@test occursin(
+  r"""BlobFreq on 8 taxa, partitioned into 6 blocks
+  taxon blocks: 5|4|6|7|8|1,2,3
+  frequency: 5
+  hybrid block => frequency:""", repr("text/plain", bb[1]))
+@test repr("text/plain", bp[1]) == """SplitFreq on 8 taxa
+  taxa in split cluster: 2,3
+  frequency: 4"""
+
 end
 
 @testset "blobs & bipartitions with chains of 2-blobs" begin
@@ -109,6 +118,12 @@ tob = @test_logs (:warn, r"^non-binary") consensus_treeofblobs(net[[1,2,4,5]])
 nfile = joinpath(@__DIR__,"..","test","bootstrapnets_h1.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","bootstrapnets_h1.nwk")
 net = readmultinewick(nfile)
+# there should be 4 blob partitions, each with a single circular order, freqs: 6,1,1,1,1
+# 0 non-redundant bipartitions, 4 hybrid clades: t6 ×5, t3 ×2, t4 ×2, t8 ×1.
+# consensus tree-of-blobs: star, blob support 60%:
+tob = readnewick("(t2,t4,t3,t5,t6,t1);"); getroot(tob).fvalue = 6/10
+# consensus, level-1:
+conl1 = readnewick("(t2,(t4,(t3,(t5,(t6)#H0))),(#H0,t1));")
 #= to look at networks locally:
 using RCall, PhyloPlots
 R"layout"([1 2 3 4 5; 6 7 8 9 10]);

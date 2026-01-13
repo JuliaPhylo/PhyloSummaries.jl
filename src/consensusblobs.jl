@@ -31,6 +31,20 @@ struct BlobFreq{N,P}
     "frequencies of the different hybrid parts for blobs with this partition"
     hybrid::Dict{Int,Int}
 end
+function Base.show(io::IO, ::MIME"text/plain", obj::BlobFreq{N,P}) where {N,P}
+    println(io, "BlobFreq on $N taxa, partitioned into $P blocks")
+    print(io, "taxon blocks: ")
+    println(io, join(join.(findall.(obj.partition),","), "|"))
+    print(io, "frequency: ")
+    println(io, freq(obj))
+    if !isempty(obj.circorder)
+        print(io, "circular order of blocks => frequency: ")
+        println(io, MIME"text/plain"(), obj.circorder)
+    end
+    print(io, "hybrid block => frequency: ")
+    show(io, MIME"text/plain"(), obj.hybrid)
+end
+
 
 """
     SplitFreq{N}
@@ -54,6 +68,13 @@ struct SplitFreq{N}
     split::NTuple{N,Bool}
     "frequency of the bipartition. mutable: use freq and freq! to get/set this value."
     freq::Base.RefValue{Int}
+end
+function Base.show(io::IO, ::MIME"text/plain", obj::SplitFreq{N}) where N
+    println(io, "SplitFreq on $N taxa")
+    print(io, "taxa in split cluster: ")
+    println(io, join(findall(obj.split),","))
+    print(io, "frequency: ")
+    print(io, freq(obj))
 end
 
 freq(obj::Union{SplitFreq,BlobFreq}) = obj.freq[]

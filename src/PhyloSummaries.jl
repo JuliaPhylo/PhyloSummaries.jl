@@ -3,6 +3,9 @@ module PhyloSummaries
 using Dictionaries
 using PhyloNetworks
 
+# import: to extend methods from another packages
+import Base: show
+
 const PN = PhyloNetworks
 
 export
