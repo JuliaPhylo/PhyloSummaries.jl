@@ -169,13 +169,12 @@ function consensus_treeofblobs(
         throw(ArgumentError("minimumblobdegree should be 2, 3 or 4, not $(minimumblobdegree)"))
     taxa = sort(tiplabels(networks[1]))
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
+    hybdict = count_hybridclusters(blobvec) # before filtering blobs out
     nnets = length(networks)
-    # fixit: before filtering blobs out, extract the taxon block's hybrid frequencies.
-    # problem: the same taxon block, say (1,1,0,0,0), may be "hybrid" in
-    # different networks, each time in a different blob. Its hybrid frequency
-    # as part of a specific blob could be low, but could be high overall.
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
     tob = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
+    edge2hyb = _hybridsupport_cladesintree(hybdict, tob, taxa, nnets)
+    # fixit: also return edge2hyb. Any better way to tell the user?
     return tob
 end
 
@@ -938,8 +937,6 @@ outgroup: an edge's cluster of descendants does not contain the last taxon.
 Assumptions (none are checked): `tree` is a tree, P ≥ 3, taxon blocks are
 non-empty and do form a partition, and
 assumptions in [`add_clusteredge!`](@ref).
-
-fixit: add proportion that each taxon block is hybrid to some edge or node attribute?
 """
 function add_blobnode!(
     net::PN.HybridNetwork,
@@ -1016,4 +1013,47 @@ function add_clusteredge_weight!(
         e = _resolveclade_belowlca(net, lca, ci, ni, ei, weight, supportaslength)
     end
     return e
+end
+
+function count_hybridclusters(blobvec::Vector{BlobFreq{N}}) where N
+    hybdict = Dict{NTuple{N,Bool},Int}()
+    for bf in blobvec
+        for (hi, hf) in bf.hybrid
+            hcluster = bf.partition[hi]
+            hybdict[hcluster] = get(hybdict, hcluster, 0) + hf
+        end
+    end
+    return hybdict
+end
+
+function _hybridsupport_cladesintree(
+    hybdict::Dict{NTuple{N,Bool},Int},
+    tre::PN.HybridNetwork,
+    taxa::AbstractVector{<:String},
+    nnets::Number,
+) where {N}
+    hwm = hardwiredclusters(tre, taxa) # but excludes external edges
+    # map: (edge_number, reverse_direction?) => hybrid proportion
+    edge2hyb = Dict{Tuple{Int,Bool},Float64}()
+    for row in axes(hwm,1)
+        clade = ntuple(j -> Bool(hwm[row, j+1]), N)
+        if haskey(hybdict, clade)
+            edge2hyb[(hwm[row,1],true)]  = hybdict[clade]/nnets
+        end
+        cladecomp = .!clade
+        if haskey(hybdict, cladecomp)
+            edge2hyb[(hwm[row,1],false)] = hybdict[cladecomp]/nnets
+        end
+    end
+    for j in 1:N # external edges: assume numbered 1:N, from startree()
+        clade = ntuple(isequal(j), N)
+        if haskey(hybdict, clade)
+            edge2hyb[(j,true)]  = hybdict[clade]/nnets
+        end
+        cladecomp = .!clade
+        if haskey(hybdict, cladecomp)
+            edge2hyb[(j,false)] = hybdict[cladecomp]/nnets
+        end
+    end
+    return edge2hyb
 end
