@@ -71,11 +71,76 @@ function treecompatible(a::NTuple{N,Bool}, b::NTuple{N,Bool})::Bool where N
 end
 
 """
-    blobcompatible(a::NTuple{P,NTuple{N,Bool}}, b::NTuple{N,Bool})
-    blobcompatible(a::NTuple{P,NTuple{N,Bool}}, b::NTuple{P,NTuple{N,Bool}})
+    blobcompatible(A, B)
 
-fixit / todo: implement
-fixit: explain. unrooted.
+Check if two partitions A and B are blob-compatible (unrooted).
+
+Two partitions are compatible if there exists a pair (i, j) such that all parts
+of A except Aᵢ are subsets of Bⱼ. This reduces to tree-compatibility when both
+A and B are bipartitions.
+
+
 """
-blobcompatible(p1,p2) = true
+function blobcompatible(
+    A::NTuple{Ka, NTuple{N,Bool}},
+    B::NTuple{Kb, NTuple{N,Bool}}
+) where {N, Ka, Kb}
+    for i in 1:Ka
+        for j in 1:Kb
+            all_included = true
+            for q in 1:Ka
+                q == i && continue  # skip A_i
+                # Check if A_q ⊆ B_j (every taxon in A_q is also in B_j)
+                if !issubset_split(A[q], B[j])
+                    all_included = false
+                    break
+                end
+            end
+            if all_included
+                return true
+            end
+        end
+    end
+    return false
+end
 
+# Edge case: empty partitions are trivially compatible
+blobcompatible(::Tuple{}, ::Tuple{}) = true
+blobcompatible(::Tuple{}, ::NTuple{Kb, NTuple{N,Bool}}) where {N, Kb} = true
+blobcompatible(::NTuple{Ka, NTuple{N,Bool}}, ::Tuple{}) where {N, Ka} = true
+
+"""
+    issubset_split(a, b)
+
+Check if split `a` is a subset of split `b` (all taxa in `a` are also in `b`).
+"""
+function issubset_split(a::NTuple{N,Bool}, b::NTuple{N,Bool}) where N
+    inter = ntuple(i -> a[i] & b[i], N)
+    return !any(inter) || inter == a
+end
+
+function blobcompatible(
+    split::NTuple{N,Bool},
+    B::NTuple{Kb, NTuple{N,Bool}}
+) where {N, Kb}
+    splitcomplement = ntuple(i -> !split[i], N)
+    A = (split, splitcomplement)
+    return blobcompatible(A, B)
+end
+
+
+function blobcompatible(
+    A::NTuple{Ka, NTuple{N,Bool}},
+    split::NTuple{N,Bool}
+) where {N, Ka}
+    splitcomplement = ntuple(i -> !split[i], N)
+    B = (split, splitcomplement)
+    return blobcompatible(A, B)
+end
+
+function blobcompatible(
+    split1::NTuple{N,Bool},
+    split2::NTuple{N,Bool}
+) where N
+    return treecompatible(split1, split2)
+end
