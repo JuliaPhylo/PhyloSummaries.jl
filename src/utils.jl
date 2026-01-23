@@ -91,7 +91,7 @@ function blobcompatible(
             for q in 1:Ka
                 q == i && continue  # skip A_i
                 # Check if A_q ⊆ B_j (every taxon in A_q is also in B_j)
-                if !issubset_split(A[q], B[j])
+                if !issubsetsplit(A[q], B[j])
                     all_included = false
                     break
                 end
@@ -110,13 +110,14 @@ blobcompatible(::Tuple{}, ::NTuple{Kb, NTuple{N,Bool}}) where {N, Kb} = true
 blobcompatible(::NTuple{Ka, NTuple{N,Bool}}, ::Tuple{}) where {N, Ka} = true
 
 """
-    issubset_split(a, b)
+    issubsetsplit(a, b)
 
 Check if split `a` is a subset of split `b` (all taxa in `a` are also in `b`).
 """
-function issubset_split(a::NTuple{N,Bool}, b::NTuple{N,Bool}) where N
+function issubsetsplit(a::NTuple{N,Bool}, b::NTuple{N,Bool}) where N
     inter = ntuple(i -> a[i] & b[i], N)
-    return !any(inter) || inter == a
+    # return !any(inter) || inter == a # should we check disjoint as  unrooted?
+    return inter == a 
 end
 
 function blobcompatible(

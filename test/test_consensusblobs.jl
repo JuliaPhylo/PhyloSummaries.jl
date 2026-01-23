@@ -17,6 +17,23 @@ nwk = [ # some rooted, some unrooted
     @test ccw == (1, 5, 4, 2, 3)
 end
 
+@testset "blobcompatible" begin
+    A = ((true,true,false,false,false),   # {A,B}
+         (false,false,true,false,false),  # {C}
+         (false,false,false,true,true))   # {D,E}
+    B = ((true,true,true,false,false),    # {A,B,C}
+         (false,false,false,true,true))   # {D,E}
+    @test PS.blobcompatible(A, B) == true
+    
+
+    A2 = ((true,true,true,false,false,false),  # {A,B,C}
+          (false,false,false,true,true,true))  # {D,E,F}
+    B2 = ((true,false,false,true,false,false), # {A,D}
+          (false,true,false,false,true,false), # {B,E}
+          (false,false,true,false,false,true)) # {C,F}
+    @test PS.blobcompatible(A2, B2) == false
+end
+
 @testset "count blobs" begin
 taxa = ["D","C","B","A","E"] # not what consensusblob would use
 net = readnewick.(nwk)
@@ -135,4 +152,35 @@ end
 =#
 end
 
+@testset "blob compatibility filtering" begin
+    # Helper to create Bool tuples more readably: b(1,1,0,0,0) → (true,true,false,false,false)
+    b(x...) = NTuple{length(x),Bool}(Bool.(x))
+    
+    net1 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")  # blob: E|AB|C|D
+    net2 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")  # same as net1
+    net3 = readnewick("((((A,C),(B)#H1),(#H1,D)),E);")  # blob: E|AC|B|D
+    
+    taxa = ["A","B","C","D","E"]
+    
+    blobs, bps = PS.count_blobpartitions([net1, net2, net3], taxa, 4)
+    
+    @test length(blobs) == 2
+    freqs = sort([PS.freq(b) for b in blobs], rev=true)
+    @test freqs == [2, 1]
+    
+    PS.filter_sort_compatible_partitions!(blobs, bps, 3, 0)
+    
+  
+    @test length(blobs) == 1
+    
+    # The remaining blob is from net1,net2 (freq=2)
+    blob_freq2 = blobs[1]
+    @test PS.freq(blob_freq2) == 2
+    
+    # Blob from net1,net2: partition E|AB|C|D
+    @test blob_freq2.partition == (b(0,0,0,0,1), b(1,1,0,0,0), b(0,0,1,0,0), b(0,0,0,1,0))
 end
+
+
+end
+

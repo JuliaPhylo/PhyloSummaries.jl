@@ -1,5 +1,4 @@
 #TODO: parse in circular order and store info that way. check funcs after canonicalizepartition
-#TODO: add compatibility checking for blobs
 
 """
     BlobFreq{N,P}
