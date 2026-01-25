@@ -153,7 +153,6 @@ end
 end
 
 @testset "blob compatibility filtering" begin
-    # Helper to create Bool tuples more readably: b(1,1,0,0,0) → (true,true,false,false,false)
     b(x...) = NTuple{length(x),Bool}(Bool.(x))
     
     net1 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")  # blob: E|AB|C|D
@@ -173,11 +172,9 @@ end
   
     @test length(blobs) == 1
     
-    # The remaining blob is from net1,net2 (freq=2)
     blob_freq2 = blobs[1]
     @test PS.freq(blob_freq2) == 2
     
-    # Blob from net1,net2: partition E|AB|C|D
     @test blob_freq2.partition == (b(0,0,0,0,1), b(1,1,0,0,0), b(0,0,1,0,0), b(0,0,0,1,0))
 end
 

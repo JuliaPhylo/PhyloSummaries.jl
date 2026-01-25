@@ -583,7 +583,6 @@ function blobtaxonsetpartition!(
         else
             rowidx = get(edgemap, e.number, nothing)
             isnothing(rowidx) && error("unmapped non-external edge $(e.number)")
-            # if good reason, then: split = descendants_bitvec(e, taxaindex)
             split = ntuple(i -> Bool(hwmatrix[rowidx,i+1]), N)
         end
         push!(splits, split)
@@ -731,48 +730,6 @@ function add_bipartition!(bpvec::Vector{SplitFreq{N}}, split) where N
     end
 end
 
-# fixit: delete descendants_bitvec and descendants_bitvec! below? not used.
-"""
-    descendants_bitvec(edge::PN.Edge, taxaindex::Dict{String,Int})
-
-Tuple `d` indicating which leaves are descendants of `edge`: `d[i]=true` if
-a taxon "name" is a descendant of `edge`, `d[i]=false` otherwise,
-with `i=taxaindex["name"]`.
-
-Similar to `PhyloNetworks.descendants`, except that:
-- the output contains `ntaxa` true/false values ordered according to `taxaindex`
-  (`ntaxa` being the number of taxa)
-  rather than the list of descendant node numbers, and
-- only leaves are considered (`PhyloNetworks.descendants` can tell which
-  internal nodes are descendants).
-"""
-function descendants_bitvec(edge::PN.Edge, taxaindex::Dict{String,Int})
-    visited = Int[]
-    splitvec = zeros(Bool, length(taxaindex))
-    descendants_bitvec!(splitvec, visited, edge, taxaindex)
-    return Tuple(splitvec)
-end
-function descendants_bitvec!(
-    splitvec::Vector,
-    visited::Vector{Int},
-    edge::PN.Edge,
-    taxaindex::Dict{String,Int}
-)
-    n = getchild(edge)
-    if n.hybrid # only need to check previous visits for hybrid nodes
-        n.number in visited && return nothing
-        push!(visited, n.number)
-    end
-    if n.leaf
-        splitvec[taxaindex[n.name]] = 1
-    end
-    for ce in n.edge
-        if isparentof(n, ce)
-            descendants_bitvec!(splitvec, visited, ce, taxaindex)
-        end
-    end
-    return nothing
-end
 
 """
     filter_sort_compatible_partitions!(blobpartitions, bipartitions, nnets, proportion)
