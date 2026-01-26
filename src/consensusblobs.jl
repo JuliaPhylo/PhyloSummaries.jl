@@ -30,17 +30,22 @@ struct BlobFreq{N,P}
     "frequencies of the different hybrid parts for blobs with this partition"
     hybrid::Dict{Int,Int}
 end
+partitionstring(obj::BlobFreq) = join(join.(findall.(obj.partition),","), "|")
+Base.show(io::IO, obj::BlobFreq{N,P}) where {N,P} = print(io,
+    "BlobFreq on $N taxa, $P blocks " * partitionstring(obj) *
+    ", frequency $(freq(obj))" *
+    ", $(length(obj.circorder)) circular orders, $(length(obj.hybrid)) hybrid blocks")
 function Base.show(io::IO, ::MIME"text/plain", obj::BlobFreq{N,P}) where {N,P}
     println(io, "BlobFreq on $N taxa, partitioned into $P blocks")
     print(io, "taxon blocks: ")
-    println(io, join(join.(findall.(obj.partition),","), "|"))
+    println(io, partitionstring(obj))
     print(io, "frequency: ")
     println(io, freq(obj))
     if !isempty(obj.circorder)
         print(io, "circular order of blocks => frequency: ")
-        println(io, MIME"text/plain"(), obj.circorder)
+        show(io, MIME"text/plain"(), obj.circorder)
     end
-    print(io, "hybrid block => frequency: ")
+    print(io, "\nhybrid block => frequency: ")
     show(io, MIME"text/plain"(), obj.hybrid)
 end
 
@@ -68,13 +73,10 @@ struct SplitFreq{N}
     "frequency of the bipartition. mutable: use freq and freq! to get/set this value."
     freq::Base.RefValue{Int}
 end
-function Base.show(io::IO, ::MIME"text/plain", obj::SplitFreq{N}) where N
-    println(io, "SplitFreq on $N taxa")
-    print(io, "taxa in split cluster: ")
-    println(io, join(findall(obj.split),","))
-    print(io, "frequency: ")
-    print(io, freq(obj))
-end
+splitstring(obj::SplitFreq) = join(findall(obj.split),",")
+Base.show(io::IO, obj::SplitFreq{N}) where {N} = print(io,
+    "SplitFreq on $N taxa, taxa in split cluster: " * splitstring(obj) *
+    ", frequency: $(freq(obj))")
 
 freq(obj::Union{SplitFreq,BlobFreq}) = obj.freq[]
 function freq!(obj::Union{SplitFreq,BlobFreq}, n)

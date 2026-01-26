@@ -124,21 +124,29 @@ tob = consensus_treeofblobs(net)
 end
 
 @testset "consensus ToB" begin
-# fixit: nets 1,2,4,5 all have the same blob, same hybrid, same circular order.
-# change to more complex test with net 3 after blobcompatible() works
+# nets 1,2,4,5: same blob AE|B|C|D, same hybrid C, same circular order
+# net 3; blob AD|C|B(hybrid)|E
 net = readnewick.(nwk)
-tob = @test_logs (:warn, r"^non-binary") consensus_treeofblobs(net[[1,2,4,5]])
+tob = @test_logs (:warn, r"^non-binary") consensus_treeofblobs(net)
 @test writenewick(tob) == "(A,E,(D,C,B));"
-@test tob.node[7].fvalue == 1 # blob in 100% of input nets
+@test tob.node[7].fvalue == 0.8 # blob in 4/5 input nets
 
-# fixit: add tests on level-1 nets
 nfile = joinpath(@__DIR__,"..","test","bootstrapnets_h1.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","bootstrapnets_h1.nwk")
 net = readmultinewick(nfile)
-# there should be 4 blob partitions, each with a single circular order, freqs: 6,1,1,1,1
+# 4 blob partitions, each with a single circular order, freqs: 6,1,1,1,1
 # 0 non-redundant bipartitions, 4 hybrid clades: t6 ×5, t3 ×2, t4 ×2, t8 ×1.
 # consensus tree-of-blobs: star, blob support 60%:
-tob = readnewick("(t2,t4,t3,t5,t6,t1);"); getroot(tob).fvalue = 6/10
+tob = consensus_treeofblobs(net)
+@test writenewick(tob) == "(t2,t4,t3,t5,t6,t1);"
+@test getroot(tob).fvalue == 6/10
+tob = consensus_treeofblobs(net[[2,3,4,9]])
+@test writenewick(tob) == "(t5,t6,(t4,t3,t2,t1));" # blob from nets 4,9
+@test tob.node[8].fvalue == 0.5
+tob = consensus_treeofblobs(net[[4,9,3,2]])
+@test writenewick(tob) == "(t3,t4,t5,t6,(t2,t1));" # blob from nets 2,3
+@test getroot(tob).fvalue == 0.5
+# fixit: add tests on level-1 nets: hybrid, circular order etc.
 # consensus, level-1:
 conl1 = readnewick("(t2,(t4,(t3,(t5,(t6)#H0))),(#H0,t1));")
 #= to look at networks locally:
@@ -152,30 +160,26 @@ end
 =#
 end
 
-@testset "blob compatibility filtering" begin
-    b(x...) = NTuple{length(x),Bool}(Bool.(x))
-    
-    net1 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")  # blob: E|AB|C|D
-    net2 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")  # same as net1
-    net3 = readnewick("((((A,C),(B)#H1),(#H1,D)),E);")  # blob: E|AC|B|D
-    
-    taxa = ["A","B","C","D","E"]
-    
-    blobs, bps = PS.count_blobpartitions([net1, net2, net3], taxa, 4)
-    
-    @test length(blobs) == 2
-    freqs = sort([PS.freq(b) for b in blobs], rev=true)
-    @test freqs == [2, 1]
-    
-    PS.filter_sort_compatible_partitions!(blobs, bps, 3, 0)
-    
-  
-    @test length(blobs) == 1
-    
-    blob_freq2 = blobs[1]
-    @test PS.freq(blob_freq2) == 2
-    
-    @test blob_freq2.partition == (b(0,0,0,0,1), b(1,1,0,0,0), b(0,0,1,0,0), b(0,0,0,1,0))
+@testset "blob compatibility filtering, show" begin
+  b(x...) = NTuple{length(x),Bool}(Bool.(x))
+  net1 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")  # blob: E|AB|C|D
+  net2 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")  # same as net1
+  net3 = readnewick("((((A,C),(B)#H1),(#H1,D)),E);")  # blob: E|AC|B|D
+  taxa = ["A","B","C","D","E"]
+  blobs, bps = PS.count_blobpartitions([net1, net2, net3], taxa, 4)
+  s = IOBuffer();
+  show(s, MIME"text/plain"(), blobs)
+  @test String(take!(s)) =="""
+2-element Vector{PhyloSummaries.BlobFreq{5}}:
+ BlobFreq on 5 taxa, 4 blocks 5|1,2|3|4, frequency 2, 1 circular orders, 1 hybrid blocks
+ BlobFreq on 5 taxa, 4 blocks 5|1,3|2|4, frequency 1, 1 circular orders, 1 hybrid blocks"""
+  s = sprint(show, MIME"text/plain"(), blobs[1])
+  @test occursin("1 entry:\n  (1, 2, 3, 4) => 2", s) # 1 circular order, freq 2
+  @test occursin("1 entry:\n  3 => 2", s) # 1 hybrid block (C), freq 2
+  PS.filter_sort_compatible_partitions!(blobs, bps, 3, 0)
+  @test occursin("[BlobFreq on 5 taxa, 4 blocks 5|1,2|3|4, frequency 2, 1 circular orders, 1 hybrid blocks]",
+      repr(blobs))
+  # fixit: add example with some non-redundant bipartition, and test show methods for them
 end
 
 
