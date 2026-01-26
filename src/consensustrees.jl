@@ -1,5 +1,3 @@
-const SplitTuple = NTuple{N,Bool} where N # tuple used to represent a bipartition
-
 """
     consensustree(trees::AbstractVector{PN.HybridNetwork};
                   rooted=false,

@@ -1,3 +1,5 @@
+const SplitTuple = NTuple{N,Bool} where N # tuple used to represent a bipartition
+
 """
     startree(taxa)
 
@@ -48,6 +50,23 @@ function isredundantsplit(v, b)
     return (v ∈ b || .!v ∈ b) # any(isequal(v), b) || ...
 end
 
+"""
+    issubsetsplit(a, b)
+
+true if `a ⊆ b` (all taxa in `a` are also in `b`), false otherwise.
+`a` and `b` are splits (or clusters) on N taxa, encoded as tuples of N booleans,
+with `a[i]` true to mean that taxon i ∈ `a`.
+"""
+issubsetsplit(a::NTuple{N,Bool}, b::NTuple{N,Bool}) where {N} =
+    all(x -> !x[1] | x[2], zip(a,b)) # 1 iteration, no storage of intersection
+"""
+    isnotdisjointsplit(a, b)
+
+true if `a ∩ b` is non-empty (`a` and `b` share 1 or more taxa), false otherwise.
+`a` and `b` are splits (or clusters) on N taxa, encoded as tuples of N booleans.
+"""
+isnotdisjointsplit(a::NTuple{N,Bool}, b::NTuple{N,Bool}) where {N} =
+    any(x -> x[1] & x[2], zip(a,b))
 
 """
     treecompatible(a::NTuple{N,Bool}, b::NTuple{N,Bool})
@@ -73,75 +92,49 @@ end
 """
     blobcompatible(A, B)
 
-Check if two partitions A and B are blob-compatible (unrooted).
+true if two partitions A and B of N taxa are blob-compatible; false otherwise.
 
-Two partitions are compatible if there exists a pair (i, j) such that all parts
-of A except Aᵢ are subsets of Bⱼ. This reduces to tree-compatibility when both
-A and B are bipartitions.
+A and B are compatible if there exists i and j such that all parts
+of B except Bⱼ are subsets of Aᵢ. Then, since A and B are partitions of
+the same set (not checked!), all parts of A except Aᵢ are subsets of Bⱼ.
+This reduces to tree-compatibility when both A and B are bipartitions.
 
-
+If A or B is given as a single cluster, it is considered as unrooted, as one
+part of the bipartition (A,Aᶜ) or (B, Bᶜ) where Aᶜ denotes the complement of A.
 """
 function blobcompatible(
     A::NTuple{Ka, NTuple{N,Bool}},
     B::NTuple{Kb, NTuple{N,Bool}}
 ) where {N, Ka, Kb}
+    if Ka == 0 # a partition must have at least 1 part, assuming N > 0
+        ArgumentError("$Ka parts in partition A")
+    end
     for i in 1:Ka
+        j0 = 0 # j0 such that B[j0] ⊇ all but one A[i]
+        found_i0 = true # i0 "good" if A[i0] ⊇ B[j] for j ≠ j0
+        Ai = A[i]
         for j in 1:Kb
-            all_included = true
-            for q in 1:Ka
-                q == i && continue  # skip A_i
-                # Check if A_q ⊆ B_j (every taxon in A_q is also in B_j)
-                if !issubsetsplit(A[q], B[j])
-                    all_included = false
+            if !issubsetsplit(B[j], Ai)
+                if j0 > 0
+                    found_i0 = false
                     break
+                else
+                    j0 = j
                 end
             end
-            if all_included
-                return true
-            end
+        end
+        if found_i0
+            return true
         end
     end
-    return false
+    return false # assumes A non-empty
 end
 
-# Edge case: empty partitions are trivially compatible
-blobcompatible(::Tuple{}, ::Tuple{}) = true
-blobcompatible(::Tuple{}, ::NTuple{Kb, NTuple{N,Bool}}) where {N, Kb} = true
-blobcompatible(::NTuple{Ka, NTuple{N,Bool}}, ::Tuple{}) where {N, Ka} = true
-
-"""
-    issubsetsplit(a, b)
-
-Check if split `a` is a subset of split `b` (all taxa in `a` are also in `b`).
-"""
-function issubsetsplit(a::NTuple{N,Bool}, b::NTuple{N,Bool}) where N
-    inter = ntuple(i -> a[i] & b[i], N)
-    # return !any(inter) || inter == a # should we check disjoint as  unrooted?
-    return inter == a 
-end
-
-function blobcompatible(
+function splitblobcompatible(
     split::NTuple{N,Bool},
     B::NTuple{Kb, NTuple{N,Bool}}
 ) where {N, Kb}
     splitcomplement = ntuple(i -> !split[i], N)
     A = (split, splitcomplement)
     return blobcompatible(A, B)
-end
-
-
-function blobcompatible(
-    A::NTuple{Ka, NTuple{N,Bool}},
-    split::NTuple{N,Bool}
-) where {N, Ka}
-    splitcomplement = ntuple(i -> !split[i], N)
-    B = (split, splitcomplement)
-    return blobcompatible(A, B)
-end
-
-function blobcompatible(
-    split1::NTuple{N,Bool},
-    split2::NTuple{N,Bool}
-) where N
-    return treecompatible(split1, split2)
 end

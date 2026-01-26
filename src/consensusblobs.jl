@@ -110,7 +110,7 @@ end
 iscompatible(b1::SplitFreq{N}, b2::SplitFreq{N}) where N =
     treecompatible(b1.split, b2.split) # in utils.jl
 iscompatible(b1::SplitFreq{N}, b2::BlobFreq{N}) where N =
-    blobcompatible(b1.split, b2.partition)
+    splitblobcompatible(b1.split, b2.partition)
 iscompatible(b1::BlobFreq{N}, b2::BlobFreq{N}) where N =
     blobcompatible(b1.partition, b2.partition)
 isredundantsplit(b1::SplitFreq{N}, b2::BlobFreq{N}) where N =

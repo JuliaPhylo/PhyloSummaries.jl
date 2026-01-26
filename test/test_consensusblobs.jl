@@ -21,17 +21,17 @@ end
     A = ((true,true,false,false,false),   # {A,B}
          (false,false,true,false,false),  # {C}
          (false,false,false,true,true))   # {D,E}
-    B = ((true,true,true,false,false),    # {A,B,C}
-         (false,false,false,true,true))   # {D,E}
-    @test PS.blobcompatible(A, B) == true
-    
-
+    B =  (true,true,true,false,false)     # ABC, not DE
+    @test PS.splitblobcompatible(B, A)
     A2 = ((true,true,true,false,false,false),  # {A,B,C}
           (false,false,false,true,true,true))  # {D,E,F}
     B2 = ((true,false,false,true,false,false), # {A,D}
           (false,true,false,false,true,false), # {B,E}
           (false,false,true,false,false,true)) # {C,F}
-    @test PS.blobcompatible(A2, B2) == false
+    @test !PS.blobcompatible(A2, B2)
+    A2 = (B2[1], B2[2], # AD|BE|C|F
+          (false,false,true,false,false,false), (false,false,false,false,false,true))
+    @test !PS.blobcompatible(A , B2) # tree-compatible, but not blob-compatible
 end
 
 @testset "count blobs" begin
@@ -180,4 +180,3 @@ end
 
 
 end
-
