@@ -31,7 +31,7 @@ end
     @test !PS.blobcompatible(A2, B2)
     A2 = (B2[1], B2[2], # AD|BE|C|F
           (false,false,true,false,false,false), (false,false,false,false,false,true))
-    @test !PS.blobcompatible(A , B2) # tree-compatible, but not blob-compatible
+    @test !PS.blobcompatible(A2, B2) # tree-compatible, but not blob-compatible
 end
 
 @testset "count blobs" begin
@@ -84,9 +84,7 @@ bb, bp = @test_logs (:warn, r"single exit hybrid") PS.count_blobpartitions(net, 
   taxon blocks: 5|4|6|7|8|1,2,3
   frequency: 5
   hybrid block => frequency:""", repr("text/plain", bb[1]))
-@test repr("text/plain", bp[1]) == """SplitFreq on 8 taxa
-  taxa in split cluster: 2,3
-  frequency: 4"""
+@test repr(bp[1]) == "SplitFreq on 8 taxa, taxa in split cluster: 2,3, frequency: 4"
 
 end
 
@@ -138,7 +136,7 @@ net = readmultinewick(nfile)
 # 0 non-redundant bipartitions, 4 hybrid clades: t6 ×5, t3 ×2, t4 ×2, t8 ×1.
 # consensus tree-of-blobs: star, blob support 60%:
 tob = consensus_treeofblobs(net)
-@test writenewick(tob) == "(t2,t4,t3,t5,t6,t1);"
+@test writenewick(tob) == "(t1,t2,t3,t4,t5,t6);"
 @test getroot(tob).fvalue == 6/10
 tob = consensus_treeofblobs(net[[2,3,4,9]])
 @test writenewick(tob) == "(t5,t6,(t4,t3,t2,t1));" # blob from nets 4,9
@@ -167,9 +165,8 @@ end
   net3 = readnewick("((((A,C),(B)#H1),(#H1,D)),E);")  # blob: E|AC|B|D
   taxa = ["A","B","C","D","E"]
   blobs, bps = PS.count_blobpartitions([net1, net2, net3], taxa, 4)
-  s = IOBuffer();
-  show(s, MIME"text/plain"(), blobs)
-  @test String(take!(s)) =="""
+  s = IOBuffer(); show(s, MIME"text/plain"(), blobs)
+  @test String(take!(s)) == """
 2-element Vector{PhyloSummaries.BlobFreq{5}}:
  BlobFreq on 5 taxa, 4 blocks 5|1,2|3|4, frequency 2, 1 circular orders, 1 hybrid blocks
  BlobFreq on 5 taxa, 4 blocks 5|1,3|2|4, frequency 1, 1 circular orders, 1 hybrid blocks"""
@@ -179,27 +176,18 @@ end
   PS.filter_sort_compatible_partitions!(blobs, bps, 3, 0)
   @test occursin("[BlobFreq on 5 taxa, 4 blocks 5|1,2|3|4, frequency 2, 1 circular orders, 1 hybrid blocks]",
       repr(blobs))
-  # net4: has non-redundant bipartitions (cut-edges not adjacent to blob)
-  # split stored in canonical form: last taxon (E) NOT in cluster
-  net4 = readnewick("((((A,B),(C)#H1),(#H1,(D,E))));")
+  net4 = readnewick("((((A,B),(C)#H1),(#H1,(D,E))));") # no interesting blob, bipartitions from AB|C|DE
   blobs4, bps4 = PS.count_blobpartitions([net1, net2, net4], taxa, 4)
-  @test length(bps4) >= 1  # at least one non-redundant bipartition
-  @test any(bp -> bp.split == (true, true, true, false, false), bps4)  
-  bp = bps4[1]
-  s = sprint(show, bp)
-  @test occursin("SplitFreq on 5 taxa", s)
-  @test occursin("taxa in split cluster:", s)
-  @test occursin("frequency:", s)
-  s = sprint(show, MIME"text/plain"(), bp)
-  @test occursin("SplitFreq on 5 taxa", s)
-  @test occursin("taxa in split cluster:", s)
-  @test occursin("frequency:", s)
+  s = IOBuffer(); show(s, MIME"text/plain"(), bps4)
+  @test String(take!(s)) == """
+2-element Vector{PhyloSummaries.SplitFreq{5}}:
+ SplitFreq on 5 taxa, taxa in split cluster: 1,2,3, frequency: 1
+ SplitFreq on 5 taxa, taxa in split cluster: 1,2, frequency: 1"""
   # test filter_sort_compatible_partitions! with bipartitions
   PS.filter_sort_compatible_partitions!(blobs4, bps4, 3, 0)
   @test length(blobs4) == 1  
   @test length(bps4) == 1    
   @test bps4[1].split == (true, true, false, false, false)  
 end
-
 
 end

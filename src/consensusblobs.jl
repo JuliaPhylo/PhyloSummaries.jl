@@ -128,6 +128,20 @@ that are shared by more than the required `proportion` of input `trees`.
 An error is thrown if the list of input networks is empty, or if the
 input networks do not all have the same tip labels.
 
+!!! note "This is an unrooted tree"
+    This tree is to be considered as unrooted. It is built arbitrarily
+    rooted at the last alphabetical taxon.
+    Use `rootatnode!` or `rootonedge!` to re-root this tree
+    given external knowledge of the outgroup (taxon or clade).
+
+The support for a blob is the proportion of input networks that have a blob
+with this partition. This is stored in the corresponding node's `.fvalue`.
+The support for a bipartition as non-redundant is the proportion of input
+networks that have this bipartition *not* adjacent to any interesting blob.
+This is stored in the corresponding edge's field `.y`.
+With option `supportaslength=true`, this is also stored in the edge's
+`.length`. This option is *not* recommended and may be removed.
+
 An "interesting" blob in an input network N is a non-trivial blob
 (with at least one hybrid node) of degree m ≥ 4 by default.
 The degree of a blob is the number of cut edges it is adjacent to,
@@ -151,12 +165,6 @@ The majority-rule tree can be obtained by using `proportion=0.5`,
 and the strict consensus using `proportion=1`.
 
 See also: [`count_blobpartitions!`](@ref)
-
-todo:
-- build the consensus tree from the vector of blobs and non-redundant bipartitions
-- create another new function `consensus_level1network` similar to
-  `consensus_treeofblobs`, that returns a network built with the same blobs as
-  the consensus tree of blobs, but also resolves each blob with a level-1 cycle.
 """
 function consensus_treeofblobs(
     networks::AbstractVector{PN.HybridNetwork};
@@ -170,13 +178,36 @@ function consensus_treeofblobs(
         throw(ArgumentError("minimumblobdegree should be 2, 3 or 4, not $(minimumblobdegree)"))
     taxa = sort(tiplabels(networks[1]))
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
+    nnets = length(networks)
+    filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
+    tob, _ = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
+    return tob
+end
+
+"""
+    consensus_level1network(networks; proportion=0, minimumblobdegree=4)
+
+fixit
+"""
+function consensus_level1network(
+    networks::AbstractVector{PN.HybridNetwork};
+    proportion::Number=0,
+    minimumblobdegree::Int=4,
+    supportaslength::Bool=false,
+)
+    isempty(networks) &&
+        throw(ArgumentError("No input networks: cannot get a consensus"))
+    minimumblobdegree ∈ (3,4) ||
+        throw(ArgumentError("minimumblobdegree should be 3 or 4, not $(minimumblobdegree)"))
+    taxa = sort(tiplabels(networks[1]))
+    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
     hybdict = count_hybridclusters(blobvec) # before filtering blobs out
     nnets = length(networks)
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
-    tob = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
+    net, fixit = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
     edge2hyb = _hybridsupport_cladesintree(hybdict, tob, taxa, nnets)
-    # fixit: also return edge2hyb. Any better way to tell the user?
-    return tob
+    # fixit: expand each blob node into a cycle: most frequent circular order, most frequent compatible hybrid
+    return net
 end
 
 """
@@ -855,11 +886,13 @@ function tree_from_blobpartitions(
     supportaslength::Bool
 ) where N
     N == length(taxa) || error("N ($N) != number of taxa $(length(taxa))")
+    # fixit: initialize vector of nodes, 1 per blob, and vector of vector of edge indices
     net = startree(taxa) # root numbered -2
     ni = Ref(-3) # internal nodes: numbered -3,-4 etc., as done by readnewick
     ei = Ref(N+1)
     for bpart in blobparts
         weight = freq(bpart)/nnets
+        # fixit: keep blob node and blob edges
         add_blobnode!(net, ni, ei, bpart.partition, weight)
     end
     for bpart in biparts
@@ -867,7 +900,8 @@ function tree_from_blobpartitions(
         weight = freq(bpart)/nnets
         add_clusteredge_weight!(net, ni, ei, bpart.split, weight, supportaslength)
     end
-    return net
+    # fixit: return blob map
+    return net, nothing
 end
 
 """
@@ -935,6 +969,7 @@ function add_blobnode!(
             e_j = _resolveclade_belowlca(net, blobnode, ci, ni, ei, -1, false)
         end
     end
+    # fixit: also return the vector of the e_j indices from ei's.
     return blobnode
 end
 
