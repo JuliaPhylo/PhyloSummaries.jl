@@ -179,7 +179,22 @@ end
   PS.filter_sort_compatible_partitions!(blobs, bps, 3, 0)
   @test occursin("[BlobFreq on 5 taxa, 4 blocks 5|1,2|3|4, frequency 2, 1 circular orders, 1 hybrid blocks]",
       repr(blobs))
-  # fixit: add example with some non-redundant bipartition, and test show methods for them
+  # net4: has non-redundant bipartitions (cut-edges not adjacent to blob)
+  # split stored in canonical form: last taxon (E) NOT in cluster
+  net4 = readnewick("((((A,B),(C)#H1),(#H1,(D,E))));")
+  blobs4, bps4 = PS.count_blobpartitions([net1, net2, net4], taxa, 4)
+  @test length(bps4) >= 1  # at least one non-redundant bipartition
+  @test any(bp -> bp.split == (true, true, true, false, false), bps4)  # {A,B,C}
+  # test show methods for SplitFreq (on first bipartition, whatever it is)
+  bp = bps4[1]
+  s = sprint(show, bp)
+  @test occursin("SplitFreq on 5 taxa", s)
+  @test occursin("taxa in split cluster:", s)
+  @test occursin("frequency:", s)
+  s = sprint(show, MIME"text/plain"(), bp)
+  @test occursin("SplitFreq on 5 taxa", s)
+  @test occursin("taxa in split cluster:", s)
+  @test occursin("frequency:", s)
 end
 
 
