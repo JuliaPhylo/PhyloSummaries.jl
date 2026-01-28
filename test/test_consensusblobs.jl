@@ -184,8 +184,7 @@ end
   net4 = readnewick("((((A,B),(C)#H1),(#H1,(D,E))));")
   blobs4, bps4 = PS.count_blobpartitions([net1, net2, net4], taxa, 4)
   @test length(bps4) >= 1  # at least one non-redundant bipartition
-  @test any(bp -> bp.split == (true, true, true, false, false), bps4)  # {A,B,C}
-  # test show methods for SplitFreq (on first bipartition, whatever it is)
+  @test any(bp -> bp.split == (true, true, true, false, false), bps4)  
   bp = bps4[1]
   s = sprint(show, bp)
   @test occursin("SplitFreq on 5 taxa", s)
@@ -195,6 +194,11 @@ end
   @test occursin("SplitFreq on 5 taxa", s)
   @test occursin("taxa in split cluster:", s)
   @test occursin("frequency:", s)
+  # test filter_sort_compatible_partitions! with bipartitions
+  PS.filter_sort_compatible_partitions!(blobs4, bps4, 3, 0)
+  @test length(blobs4) == 1  
+  @test length(bps4) == 1    
+  @test bps4[1].split == (true, true, false, false, false)  
 end
 
 
