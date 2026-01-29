@@ -1,4 +1,3 @@
-#TODO: parse in circular order and store info that way. check funcs after canonicalizepartition
 
 """
     BlobFreq{N,P}
@@ -365,17 +364,6 @@ function count_blobpartitions!(
     if isnothing(matchidx) # add new blob to blobvec
         if islevel1
             defaultorder = ntuple(identity, nparts)
-            #= fixit: 'identity' wrong if 2+ blocks on both sides of the hybrid.
-            ihyb = hybrids[1]
-            side1 = 1:ihyh; side2 = nparts:-1:(ihyb+1)
-            defaultorder = Tuple(vcat(side1, side2))
-            or something more efficient?
-            downstream problems with changing the default order?
-            Alternative: build the Tuple of splits with this order instead?
-            co = vcat(side1, side2) # or collect(Iterators.flatten((side1, side2)))
-            partition = ntuple(i -> split[co[i]], nparts)
-            newblob = BlobFreq{N,nparts}(partition, Ref(1), cofreq, hybmap)
-            =#
             cofreq = Dict(defaultorder => 1)
         else
             # level > 1: do not store circular order
@@ -553,6 +541,9 @@ function blobtaxonsetpartition!(
     # traverse the blob starting at entrynode of the biconnected component
     blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, bloblevel,
         entrynode, bidx, edgemap, hwmatrix, taxaindex, net)
+    if bloblevel[] && length(hybrids) == 1 && hybrids[1] < length(splits)
+        reverse!(@view splits[(hybrids[1]+1):end])
+    end
     if bidx > 1 # entry ≠ root: add split from the unique entry cut-edge
         outgroupsplit = splitcomplement(splits)
         if any(outgroupsplit) # empty if entry is at or above LSA (≠ root)
