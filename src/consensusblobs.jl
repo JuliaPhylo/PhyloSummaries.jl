@@ -1085,9 +1085,25 @@ function expand_blobcycleat!(
         isparentof(bnode, hedge) || error("blob node with 2 parents?")
     end
     # 2. create the cycle, in most frequent circular order
+    #    P-1 new nodes: one for each non-parent edge
+    #    P-1 new tree edges, 2 new hybrid edges
     blockorder = argmax(bpart.circorder)
-    atroot = isrootof(bnode, net)
-    # fixit: create cycle: P-1 new nodes, P-1 new tree edges, 2 hybrid edges
+    if isrootof(bnode, net) # pick block 1 (or 2) to stay incident to blob node
+        pblock = (hblock == 1 ? 2 : 1)
+        pedge = net.edge[bedges[pblock]]
+    else # parent edge (and its block) will stay indicent to blob node
+        pedge = getparentedge(bnode)
+        pblock = findfirst(i -> net.edge[i] === pedge, bedges)
+        isnothing(pblock) && error("top block above blob node not found")
+    end
+    # downward side: from parent pblock to hybrid hblock
+    pii = findfirst(isequal(pblock), blockorder)
+    hii = findfirst(isequal(hblock), blockorder)
+    downward = hii < pii
+    for k in blockorder
+        ee = net.edge[bedges[k]]
+    end
+    # fixit: continue
     # copy bnode.fvalue in all new cycle tree nodes
     # store hybrid support in tree node .fvalue
     return nothing
