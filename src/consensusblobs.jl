@@ -207,7 +207,7 @@ function consensus_level1network(
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
     update_hybridclusterfrequency!(blobvec, hybdict)
     net, bn, bei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, false)
-    expand_blobcycles!(net, bn, bei, blobvec, taxa, nnets, outgroup)
+    expand_blobcycles!(net, bn, bei, blobvec, nnets, outgroup)
     return net
 end
 
@@ -386,7 +386,8 @@ function count_blobpartitions!(
         if islevel1
             # canonicalize circular orders using the split matched to partition entry 1
             startidx = findfirst(==(1), idxmap)
-            startidx === nothing && error("blob partition: 1 not found in idxmap. Expected Set(idxmap) == Set(1:nparts)")
+            isnothing(startidx) &&
+                error("blob partition: 1 not found in idxmap. Expected Set(idxmap) == Set(1:nparts)")
             #fixit:
             # we should always have that Set() == Set(1:nparts)
             # also, could this help: indexin(1:nparts, idxmap)
@@ -1012,7 +1013,7 @@ function add_clusteredge_weight!(
     return e
 end
 
-# sum frequencies of each given hybrid clade over all blobs
+# for each hybrid clade, sum its frequency over all blobs that may have it
 function count_hybridclusters(blobvec::Vector{BlobFreq{N}}) where N
     hybdict = Dict{NTuple{N,Bool},Int}()
     for bf in blobvec
@@ -1042,7 +1043,6 @@ function expand_blobcycles!(
     blobnode::Vector{PN.Node},
     blobedges::Vector{Vector{Int}},
     blobparts::Vector{BlobFreq{N}},
-    taxa::Vector{String},
     nnets::Number,
     outgroup::Union{Nothing, AbstractString},
 ) where N
@@ -1053,17 +1053,16 @@ function expand_blobcycles!(
     end
     nB = length(blobnode)
     @assert nB == length(blobedges) == length(blobparts)
-    for i in nB:-1:1 # blobs sorted from lowest to highest support
-        expand_blobcycleat!(net, blobnode[i],blobedges[i],blobparts[i], taxa, nnets, fixdirection)
+    for i in nB:-1:1 # reverse: from highest to lowest frequency
+        expand_blobcycleat!(net, blobnode[i],blobedges[i],blobparts[i], nnets, fixdirection)
     end
     return nothing
 end
-function expand_blobcycles!(
+function expand_blobcycleat!(
     net::PN.HybridNetwork,
     bnode::PN.Node,
     bedges::Vector{Int},
     bpart::BlobFreq{N,P},
-    taxa::Vector{String},
     nnets::Number,
     fixdirection::Bool,
 ) where {N,P}
@@ -1075,9 +1074,9 @@ function expand_blobcycles!(
         rootatnode!(net, bnode) # re-root at the blob node
         hbelowblob = isparentof(bnode, hedge)
     end
-    if !hbelowblob # then another block to be hybrid
+    if !hbelowblob # then find another block to be hybrid
         priorh = bpart.hybrid[hblock]
-        if length(bpart.hybrid) == 1 # then pick block 1 (or 2 if prior was 1)
+        if length(bpart.hybrid) == 1 # then pick block 1, or 2 if prior was 1
             hblock = (priorh == 1 ? 2 : 1)
         else # pick second most frequent hybrid block
             hblock = argmax(k -> (k==priorh ? 0 : bpart.hybrid[k]), keys(bpart.hybrid))
