@@ -145,9 +145,9 @@ An "interesting" blob in an input network N is a non-trivial blob
 (with at least one hybrid node) of degree m ≥ 4 by default.
 The degree of a blob is the number of cut edges it is adjacent to,
 and also the degree of the associated node in N's tree of blobs.
-Setting `minimumblobdegree` to 3 or 2 will cause non-trivial blobs
+Setting `minimumblobdegree` to 3 will cause non-trivial blobs
 to be considered "interesting" even if their corresponding node in N's
-tree of blobs is of degree 3 or 2.
+tree of blobs is of degree 3.
 
 Note that a node of degree 4 or more in the network's tree of blob may
 correspond to a polytomy in N: a single node incident to m cut-edges, but
@@ -173,18 +173,18 @@ function consensus_treeofblobs(
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot get a consensus"))
-    minimumblobdegree ∈ (2,3,4) ||
-        throw(ArgumentError("minimumblobdegree should be 2, 3 or 4, not $(minimumblobdegree)"))
+    minimumblobdegree ∈ (3,4) ||
+        throw(ArgumentError("minimumblobdegree should be 3 or 4, not $(minimumblobdegree)"))
     taxa = sort(tiplabels(networks[1]))
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
     nnets = length(networks)
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
-    tob, _ = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
+    tob, _, _ = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
     return tob
 end
 
 """
-    consensus_level1network(networks; proportion=0, minimumblobdegree=4)
+    consensus_level1network(networks; proportion=0, minimumblobdegree=4, outgroup=nothing)
 
 fixit
 """
@@ -192,20 +192,22 @@ function consensus_level1network(
     networks::AbstractVector{PN.HybridNetwork};
     proportion::Number=0,
     minimumblobdegree::Int=4,
-    supportaslength::Bool=false,
+    outgroup::Union{Nothing,String}=nothing,
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot get a consensus"))
     minimumblobdegree ∈ (3,4) ||
         throw(ArgumentError("minimumblobdegree should be 3 or 4, not $(minimumblobdegree)"))
     taxa = sort(tiplabels(networks[1]))
+    isnothing(outgroup) || outgroup ∈ taxa || # early problem detection
+        error("outgroup $outgroup is not in the taxon list: $taxa")
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
     hybdict = count_hybridclusters(blobvec) # before filtering blobs out
     nnets = length(networks)
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
-    net, fixit = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
-    edge2hyb = _hybridsupport_cladesintree(hybdict, tob, taxa, nnets)
-    # fixit: expand each blob node into a cycle: most frequent circular order, most frequent compatible hybrid
+    update_hybridclusterfrequency!(blobvec, hybdict)
+    net, bn, bei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, false)
+    expand_blobcycles!(net, bn, bei, blobvec, taxa, nnets, outgroup)
     return net
 end
 
@@ -785,8 +787,7 @@ function filter_sort_compatible_partitions!(
     end
     sort!(blobparts, by=freq, rev=false)
     sort!(biparts,   by=freq, rev=false)
-    if proportion >= 0.5 # fixit: and if binary networks and if minBdegree >=4
-        # then: no need to check for compatibilitiy
+    if proportion >= 0.5 # then necessarily blob-compatible, no need to check
         return nothing
     end
     threshold1 = max(0.5, proportion) * nnets
@@ -851,6 +852,11 @@ and an edge (if not redundant) for each input bipartition.
 This tree should be considered unrooted, in part because blob partitions
 do not have root information (all their taxon blocks are listed).
 
+Output: `(tree, blobnode_vector, edgeblockindices_vector)`
+where the last two components list the nodes (in the tree) corresponding
+to each input blob, and the edges corresponding to each taxon block in
+each input blob.
+
 A blob's weight is stored in the corresponding node's `.fvalue`.
 A bipartition's weight is stored in the corresponding edge's field `.y`.
 With option `supportaslength=true`, this weight is also stored in
@@ -877,22 +883,23 @@ function tree_from_blobpartitions(
     supportaslength::Bool
 ) where N
     N == length(taxa) || error("N ($N) != number of taxa $(length(taxa))")
-    # fixit: initialize vector of nodes, 1 per blob, and vector of vector of edge indices
+    blobnode = PN.Node[]
+    blobedges = Vector{Int}[] # edge indces, one for each taxon block
     net = startree(taxa) # root numbered -2
     ni = Ref(-3) # internal nodes: numbered -3,-4 etc., as done by readnewick
     ei = Ref(N+1)
     for bpart in blobparts
         weight = freq(bpart)/nnets
-        # fixit: keep blob node and blob edges
-        add_blobnode!(net, ni, ei, bpart.partition, weight)
+        bn, be = add_blobnode!(net, ni, ei, bpart.partition, weight)
+        push!(blobnode, bn)
+        push!(blobedges, be)
     end
     for bpart in biparts
         bpart.split[N] && error("bipartition side that contains the last taxon")
         weight = freq(bpart)/nnets
         add_clusteredge_weight!(net, ni, ei, bpart.split, weight, supportaslength)
     end
-    # fixit: return blob map
-    return net, nothing
+    return net, blobnode, blobedges
 end
 
 """
@@ -901,8 +908,13 @@ end
 Add nodes (numbered `ni` etc.) and edges (numbered `ei` etc.) in `tree`
 to add `blobpartition`, assumed compatible with edges already in `tree`.
 The node index `ni` is decremented, and the edge index `ei` is incremented.
-Output: newly created node whose removal disconnects the taxon set into
-the input blob partition.
+
+Output: `(n, e)` where
+- `n` is the newly created node in `tree` whose removal disconnects the
+  taxon set into the input blob partition, and
+- `e` is a vector of edge indices in `tree.edge`: `tree.edge[e[j]]` is
+  the edge whose removal disconnects taxon block `j` of `blobpartition`
+  from its complement.
 
 If the blob has P ≥ 3 taxon blocks, these blocks are assumed to form a
 partition of the full taxon set. If it is blob-compatible with all blobs
@@ -928,21 +940,23 @@ function add_blobnode!(
     blobpartition::NTuple{P,NTuple{N,Bool}},
     weight::Number,
 ) where {P,N} # 2026-01: Aqua has a problem with this. "Unbound type parameters"
+    bei = Vector{Int}(undef, P) # blob edge indices
     # 1. create (or find) blob node: its clade is the complement of the
     #    taxon block containing the outgroup (last taxon N)
     outcluster_j = findfirst(v -> v[N], blobpartition)
     if sum(blobpartition[outcluster_j]) == 1 # trivial cluster
         lca = getroot(net)
         blobnode = lca
-        # e_outj = net.edge[N] because net initialized with startree()
+        bei[outcluster_j] = N # because net initialized with startree()
+        # e_outj = net.edge[N]
     else # non-trivial because P ≥ 3
         outcluster = .!blobpartition[outcluster_j]
         lca, ci = _lca_newcluster(net, outcluster)
-        length(ci) == 1 && @warn("outgroup clade already in tree (or incompatible?): $outcluster")
-        if length(ci) > 1
-            e_outj = _resolveclade_belowlca(net, lca, ci, ni, ei, -1, false)
-            blobnode = getchild(e_outj)
-        end
+        length(ci) == 1 && error("outgroup clade already in tree (or incompatible?): $outcluster")
+        # now length(ci) > 1
+        bei[outcluster_j] = ei[] # because net.edge[k].number = k
+        e_outj = _resolveclade_belowlca(net, lca, ci, ni, ei, -1, false)
+        blobnode = getchild(e_outj)
     end
     blobnode.fvalue = weight
     # 2. create a child node below blobnode for each taxon block
@@ -955,13 +969,12 @@ function add_blobnode!(
         blobnode.booln2  || error("hmm, blob node has no taxa from the clade")
         !blobnode.booln3 || error("hmm, blob node has no taxa outside the clade")
         ci = _lca_newcluster_children(blobnode)
-        length(ci) == 1 && @warn("taxon block already in tree (or incompatible?): $v")
-        if length(ci) > 1
-            e_j = _resolveclade_belowlca(net, blobnode, ci, ni, ei, -1, false)
-        end
+        length(ci) == 1 && error("taxon block already in tree (or incompatible?): $v")
+        # now length(ci) > 1
+        bei[j] = ei[]
+        e_j = _resolveclade_belowlca(net, blobnode, ci, ni, ei, -1, false)
     end
-    # fixit: also return the vector of the e_j indices from ei's.
-    return blobnode
+    return blobnode, bei
 end
 
 """
@@ -999,6 +1012,7 @@ function add_clusteredge_weight!(
     return e
 end
 
+# sum frequencies of each given hybrid clade over all blobs
 function count_hybridclusters(blobvec::Vector{BlobFreq{N}}) where N
     hybdict = Dict{NTuple{N,Bool},Int}()
     for bf in blobvec
@@ -1010,15 +1024,99 @@ function count_hybridclusters(blobvec::Vector{BlobFreq{N}}) where N
     return hybdict
 end
 
+# replace hybrid frequencies in blob.hybrid by those in hybvec
+function update_hybridclusterfrequency!(
+    blobvec::Vector{BlobFreq{N}},
+    hybdict::Dict{NTuple{N,Bool},Int},
+) where N
+    for bf in blobvec
+        for hi in keys(bf.hybrid)
+            bf.hybrid[hi] = hybdict[bf.partition[hi]]
+        end
+    end
+    return nothing
+end
+
+function expand_blobcycles!(
+    net::PN.HybridNetwork,
+    blobnode::Vector{PN.Node},
+    blobedges::Vector{Vector{Int}},
+    blobparts::Vector{BlobFreq{N}},
+    taxa::Vector{String},
+    nnets::Number,
+    outgroup::Union{Nothing, AbstractString},
+) where N
+    fixdirection = !isnothing(outgroup)
+    if fixdirection
+        rootatnode!(net, outgroup) # creates degree-2 node
+        # blobedge to outgroup no longer incident to its blobnode, but okay
+    end
+    nB = length(blobnode)
+    @assert nB == length(blobedges) == length(blobparts)
+    for i in nB:-1:1 # blobs sorted from lowest to highest support
+        expand_blobcycleat!(net, blobnode[i],blobedges[i],blobparts[i], taxa, nnets, fixdirection)
+    end
+    return nothing
+end
+function expand_blobcycles!(
+    net::PN.HybridNetwork,
+    bnode::PN.Node,
+    bedges::Vector{Int},
+    bpart::BlobFreq{N,P},
+    taxa::Vector{String},
+    nnets::Number,
+    fixdirection::Bool,
+) where {N,P}
+    # 1. find a taxon block / edge to be the hybrid block
+    hblock = argmax(bpart.hybrid) # most frequent hybrid block
+    hedge = net.edge[bedges[hblock]]
+    hbelowblob = isparentof(bnode, hedge)
+    if !hbelowblob && !fixdirection && hedge.containroot
+        rootatnode!(net, bnode) # re-root at the blob node
+        hbelowblob = isparentof(bnode, hedge)
+    end
+    if !hbelowblob # then another block to be hybrid
+        priorh = bpart.hybrid[hblock]
+        if length(bpart.hybrid) == 1 # then pick block 1 (or 2 if prior was 1)
+            hblock = (priorh == 1 ? 2 : 1)
+        else # pick second most frequent hybrid block
+            hblock = argmax(k -> (k==priorh ? 0 : bpart.hybrid[k]), keys(bpart.hybrid))
+        end
+        hedge = net.edge[bedges[hblock]]
+        isparentof(bnode, hedge) || error("blob node with 2 parents?")
+    end
+    # 2. create the cycle, in most frequent circular order
+    blockorder = argmax(bpart.circorder)
+    atroot = isrootof(bnode, net)
+    # fixit: create cycle: P-1 new nodes, P-1 new tree edges, 2 hybrid edges
+    # copy bnode.fvalue in all new cycle tree nodes
+    # store hybrid support in tree node .fvalue
+    return nothing
+end
+
+"""
+    _hybridsupport_cladesintree(hybdict, tre, taxa, nnets)
+
+Dictionary `(j,b)` => `w` where
+- `j` is the index of an edge `e = tree.edge[j]`, assumed to be `e.number`
+- `b` is true or false ("should we traverse `e` reverse?") and
+- `w` is the weight (like hybrid support) for the taxon block that is `e`'s
+  cluster of descendant taxa if `b` is true, or its complement if `b` is false.
+
+assumption: `tre` is a tree, and unrooted (with a root of degree ≥ 3)
+
+fixit: delete this function?
+"""
 function _hybridsupport_cladesintree(
     hybdict::Dict{NTuple{N,Bool},Int},
     tre::PN.HybridNetwork,
     taxa::AbstractVector{<:String},
     nnets::Number,
 ) where {N}
-    hwm = hardwiredclusters(tre, taxa) # but excludes external edges
-    # map: (edge_number, reverse_direction?) => hybrid proportion
-    edge2hyb = Dict{Tuple{Int,Bool},Float64}()
+    hwm = hardwiredclusters(tre, taxa) # excludes external edges
+    # tree assumed unrooted: otherwise a cluster and its complement are
+    # represented by 2 different edges, not by 1 edge in either direction
+    edge2hyb = Dict{Tuple{Int,Bool},Float64}() # (edge_number, inreverse?) => %
     for row in axes(hwm,1)
         clade = ntuple(j -> Bool(hwm[row, j+1]), N)
         if haskey(hybdict, clade)
