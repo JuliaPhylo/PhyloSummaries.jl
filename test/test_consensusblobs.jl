@@ -157,7 +157,23 @@ conl1 = consensus_level1network(net)
 @test writenewick(conl1) == "(t2,(t4,(t3,(t5,#H1))),(t1,(t6)#H1));"
 # or different ismajor: "(t2,(t4,(t3,(t5,(t6)#H0))),(#H0,t1));"
 @test [e.inte1 for e in conl1.edge] == repeat([-1,1], inner=6)
-# fixit: test .fvalues
+@test all(e -> e.y==-1, conl1.edge)
+@test [n.fvalue for n in conl1.node if n.hybrid] == [.5] # hybrid support
+@test getroot(conl1).fvalue == 0.6 # blob support
+@test_broken all(i -> conl1.node[i].fvalue == 0.6, [8,9,10,12]) # circular order support
+# fixit: fix this circular order bug.
+# 6 nets have this blob partition: nets 1, 5,6,7,8, 10
+# All these 6 nets have the same circular order.
+# Somehow 2 of these networks are thought to have a different circular order.
+
+nfile = joinpath(@__DIR__,"..","test","level1_7taxa_abc.nwk")
+# nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","level1_7taxa_abc.nwk")
+net = readmultinewick(nfile)
+conl1 = consensus_level1network(net, minimumblobdegree=3)
+@test_broken writenewick(conl1) == "(a3,(a4,#H2),(a2,(a1,(((c2,(c1,#H1)),(b1)#H1))#H2)));"
+# currently: "(a3,(a4,#H2),(a2,(a1,(((c2,(c1)),#H1,(b1)#H1))#H2)));"
+# problems: degree-2 node above c1, and blocks a1-a4|c2c1|b1 instead of a1-a4|c2|c1|b1
+# fixit: fix this blob-expansion bug
 
 # fixit: add more complex tests on level-1 nets: hybrid, circular order etc.
 end

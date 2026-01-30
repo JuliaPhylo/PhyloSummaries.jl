@@ -971,11 +971,13 @@ function add_blobnode!(
     else # non-trivial because P ≥ 3
         outcluster = .!blobpartition[outcluster_j]
         lca, ci = _lca_newcluster(net, outcluster)
-        length(ci) == 1 && error("outgroup clade already in tree (or incompatible?): $outcluster")
-        # now length(ci) > 1
-        bei[outcluster_j] = ei[] # because net.edge[k].number = k
-        e_outj = _resolveclade_belowlca(net, lca, ci, ni, ei, -1, false)
+        if length(ci) == 1 # edge may already exist if implied (redundant) by 2 blobs
+            e_outj = lca.edge[ci[1]]
+        else # length(ci) > 1
+            e_outj = _resolveclade_belowlca(net, lca, ci, ni, ei, -1, false)
+        end
         blobnode = getchild(e_outj)
+        bei[outcluster_j] = e_outj.number # because net.edge[k].number = k
     end
     blobnode.fvalue = weight
     # 2. create a child node below blobnode for each taxon block
@@ -991,11 +993,13 @@ function add_blobnode!(
         blobnode.booln2  || error("hmm, blob node has no taxa from the clade")
         !blobnode.booln3 || error("hmm, blob node has no taxa outside the clade")
         ci = _lca_newcluster_children(blobnode)
-        length(ci) == 1 && error("taxon block already in tree (or incompatible?): $v")
-        # now length(ci) > 1
-        @info "will resolve block $j. ei=$(ei[])"
-        bei[j] = ei[]
-        e_j = _resolveclade_belowlca(net, blobnode, ci, ni, ei, -1, false)
+        if length(ci) == 1
+            bei[j] = blobnode.edge[ci[1]].number
+            # @warn "taxon block already in tree (or incompatible?): $v"
+        else # length(ci) > 1
+            bei[j] = ei[]
+            e_j = _resolveclade_belowlca(net, blobnode, ci, ni, ei, -1, false)
+        end
     end
     return blobnode, bei
 end
@@ -1117,17 +1121,20 @@ function expand_blobcycleat!(
     nnets::Number,
     fixdirection::Bool,
 ) where {N,P}
-    println("$(writenewick(net))")
+    #@info "start: expand blob $bnum\nbnode at node $(bnode.number).\ncurrent net: $(writenewick(net))"
+    #printedges(net); printnodes(net)
+    show(stdout, MIME"text/plain"(), bpart); println()
     # 1. find a taxon block / edge to be the hybrid block
     hblock = argmax(bpart.hybrid) # most frequent hybrid block
     hedge = net.edge[bedges[hblock]]
     hbelowblob = isparentof(bnode, hedge)
     if !hbelowblob && !fixdirection && hedge.containroot
         rootatnode!(net, bnode) # re-root at the blob node
+        # fixit: modify bedges for the outgroup taxon, if singleton block?
         hbelowblob = isparentof(bnode, hedge)
     end
     if !hbelowblob # then find another block to be hybrid
-        priorh = bpart.hybrid[hblock]
+        priorh = hblock
         if length(bpart.hybrid) == 1 # then pick block 1, or 2 if prior was 1
             hblock = (priorh == 1 ? 2 : 1)
         else # pick second most frequent hybrid block
@@ -1135,6 +1142,7 @@ function expand_blobcycleat!(
         end
         hedge = net.edge[bedges[hblock]]
         isparentof(bnode, hedge) || error("blob node with 2 parents?")
+        # fixit: check if this would wrongly throw an error with outgroup
     end
     # 2. find a block / edge to remain connected to blob node
     if isrootof(bnode, net) # no parent: pick block 1 (or 2)
@@ -1189,6 +1197,9 @@ function expand_blobcycleat!(
         if ishyb_n || ii==ii_p
             downward = !downward
         end
+    end
+    if containroot # to update edges' containroot. ischild1 already correct
+        PN.traverseDirectEdges!(getparent(hedge), hedge, false)
     end
     return nothing
 end

@@ -1,0 +1,5 @@
+(a3,(a4,#H1),(a2,(((b1,(c2,c1)))#H1,a1))); # hybrid: a -> bc
+(a3,(a2,(a1,#H1)),(a4,((b1,(c2,c1)))#H1)); # same, switched major/minor, rotated
+((#H2,c2),c1,((((a2,a1),(a3,a4)))#H2,b1)); # hybrid: bc -> a
+(((((a4,a3),(a2,a1)))#H2,(c1,c2)),b1,#H2); # bc -> a but 3-cycle
+(((a3,(a4,#H1)),a2),(((c2,(#H2,c1)),(b1)#H2))#H1,a1); # a -> bc -> b
