@@ -212,7 +212,7 @@ function consensus_level1network(
 end
 
 """
-    count_blobpartitions!(networks, taxa, minBdegree)
+    count_blobpartitions!(networks, taxa, minimumblobdegree)
 
 `(blob_vec, bipart_vec)` where `blob_vec` is a vector of [`BlobFreq{ntax}`](@ref)
 object and `bipart_vec` is a vector of [`SplitFreq{ntax}`](@ref) objects,
@@ -1038,6 +1038,29 @@ function update_hybridclusterfrequency!(
     return nothing
 end
 
+"""
+    expand_blobcycles!(net, blobnode_vector, edgeblockindices_vector,
+        blobpartition_vector, nnets, outgroup=nothing)
+
+Modify each blob node in `net` into a cycle. If specified, `net` is rooted
+at the outgroup taxon.
+Blobs are expanded sequentially, from most frequent to least frequent.
+Each blob node is expanded using a circular order of highest frequency.
+The hybrid node in the cycle is one of highest frequency among those compatible
+with previous expanded blobs, or some child of the blob node otherwise.
+
+Weights (frequency / `nnets`) of blobs, circular order and hybrid clades are
+stored in specific nodes' `.fvalue`:
+- The blob weight should be stored in the fvalue of the blob node
+  if the input `net` is originally from [`tree_from_blobpartitions`](@ref).
+  The original blob node will become the entry (or root) of the blob cycle.
+- The weight of the circular order is stored in the fvalue of all
+  non-entry tree nodes in the cycle.
+- The weight of a hybrid clade is stored the hybrid node's fvalue.
+
+In each cycle, the edges' `.inte1` is set to a blob identifier (its index
+in the input vectors).
+"""
 function expand_blobcycles!(
     net::PN.HybridNetwork,
     blobnode::Vector{PN.Node},
@@ -1051,15 +1074,21 @@ function expand_blobcycles!(
         rootatnode!(net, outgroup) # creates degree-2 node
         # blobedge to outgroup no longer incident to its blobnode, but okay
     end
+    nnum = Ref(maximum(n.number for n in net.node)+1)
+    enum = Ref(maximum(e.number for e in net.edge)+1)
     nB = length(blobnode)
     @assert nB == length(blobedges) == length(blobparts)
     for i in nB:-1:1 # reverse: from highest to lowest frequency
-        expand_blobcycleat!(net, blobnode[i],blobedges[i],blobparts[i], nnets, fixdirection)
+        expand_blobcycleat!(net, nnum, enum, i,
+            blobnode[i],blobedges[i],blobparts[i], nnets, fixdirection)
     end
     return nothing
 end
 function expand_blobcycleat!(
     net::PN.HybridNetwork,
+    nnum::Base.RefValue{Int},
+    enum::Base.RefValue{Int},
+    bnum::Integer,
     bnode::PN.Node,
     bedges::Vector{Int},
     bpart::BlobFreq{N,P},
@@ -1084,11 +1113,8 @@ function expand_blobcycleat!(
         hedge = net.edge[bedges[hblock]]
         isparentof(bnode, hedge) || error("blob node with 2 parents?")
     end
-    # 2. create the cycle, in most frequent circular order
-    #    P-1 new nodes: one for each non-parent edge
-    #    P-1 new tree edges, 2 new hybrid edges
-    blockorder = argmax(bpart.circorder)
-    if isrootof(bnode, net) # pick block 1 (or 2) to stay incident to blob node
+    # 2. find a block / edge to remain connected to blob node
+    if isrootof(bnode, net) # no parent: pick block 1 (or 2)
         pblock = (hblock == 1 ? 2 : 1)
         pedge = net.edge[bedges[pblock]]
     else # parent edge (and its block) will stay indicent to blob node
@@ -1096,16 +1122,51 @@ function expand_blobcycleat!(
         pblock = findfirst(i -> net.edge[i] === pedge, bedges)
         isnothing(pblock) && error("top block above blob node not found")
     end
-    # downward side: from parent pblock to hybrid hblock
-    pii = findfirst(isequal(pblock), blockorder)
-    hii = findfirst(isequal(hblock), blockorder)
-    downward = hii < pii
-    for k in blockorder
+    hweight = bpart.hybrid[hblock]/nnets
+    # 3. create the cycle, in most-frequent circular order
+    #    P-1 new nodes: one for each non-parent edge
+    #    P   new edges: P-2 tree edges + 2 hybrid edges
+    blockorder = argmax(bpart.circorder)
+    circweight = bpart.circorder[blockorder] / nnets
+    ii_p = findfirst(isequal(pblock), blockorder)
+    ii_h = findfirst(isequal(hblock), blockorder)
+    neighbor = nothing
+    downward = ii_h < ii_p # used later to orient the new edges
+    containroot = pedge.containroot
+    for ii in Iterators.flatten((1:P, [1]))
+        k = blockorder[ii]
         ee = net.edge[bedges[k]]
+        ishyb_n = (ii==ii_h)
+        if isnothing(neighbor) || ii!=1 # first P blocks: create new node
+            if ii==ii_p # except if parent block
+                newnode = bnode
+            else
+                newnode = PN.Node(nnum[], false, ishyb_n)
+                newnode.fvalue = (ishyb_n ? hweight : circweight)
+                nnum[] += 1
+                PN.removeEdge!(bnode, ee)
+                ee.node[findfirst(x -> x === bnode, ee.node)] = newnode
+                push!(newnode.edge, ee)
+                PN.pushNode!(net, newnode)
+            end
+        end
+        if !isnothing(neighbor) # last P blocks: create new edge
+            ishyb_e = ishyb_n || neighbor.hybrid
+            gam = (ishyb_e ? -1.0 : 1.0)
+            ismajor = !ishyb_n
+            newedge = PN.Edge(enum[], -1., ishyb_e, # length=-1
+                -1.,-1., gam, [newnode,neighbor], downward, # y=-1, z=-1
+                ismajor, bnum, containroot, true, false)
+            enum[] += 1
+            push!(neighbor.edge, newedge)
+            push!(newnode.egde,  newedge)
+            PN.pushEdge!(net, newedge)
+        end
+        neighbor = newnode
+        if ishyb_n || ii==ii_p
+            downward = !downward
+        end
     end
-    # fixit: continue
-    # copy bnode.fvalue in all new cycle tree nodes
-    # store hybrid support in tree node .fvalue
     return nothing
 end
 
