@@ -184,9 +184,26 @@ function consensus_treeofblobs(
 end
 
 """
-    consensus_level1network(networks; proportion=0, minimumblobdegree=4, outgroup=nothing)
+    consensus_level1network(networks; proportion=0, minimumblobdegree=4,
+        outgroup=nothing)
 
-fixit
+Consensus network summarizing a list of level-1 networks, by these steps:
+1. A consensus tree of blobs is built as in [`consensus_treeofblobs`](@ref),
+   with one node for each blob present in a majority (or in more than the
+   required `proportion`) of input networks, if compatible with blobs
+   of higher support, with non-redundant bipartitions supported by more
+   than the `proportion` of input networks.
+2. Each blob is resolved as a cycle, one after another, from highest to lowest
+   supported blobs.
+3. To resolve a blob, its taxon blocks are placed around a cycle in the
+   circular order most-frequently found in input networks.
+3. To orient the edges in the cycle, the node chosen to be hybrid is the one
+   whose descendant clade has the highest support as being a hybrid clade, among
+   the placements that are admissible (do not conflict with the direction of
+   edges from hybrids in other cycles).
+   If an `outgroup` is provided, the hybrid node is chosen among those that
+   do not conflict with this outgroup taxon being an outgroup: below the root,
+   and not affected (below) any reticulation.
 """
 function consensus_level1network(
     networks::AbstractVector{PN.HybridNetwork};
@@ -885,7 +902,7 @@ function tree_from_blobpartitions(
 ) where N
     N == length(taxa) || error("N ($N) != number of taxa $(length(taxa))")
     blobnode = PN.Node[]
-    blobedges = Vector{Int}[] # edge indces, one for each taxon block
+    blobedges = Vector{Int}[] # edge indices, one for each taxon block
     net = startree(taxa) # root numbered -2
     ni = Ref(-3) # internal nodes: numbered -3,-4 etc., as done by readnewick
     ei = Ref(N+1)
@@ -931,8 +948,9 @@ considered unrooted. The added edges correspond to using the last taxon as
 outgroup: an edge's cluster of descendants does not contain the last taxon.
 
 Assumptions (none are checked): `tree` is a tree, P ≥ 3, taxon blocks are
-non-empty and do form a partition, and
-assumptions in [`add_clusteredge!`](@ref).
+non-empty and do form a partition, assumptions in [`add_clusteredge!`](@ref),
+and taxon `j` is the node number `j` in `tree` incident to `tree.edge[j]`,
+as built from [`startree`](@ref).
 """
 function add_blobnode!(
     net::PN.HybridNetwork,
@@ -964,7 +982,10 @@ function add_blobnode!(
     for j in 1:P
         j == outcluster_j && continue
         v = blobpartition[j]
-        sum(v) == 1 && continue # skip trivial blocks of a single taxon
+        if sum(v) == 1 # skip trivial blocks of a single taxon
+            bei[j] = findfirst(v) # taxon i: has edge index & number i, from startree
+            continue
+        end
         node2clade_intersection_initialize(net, v)  # update .booln{2,3} for v
         node2clade_intersection_update(getroot(net))
         blobnode.booln2  || error("hmm, blob node has no taxa from the clade")
@@ -972,6 +993,7 @@ function add_blobnode!(
         ci = _lca_newcluster_children(blobnode)
         length(ci) == 1 && error("taxon block already in tree (or incompatible?): $v")
         # now length(ci) > 1
+        @info "will resolve block $j. ei=$(ei[])"
         bei[j] = ei[]
         e_j = _resolveclade_belowlca(net, blobnode, ci, ni, ei, -1, false)
     end
@@ -1095,6 +1117,7 @@ function expand_blobcycleat!(
     nnets::Number,
     fixdirection::Bool,
 ) where {N,P}
+    println("$(writenewick(net))")
     # 1. find a taxon block / edge to be the hybrid block
     hblock = argmax(bpart.hybrid) # most frequent hybrid block
     hedge = net.edge[bedges[hblock]]
@@ -1137,18 +1160,18 @@ function expand_blobcycleat!(
         k = blockorder[ii]
         ee = net.edge[bedges[k]]
         ishyb_n = (ii==ii_h)
-        if isnothing(neighbor) || ii!=1 # first P blocks: create new node
-            if ii==ii_p # except if parent block
-                newnode = bnode
-            else
-                newnode = PN.Node(nnum[], false, ishyb_n)
-                newnode.fvalue = (ishyb_n ? hweight : circweight)
-                nnum[] += 1
-                PN.removeEdge!(bnode, ee)
-                ee.node[findfirst(x -> x === bnode, ee.node)] = newnode
-                push!(newnode.edge, ee)
-                PN.pushNode!(net, newnode)
+        newnode = bnode # good for parent block only
+        # first P block, except parent block: create new node
+        if (isnothing(neighbor) || ii!=1) && ii!=ii_p
+            newnode = PN.Node(nnum[], false, ishyb_n,
+                (ishyb_n ? hweight : circweight), [ee]) # fvalue, edge
+            if ishyb_n
+                newnode.name = "H$bnum"
             end
+            nnum[] += 1
+            PN.removeEdge!(bnode, ee)
+            ee.node[findfirst(x -> x === bnode, ee.node)] = newnode
+            PN.pushNode!(net, newnode)
         end
         if !isnothing(neighbor) # last P blocks: create new edge
             ishyb_e = ishyb_n || neighbor.hybrid
@@ -1159,7 +1182,7 @@ function expand_blobcycleat!(
                 ismajor, bnum, containroot, true, false)
             enum[] += 1
             push!(neighbor.edge, newedge)
-            push!(newnode.egde,  newedge)
+            push!(newnode.edge,  newedge)
             PN.pushEdge!(net, newedge)
         end
         neighbor = newnode

@@ -10,7 +10,8 @@ const PN = PhyloNetworks
 
 export
 consensustree,
-consensus_treeofblobs
+consensus_treeofblobs,
+consensus_level1network
 
 include("utils.jl")
 include("consensustrees.jl")

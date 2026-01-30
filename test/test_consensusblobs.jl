@@ -133,7 +133,16 @@ nfile = joinpath(@__DIR__,"..","test","bootstrapnets_h1.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","bootstrapnets_h1.nwk")
 net = readmultinewick(nfile)
 # 4 blob partitions, each with a single circular order, freqs: 6,1,1,1,1
-# 0 non-redundant bipartitions, 4 hybrid clades: t6 ×5, t3 ×2, t4 ×2, t8 ×1.
+# 0 non-redundant bipartitions, 4 hybrid clades: t6 ×5, t3 ×2, t4 ×2, t8 ×1
+#= to look at networks locally:
+using RCall, PhyloPlots
+R"layout"([1 2 3 4 5; 6 7 8 9 10]);
+R"par"(mar=[0,0,0,0])
+for i in 1:10
+    plot(net[i], shownodenumber=true, tipoffset=0.2, nodecex=0.2)
+    R"mtext"("net $i", side=1, line=-1)
+end
+=#
 # consensus tree-of-blobs: star, blob support 60%:
 tob = consensus_treeofblobs(net)
 @test writenewick(tob) == "(t1,t2,t3,t4,t5,t6);"
@@ -144,18 +153,13 @@ tob = consensus_treeofblobs(net[[2,3,4,9]])
 tob = consensus_treeofblobs(net[[4,9,3,2]])
 @test writenewick(tob) == "(t3,t4,t5,t6,(t2,t1));" # blob from nets 2,3
 @test getroot(tob).fvalue == 0.5
-# fixit: add tests on level-1 nets: hybrid, circular order etc.
-# consensus, level-1:
-conl1 = readnewick("(t2,(t4,(t3,(t5,(t6)#H0))),(#H0,t1));")
-#= to look at networks locally:
-using RCall, PhyloPlots
-R"layout"([1 2 3 4 5; 6 7 8 9 10]);
-R"par"(mar=[0,0,0,0])
-for i in 1:10
-    plot(net[i], shownodenumber=true, tipoffset=0.2, nodecex=0.2)
-    R"mtext"("net $i", side=1, line=-1)
-end
-=#
+conl1 = consensus_level1network(net)
+@test writenewick(conl1) == "(t2,(t4,(t3,(t5,#H1))),(t1,(t6)#H1));"
+# or different ismajor: "(t2,(t4,(t3,(t5,(t6)#H0))),(#H0,t1));"
+@test [e.inte1 for e in conl1.edge] == repeat([-1,1], inner=6)
+# fixit: test .fvalues
+
+# fixit: add more complex tests on level-1 nets: hybrid, circular order etc.
 end
 
 @testset "blob compatibility filtering, show" begin

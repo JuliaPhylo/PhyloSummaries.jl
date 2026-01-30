@@ -6,6 +6,7 @@ const SplitTuple = NTuple{N,Bool} where N # tuple used to represent a bipartitio
 Star tree `t` such that `t.node` lists all leaves named after the N `taxa`
 in that order: for `i` in 1 through N: node `n = t.node[i]` has `n.number = i`
 and `n.name = taxa[i]`.
+It is incident to edge `e = t.edge[i]` which has `e.number = i`.
 The root node is last, `t.node[N+1]`, and has number `-2`.
 """
 function startree(taxa::Vector{String})
