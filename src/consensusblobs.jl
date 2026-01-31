@@ -55,13 +55,13 @@ end
 Frequency of one non-trivial taxon block, typically considered as describing an
 unrooted bipartition (or split) of the `N` taxa into P=2 parts.
 
-It is non-trivial if each part have at least 2 taxa, that is: the block is
-not empty, not full, does not contain a single taxa, or all but a single taxon.
+It is non-trivial if each part has at least 2 taxa, that is: the block is
+not empty, not full, does not contain a single taxon, or all but a single taxon.
 
 The taxon block is represented by an `N`-tuple of booleans, where entry `i`
 says whether taxon number `i` is in or out of this block.
 The canonical taxon block used to describe an unrooted bipartition is the block
-that does not contain the last taxa, such that its last entry `N` is false.
+that does not contain the last taxon, such that its last entry `N` is false.
 """
 struct SplitFreq{N}
     """bipartition: block 1 does *not* contain the last taxon, block 2 does.
@@ -508,10 +508,12 @@ end
 
 
 """
-    blobtaxonsetpartition!(visitedbcc, blobdegree, net, blob, bidx, edgemap, hwmatrix, taxaindex, ntaxa)
+    blobtaxonsetpartition!(visitedbcc, blobdegree, net, bicomponent, bidx,
+        edgemap, hardwiredclustermatrix, taxon2index, ntaxa)
 
-Depth-first traversal of a blob `B` that collect its taxon blocks, which form a
-partition of the full set of `N` taxa. Each taxon block (or split) corresponds
+Depth-first traversal of a blob `B` starting from its top bicomponent,
+to collect its taxon blocks, which form a partition of the full set of `N` taxa.
+Each taxon block (or split) corresponds
 to a cut-edge `uv` adjacent to the blob, with `u ∈ B` in the blob and `v ∉ B`.
 The taxon block for `uv` is reprented by an `N`-tuple of 0/1 values with 1 at
 index `i = taxaindex[label]` if the taxon named `label` is a descendant of
@@ -519,12 +521,15 @@ index `i = taxaindex[label]` if the taxon named `label` is a descendant of
 If `u ∈ B` is a hybrid node incident to some exit edge `uv`, then the taxon
 block associated with this edge is considered "hybrid" for this blob.
 
-Output: `(splits,hybrid)` where
+Output: `(splits, hybrids, islevel1)` where
 - `splits` is the blob's partition as a tuple of N-tuples, listed in a "half"
   circular order if the blob is level-1: from highest to lowest along one side
   then along the other side.
-- `hybrid` is the vector of indices in `splits`, of taxon blocks
+- `hybrids` is the vector of indices in `splits`, of taxon blocks
   that are hybrid for the blob.
+- `islevel1` is true all bicomponent in the blob have a reticulation number ≤ 1;
+  false otherwise. For binary networks, a non-trivial blob has a single
+  biconnected component, and its level is its number of hybrid nodes.
 
 Also:
 - `visitedbcc` may be modified. If several biconnected components are part
@@ -556,13 +561,13 @@ function blobtaxonsetpartition!(
     entrynode.intn1 = bidx # blob index: index of first bicomponent
     splits = NTuple{ntaxa,Bool}[]
     hybrids = Int[]
-    # bloblevel: true if all biconnected components in this blob are level-1
-    bloblevel = Ref(PN.getlevel(bicomp) <= 1)
+    islevel1 = Ref(PN.getlevel(bicomp) <= 1)
     # traverse the blob starting at entrynode of the biconnected component
-    blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, bloblevel,
+    blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, islevel1,
         entrynode, bidx, edgemap, hwmatrix, taxaindex, net)
-    if bloblevel[] && length(hybrids) == 1 && hybrids[1] < length(splits)
-        reverse!(@view splits[(hybrids[1]+1):end])
+    nsplits = length(splits)
+    if islevel1[] && length(hybrids) == 1 && hybrids[1] < nsplits
+        reverse!(view(splits, (hybrids[1]+1):nsplits)) # to get circular order
     end
     if bidx > 1 # entry ≠ root: add split from the unique entry cut-edge
         outgroupsplit = splitcomplement(splits)
@@ -572,13 +577,14 @@ function blobtaxonsetpartition!(
             hybrids .+= 1
         end
     end
-    return splits, hybrids, bloblevel[]
+    return splits, hybrids, islevel1[]
 end
 
 """
-    blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, bloblevel, entrynode, bidx, edgemap, hwmatrix, taxaindex, net)
+    blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, islevel1,
+        entrynode, bidx, edgemap, hardwiredclustermatrix, taxon2index, net)
 
-Helper for `blobtaxonsetpartition` to accumulate entries in `splits` and `hybrids`.
+Helper to accumulate entries in `splits` and `hybrids`.
 Internal fields:
 - `.inte1` used but not modified: should store the index of an edge's
   biconnected component.
@@ -595,7 +601,7 @@ function blobtaxonsetpartition!(
     hybrids::Vector{Int},
     visitedbcc::Set{Int},
     blobdegree::Base.RefValue{Int},
-    bloblevel::Base.RefValue{Bool},
+    islevel1::Base.RefValue{Bool},
     node::PN.Node,
     bidx::Int,
     edgemap::Dict{<:Integer,<:Integer},
@@ -655,7 +661,7 @@ function blobtaxonsetpartition!(
                 end
             end
             cn.intn1 = node.intn1 # may be different from bidx
-            blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, bloblevel,
+            blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, islevel1,
                 cn, bidx, edgemap, hwmatrix, taxaindex, net)
         elseif atotherBC && !PN.istrivial(bcc[ei]) && !(ei ∈ visitedbcc)
             push!(visitedbcc, ei)
@@ -663,9 +669,9 @@ function blobtaxonsetpartition!(
             otherBCentry.intn1 = node.intn1
             # check if other BCC is level > 1: if so, blob is not level-1
             if PN.getlevel(bcc[ei]) > 1
-                bloblevel[] = false
+                islevel1[] = false
             end
-            blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, bloblevel,
+            blobtaxonsetpartition!(splits, hybrids, visitedbcc, blobdegree, islevel1,
                 otherBCentry,   ei,   edgemap, hwmatrix, taxaindex, net)
         end
     end
@@ -1097,8 +1103,10 @@ function expand_blobcycles!(
 ) where N
     fixdirection = !isnothing(outgroup)
     if fixdirection
-        rootatnode!(net, outgroup) # creates degree-2 node
-        # blobedge to outgroup no longer incident to its blobnode, but okay
+        oldoutedgei = findfirst(n -> n.name==outgroup, net.node) # assume edge i to leaf i
+        rootatnode!(net, oldoutedgei; index=true) # creates degree-2 node
+        newoutedgei = length(net.edge) # last=new edge: incident to blob if {outgroup}=block
+        replace!.(blobedges, oldoutedgei => newoutedgei; count=1)
     end
     nnum = Ref(maximum(n.number for n in net.node)+1)
     enum = Ref(maximum(e.number for e in net.edge)+1)
@@ -1123,14 +1131,13 @@ function expand_blobcycleat!(
 ) where {N,P}
     #@info "start: expand blob $bnum\nbnode at node $(bnode.number).\ncurrent net: $(writenewick(net))"
     #printedges(net); printnodes(net)
-    show(stdout, MIME"text/plain"(), bpart); println()
+    #show(stdout, MIME"text/plain"(), bpart); println()
     # 1. find a taxon block / edge to be the hybrid block
     hblock = argmax(bpart.hybrid) # most frequent hybrid block
     hedge = net.edge[bedges[hblock]]
     hbelowblob = isparentof(bnode, hedge)
     if !hbelowblob && !fixdirection && hedge.containroot
         rootatnode!(net, bnode) # re-root at the blob node
-        # fixit: modify bedges for the outgroup taxon, if singleton block?
         hbelowblob = isparentof(bnode, hedge)
     end
     if !hbelowblob # then find another block to be hybrid
@@ -1142,8 +1149,8 @@ function expand_blobcycleat!(
         end
         hedge = net.edge[bedges[hblock]]
         isparentof(bnode, hedge) || error("blob node with 2 parents?")
-        # fixit: check if this would wrongly throw an error with outgroup
     end
+    hweight = bpart.hybrid[hblock]/nnets
     # 2. find a block / edge to remain connected to blob node
     if isrootof(bnode, net) # no parent: pick block 1 (or 2)
         pblock = (hblock == 1 ? 2 : 1)
@@ -1153,7 +1160,6 @@ function expand_blobcycleat!(
         pblock = findfirst(i -> net.edge[i] === pedge, bedges)
         isnothing(pblock) && error("top block above blob node not found")
     end
-    hweight = bpart.hybrid[hblock]/nnets
     # 3. create the cycle, in most-frequent circular order
     #    P-1 new nodes: one for each non-parent edge
     #    P   new edges: P-2 tree edges + 2 hybrid edges
@@ -1169,8 +1175,8 @@ function expand_blobcycleat!(
         ee = net.edge[bedges[k]]
         ishyb_n = (ii==ii_h)
         newnode = bnode # good for parent block only
-        # first P block, except parent block: create new node
-        if (isnothing(neighbor) || ii!=1) && ii!=ii_p
+        if ii!=ii_p     # for non-parent blocks:
+          if isnothing(neighbor) || ii!=1 # first P blocks: create new node
             newnode = PN.Node(nnum[], false, ishyb_n,
                 (ishyb_n ? hweight : circweight), [ee]) # fvalue, edge
             if ishyb_n
@@ -1180,6 +1186,9 @@ function expand_blobcycleat!(
             PN.removeEdge!(bnode, ee)
             ee.node[findfirst(x -> x === bnode, ee.node)] = newnode
             PN.pushNode!(net, newnode)
+          else # last iteration: back to block 1
+            newnode = getparent(ee) # created at first iteration
+          end
         end
         if !isnothing(neighbor) # last P blocks: create new edge
             ishyb_e = ishyb_n || neighbor.hybrid

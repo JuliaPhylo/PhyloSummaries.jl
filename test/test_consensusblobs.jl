@@ -138,8 +138,8 @@ net = readmultinewick(nfile)
 using RCall, PhyloPlots
 R"layout"([1 2 3 4 5; 6 7 8 9 10]);
 R"par"(mar=[0,0,0,0])
-for i in 1:10
-    plot(net[i], shownodenumber=true, tipoffset=0.2, nodecex=0.2)
+for (i,n) in enumerate(net)
+    plot(n, shownodenumber=true, tipoffset=0.2, nodecex=0.2)
     R"mtext"("net $i", side=1, line=-1)
 end
 =#
@@ -166,12 +166,14 @@ nfile = joinpath(@__DIR__,"..","test","level1_7taxa_abc.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","level1_7taxa_abc.nwk")
 net = readmultinewick(nfile)
 conl1 = consensus_level1network(net, minimumblobdegree=3)
-@test_broken writenewick(conl1) == "(a3,(a4,#H2),(a2,(a1,(((c2,(c1,#H1)),(b1)#H1))#H2)));"
-# currently: "(a3,(a4,#H2),(a2,(a1,(((c2,(c1)),#H1,(b1)#H1))#H2)));"
-# problems: degree-2 node above c1, and blocks a1-a4|c2c1|b1 instead of a1-a4|c2|c1|b1
-# fixit: fix this blob-expansion bug
-
-# fixit: add more complex tests on level-1 nets: hybrid, circular order etc.
+@test writenewick(conl1) == "(a3,(a4,#H2),(a2,(a1,(((c2,(c1,(b1)#H1)),#H1))#H2)));"
+@test [n.fvalue for n in conl1.node if n.hybrid] == [.6, .2]
+@test [n.fvalue for n in conl1.node if !n.leaf && !n.hybrid] == [.4,.6,.6,.6,.6,.4,.4]
+@test [conl1.edge[i].inte1 for i in 8:17] == [-1, 2,2,2,2,2, 1,1,1,1]
+conl1 = consensus_level1network(net, minimumblobdegree=3, outgroup="a2")
+@test writenewick(conl1) == "(a2,((a1,(((c2,(c1,(b1)#H1)),#H1))#H2),(a3,(a4,#H2))));"
+@test [n.fvalue for n in conl1.node if !n.leaf] == [.4,.6,-1,.6,.6,.6,.6,.4,.4,.2]
+@test [conl1.edge[i].inte1 for i in 8:18] == [-1,-1, 2,2,2,2,2, 1,1,1,1]
 end
 
 @testset "blob compatibility filtering, show" begin
