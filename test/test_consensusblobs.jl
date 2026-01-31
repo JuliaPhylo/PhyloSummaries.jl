@@ -64,19 +64,19 @@ l4nwk = [
   "(a2,a3,(a1,(((#H2,b2))#H3,((c2,#H1),((((h)#H0,b1))#H2,(((c1,#H0))#H1,#H3))))));",
   # after deleting edge 8: outer-labeled planar, so has a circular order
   "((c2,#H1),(((b2,((h)#H0,b1)))#H3,(a1,(a2,a3))),(((c1,#H0))#H1,#H3));",
-  # after deleting edge 16: 2 exit hybrids
+  # after deleting edge 16: 2 exit hybrids in same blob
   "((c2,#H1),((((c1,#H0))#H1,#H3),((h)#H0,b1)),((b2)#H3,(a1,(a2,a3))));",
 ]
 net = readnewick.(l4nwk)
 taxa = ["a1","a2","a3", "c1","c2", "h", "b1","b2"]
-bb, bp = @test_logs (:warn, r"single exit hybrid") PS.count_blobpartitions(net, taxa, 4)
+bb, bp = PS.count_blobpartitions(net, taxa, 4)
 @test [x.split for x in bp] == [(0,1,1,0,0,0,0,0), (1,1,0,0,0,0,0,0)]
 @test [PS.freq(x) for x in bp] == [4,1]
 @test [x.partition for x in bb] == [
   ((0,0,0,0,1,0,0,0),(0,0,0,1,0,0,0,0),(0,0,0,0,0,1,0,0),
    (0,0,0,0,0,0,1,0),(0,0,0,0,0,0,0,1),(1,1,1,0,0,0,0,0))]
 @test isempty(bb[1].circorder)
-@test bb[1].hybrid == Dict( # NOTE: 6 but only 5 networks because one has 2 hybrids
+@test bb[1].hybrid == Dict( # 6 total in only 5 networks because one has 2 hybrids
   3 => 5,  # h hybrid in all 5 nets,
   5 => 1) # b2 hybrid in net[5] only
 @test occursin(

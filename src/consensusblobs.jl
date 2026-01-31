@@ -393,24 +393,20 @@ function count_blobpartitions!(
         push!(blobvec, newblob)
     else # existing blob: increment frequencies of canonical partition slots
         bf = blobvec[matchidx]
-        length(hybrids) == 1 || @warn "expected a single exit hybrid per blob"
-        hybridpos = hybrids[1] # use the first to find circular order
-        for k in hybrids       # but count all
+        for k in hybrids
             canonk = idxmap[k]
             bf.hybrid[canonk] = get(bf.hybrid, canonk, 0) + 1
         end
-        # only calculate and store circular order for level-1 blobs
-        if islevel1
+        # calculate & store circular order if level-1 blob with 1 lowest hybrid
+        # a level-1 blob of >1 bicomponents could have >1 lowest hybrids
+        if islevel1 && length(hybrids) == 1
             # canonicalize circular orders using the split matched to partition entry 1
             startidx = findfirst(==(1), idxmap)
             isnothing(startidx) &&
-                error("blob partition: 1 not found in idxmap. Expected Set(idxmap) == Set(1:nparts)")
-            #fixit:
-            # we should always have that Set() == Set(1:nparts)
-            # also, could this help: indexin(1:nparts, idxmap)
-            # first value = startidx
-            circorderkey, reversekey = canonicalorders(idxmap, startidx, hybridpos)
-            isempty(circorderkey) && error("blob partition: empty circular order key")
+                error("block 1 not found in idxmap: $idxmap (should span 1:$(nparts))")
+            circorderkey, reversekey = canonicalorders(idxmap, startidx, hybrids[1])
+            length(circorderkey) == nparts ||
+                error("circular order key of length $(length(circorderkey)) instead of $nparts")
             if haskey(bf.circorder, circorderkey)
                 bf.circorder[circorderkey] += 1
             elseif haskey(bf.circorder, reversekey)
