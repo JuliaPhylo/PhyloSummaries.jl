@@ -42,7 +42,7 @@ blobs, bps = @test_logs (:warn, r"^non-binary articulation") PS.count_blobpartit
  ((0,0,0,1,1), (0,0,1,0,0), (0,1,0,0,0), (1,0,0,0,0)),
  ((1,0,0,1,0), (0,1,0,0,0), (0,0,1,0,0), (0,0,0,0,1)) ]
 @test [PS.freq(b) for b in blobs] == [4,1]
-@test [b.circorder for b in blobs] == [Dict((1,4,2,3)=>1, (1,2,3,4)=>3), Dict((1,2,3,4)=>1)]
+@test [b.circorder for b in blobs] == [Dict((1,2,3,4)=>4), Dict((1,2,3,4)=>1)]
 @test [b.hybrid for b in blobs] == [Dict(2=>2, 3=>2), Dict(3=>1)]
 
 # blob of 3 biconnected components
@@ -160,11 +160,7 @@ conl1 = consensus_level1network(net)
 @test all(e -> e.y==-1, conl1.edge)
 @test [n.fvalue for n in conl1.node if n.hybrid] == [.5] # hybrid support
 @test getroot(conl1).fvalue == 0.6 # blob support
-@test_broken all(i -> conl1.node[i].fvalue == 0.6, [8,9,10,12]) # circular order support
-# fixit: fix this circular order bug.
-# 6 nets have this blob partition: nets 1, 5,6,7,8, 10
-# All these 6 nets have the same circular order.
-# Somehow 2 of these networks are thought to have a different circular order.
+@test all(i -> conl1.node[i].fvalue == 0.6, [8,9,10,12]) # circular order support
 
 nfile = joinpath(@__DIR__,"..","test","level1_7taxa_abc.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","level1_7taxa_abc.nwk")
