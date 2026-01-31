@@ -9,10 +9,7 @@ nwk = [ # some rooted, some unrooted
 ]
 # sanity-check canonical order helper
 @testset "canonicalorders" begin
-    idxmap = [5, 1, 3, 2, 4]
-    start_idx = 2 # position of partition[1] in idxmap
-    hybrid_idx = 2
-    cw, ccw = PS.canonicalorders(idxmap, start_idx, hybrid_idx)
+    cw, ccw = PS.canonicalorders([5, 1, 3, 2, 4], 2) # start at index 2
     @test cw == (1, 3, 2, 4, 5)
     @test ccw == (1, 5, 4, 2, 3)
 end

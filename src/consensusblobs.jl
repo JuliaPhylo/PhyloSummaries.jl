@@ -400,20 +400,7 @@ function count_blobpartitions!(
         # calculate & store circular order if level-1 blob with 1 lowest hybrid
         # a level-1 blob of >1 bicomponents could have >1 lowest hybrids
         if islevel1 && length(hybrids) == 1
-            # canonicalize circular orders using the split matched to partition entry 1
-            startidx = findfirst(==(1), idxmap)
-            isnothing(startidx) &&
-                error("block 1 not found in idxmap: $idxmap (should span 1:$(nparts))")
-            circorderkey, reversekey = canonicalorders(idxmap, startidx, hybrids[1])
-            length(circorderkey) == nparts ||
-                error("circular order key of length $(length(circorderkey)) instead of $nparts")
-            if haskey(bf.circorder, circorderkey)
-                bf.circorder[circorderkey] += 1
-            elseif haskey(bf.circorder, reversekey)
-                bf.circorder[reversekey] += 1
-            else
-                bf.circorder[circorderkey] = 1
-            end
+            add_canonical_circularorder!(bf.circorder, idxmap)
         end
         incrementfreq!(bf)
     end
@@ -458,50 +445,59 @@ function findmatchingblob(
 end
 
 """
-    canonicalorders(idxmap, startidx, hybridpos)
+    canonicalorders(vector, startidx)
 
-Return the clockwise and counter-clockwise permutations of `idxmap`,
-anchored at the split corresponding to the first partition entry, and
-oriented relative to `hybridpos`.
+Clockwise and counter-clockwise circular permutations of `vector`, starting at
+index `startidx`. Assumptions, not checked: `vector` is non-empty, and
+`startidx` is a valid index for it.
+
+fixit: delete, replaced by `add_canonical_circularorder!` to avoid calculating
+the backward order if it's not needed.
 """
-function canonicalorders(idxmap::AbstractVector{Int}, startidx::Int, hybridpos::Int)
-    n = length(idxmap)
-    if n == 0 || startidx < 1 || startidx > n ||
-        hybridpos < 1 || hybridpos > n
-        return (), ()
-    end
-    order = Int[]
-
-    if startidx > hybridpos
-        append!(order, idxmap[startidx:end])
-        append!(order, idxmap[1:hybridpos])
-        if hybridpos + 1 <= startidx - 1
-            append!(order, idxmap[(hybridpos+1):(startidx-1)])
-        end
-    elseif startidx == hybridpos
-        append!(order, idxmap[startidx:end])
-        append!(order, idxmap[1:hybridpos-1])
-    else
-        append!(order, idxmap[startidx:hybridpos])
-        if hybridpos < n
-            append!(order, idxmap[(hybridpos+1):n])
-        end
-        if startidx > 1
-            append!(order, idxmap[1:startidx-1])
-        end
-    end
-    forward = Tuple(order)
-    if length(order) > 1
-        revseq = Vector{Int}(undef, length(order))
-        revseq[1] = order[1]
-        revseq[2:end] .= reverse(order[2:end])
-        backward = Tuple(revseq)
-    else
-        backward = forward
-    end
+function canonicalorders(vec::AbstractVector{T}, startidx::Int) where T
+    nB = length(vec) # nB for number of blocks in the partition
+    itr = Iterators.flatten((startidx:nB, 1:(startidx-1)))
+    forward  = Tuple(Iterators.map(i -> vec[i], itr))
+    itr = Iterators.flatten((startidx:-1:1, nB:-1:(startidx+1)))
+    backward = Tuple(Iterators.map(i -> vec[i], itr))
     return forward, backward
 end
 
+"""
+    add_canonical_circularorder!(circularorder_dictionary, indexmap)
+
+1. Find the clockwise (and counter-clockwise if necessary) circular permutation(s)
+  of `indexmap`, starting at the index for value 1. For example, for vector
+  `[5, 1, 3, 2, 4]`, these are: `1,3,2,4,5` and `1,5,4,2,3`.
+  These are the 2 canonical ways of coding their shared circular order:
+  starting from value 1 and circling in one or the other direction.
+2. Add this circular order in the input dictionary: if already present
+  (in clockwise or counterwise direction) then its frequency is incremented.
+  Otherwise, a new entry with frequency 1 is added to the dictionary.
+"""
+function add_canonical_circularorder!(
+    codict::Dict{NTuple{P,Int},Int},
+    idxmap::AbstractVector{Int},
+) where P
+    startidx = findfirst(==(1), idxmap)
+    isnothing(startidx) &&
+        error("block 1 not found in idxmap: $idxmap (should span 1:$P)")
+    itr = Iterators.flatten((startidx:P, 1:(startidx-1)))
+    circorderkey  = Tuple(Iterators.map(i -> idxmap[i], itr))
+    length(circorderkey) == P ||
+        error("circular order key of length $(length(circorderkey)) instead of $P")
+    if haskey(codict, circorderkey)
+        codict[circorderkey] += 1
+    else
+        itr = Iterators.flatten((startidx:-1:1, P:-1:(startidx+1)))
+        reversekey = Tuple(Iterators.map(i -> idxmap[i], itr))
+        if haskey(codict, reversekey)
+            codict[reversekey] += 1
+        else
+            codict[circorderkey] = 1
+        end
+    end
+end
 
 """
     blobtaxonsetpartition!(visitedbcc, blobdegree, net, bicomponent, bidx,
