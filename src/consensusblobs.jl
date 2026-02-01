@@ -1108,19 +1108,20 @@ function expand_blobcycles!(
     h_bs = Vector{Float64}(undef, nB) # hybrid: bootstrap support
     h_num = Vector{Int}(undef, nB) # hybrid: node number
     @assert nB == length(blobedges) == length(blobparts)
-    for i in nB:-1:1 # reverse: from highest to lowest frequency
+    bitr = ((i,blobparts[i]) for i in nB:-1:1) # from most to least frequent blob
+    for (i,b) in bitr
         o_bs[i], h_bs[i], h_num[i] = expand_blobcycleat!(net, nnum, enum, i,
-            blobnode[i],blobedges[i],blobparts[i], nnets, fixdirection)
+            blobnode[i],blobedges[i],b, nnets, fixdirection)
     end
-    blob_data = (blob = collect(1:nB),
-        degree = [length(b.partition) for b in blobparts],
-        node = [n.number for n in blobnode],
-        hybrid = h_num,
-        support_partition = [freq(b)/nnets for b in blobparts],
-        support_circorder = o_bs,
-        support_hybrid = h_bs,
-        partition = [partitionstring(b) for b in blobparts])
-    itr = ((i,b,h,f) for (i,b) in enumerate(blobparts) for (h,f) in b.hybrid)
+    blob_data = (blob = [i for (i,b) in bitr],
+        degree = [length(b.partition) for (i,b) in bitr],
+        node = [blobnode[i].number for (i,b) in bitr],
+        hybrid = [h_num[i] for (i,b) in bitr],
+        support_partition = [freq(b)/nnets for (i,b) in bitr],
+        support_circorder = [o_bs[i] for (i,b) in bitr],
+        support_hybrid = [h_bs[i] for (i,b) in bitr],
+        partition = [partitionstring(b) for (i,b) in bitr])
+    itr = ((i,b,h,f) for (i,b) in bitr for (h,f) in b.hybrid)
     bnum = [x[1] for x in itr]
     hedgenum = [blobedges[i][h] for (i,b,h,f) in itr]
     function e2n(bnum, enum)

@@ -134,7 +134,7 @@ net = readmultinewick(nfile)
 #= to look at networks locally:
 using RCall, PhyloPlots
 R"layout"([1 2 3 4 5; 6 7 8 9 10]);
-R"par"(mar=[0,0,0,0])
+R"par"(mar=[0,0,0,0]);
 for (i,n) in enumerate(net)
     plot(n, shownodenumber=true, tipoffset=0.2, nodecex=0.2)
     R"mtext"("net $i", side=1, line=-1)
@@ -150,6 +150,7 @@ tob = consensus_treeofblobs(net[[2,3,4,9]])
 tob = consensus_treeofblobs(net[[4,9,3,2]])
 @test writenewick(tob) == "(t3,t4,t5,t6,(t2,t1));" # blob from nets 2,3
 @test getroot(tob).fvalue == 0.5
+# fixit: make consensus_treeofblobs return a data table, and test it
 conl1, _ = consensus_level1network(net)
 @test writenewick(conl1) == "(t2,(t4,(t3,(t5,#H1))),(t1,(t6)#H1));"
 # or different ismajor: "(t2,(t4,(t3,(t5,(t6)#H0))),(#H0,t1));"
@@ -163,15 +164,20 @@ conl1, _ = consensus_level1network(net)
 nfile = joinpath(@__DIR__,"..","test","level1_7taxa_abc.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","level1_7taxa_abc.nwk")
 net = readmultinewick(nfile)
-conl1,_ = consensus_level1network(net, minimumblobdegree=3)
-@test writenewick(conl1) == "(a3,(a4,#H2),(a2,(a1,(((c2,(c1,(b1)#H1)),#H1))#H2)));"
-@test [n.fvalue for n in conl1.node if n.hybrid] == [.6, .2]
-@test [n.fvalue for n in conl1.node if !n.leaf && !n.hybrid] == [.4,.6,.6,.6,.6,.4,.4]
-@test [conl1.edge[i].inte1 for i in 8:17] == [-1, 2,2,2,2,2, 1,1,1,1]
-conl1,_ = consensus_level1network(net, minimumblobdegree=3, outgroup="a2")
-@test writenewick(conl1) == "(a2,((a1,(((c2,(c1,(b1)#H1)),#H1))#H2),(a3,(a4,#H2))));"
-@test [n.fvalue for n in conl1.node if !n.leaf] == [.4,.6,-1,.6,.6,.6,.6,.4,.4,.2]
-@test [conl1.edge[i].inte1 for i in 8:18] == [-1,-1, 2,2,2,2,2, 1,1,1,1]
+con,_ = consensus_level1network(net, minimumblobdegree=3) # 2 blobs, 0 bps
+@test writenewick(con) == "(a3,(a4,#H2),(a2,(a1,(((c2,(c1,(b1)#H1)),#H1))#H2)));"
+@test [n.fvalue for n in con.node if n.hybrid] == [.6, .2]
+@test [n.fvalue for n in con.node if !n.leaf && !n.hybrid] == [.4,.6,.6,.6,.6,.4,.4]
+@test [con.edge[i].inte1 for i in 8:17] == [-1, 2,2,2,2,2, 1,1,1,1]
+@test [n.intn1 for n in con.node if !n.leaf] == [1, 2,2,2,2,2, 1,1,1]
+con,_ = consensus_level1network(net, outgroup="a2") # 1 blob, 1 bps
+@test writenewick(con) == "(a2,((a1,((b1,(c1,c2)))#H1),(a3,(a4,#H1))));"
+@test [n.fvalue for n in con.node if !n.leaf] == [-1,.6,-1,-1,.6,.6,.6,.6]
+@test [e.inte1 for e in con.edge if !isexternal(e)] == [-1,-1,-1, 1,1,1,1,1]
+@test [n.intn1 for n in con.node if !n.leaf] == [-1, 1, -1,-1, 1,1,1,1]
+# fixit: test returned data frames
+# fixit: add test when expand_blobcycle re-roots at node to change hedge direction
+# fixit: add test when hedge has weight 0
 end
 
 @testset "blob compatibility filtering, show" begin
