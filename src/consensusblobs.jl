@@ -29,7 +29,9 @@ struct BlobFreq{N,P}
     "frequencies of the different hybrid parts for blobs with this partition"
     hybrid::Dict{Int,Int}
 end
-partitionstring(obj::BlobFreq) = join(join.(findall.(obj.partition),","), "|")
+partitionstring(vv) = join(join.(findall.(vv),","), "|")
+partitionstring(vv, itr) = join(join.([findall(vv[i]) for i in itr],","), "|")
+partitionstring(obj::BlobFreq) = partitionstring(obj.partition)
 Base.show(io::IO, obj::BlobFreq{N,P}) where {N,P} = print(io,
     "BlobFreq on $N taxa, $P blocks " * partitionstring(obj) *
     ", frequency $(freq(obj))" *
@@ -179,9 +181,12 @@ function consensus_treeofblobs(
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
     nnets = length(networks)
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
-    tob, _ = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
-    # fixit: return named tuple with blob support and hybrid support, and test it
-    return tob
+    tob, bn, bei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
+    bdat, odat = blobdata_onToB(blobvec, bn, nnets)
+    hdat = hybriddata_onToB(blobvec, bei, nnets, tob.edge)
+    sdat = nothing # fixit: build split data (non-redundant bipartitions)
+    # fixit: test it output named tuples
+    return tob, bdat, odat, hdat, sdat
 end
 
 """
@@ -1064,6 +1069,48 @@ function update_hybridclusterfrequency!(
     return nothing
 end
 
+function blobdata_onToB(
+    blobparts::Vector{BlobFreq{N}},
+    blobnode::Vector{PN.Node},
+    nnets::Number,
+) where N
+    nB = length(blobparts)
+    @assert nB == length(blobnode)
+    bitr = ((i,blobparts[i]) for i in nB:-1:1) # from most to least frequent blob
+    blob_data = (blob = [i for (i,b) in bitr],
+        degree = [length(b.partition) for (i,b) in bitr],
+        node = [blobnode[i].number for (i,b) in bitr],
+        support_partition = [freq(b)/nnets for (i,b) in bitr],
+        partition = [partitionstring(b) for (i,b) in bitr])
+    itr = ((i,b,co,f) for (i,b) in bitr for (co,f) in b.circorder)
+    co_data = (blob = [x[1] for x in itr],
+        order = [x[3] for x in itr],
+        support_circorder = [x[4]/nnets for x in itr],
+        partition = [partitionstring(b.partition, co) for (i,b,co,f) in itr])
+    return blob_data, co_data
+end
+function hybriddata_onToB(
+    blobparts::Vector{BlobFreq{N}},
+    blobedges::Vector{Vector{Int}},
+    nnets::Number,
+    netedge::Vector{PN.Edge},
+) where N
+    nB = length(blobparts)
+    @assert nB == length(blobedges)
+    bitr = ((i,blobparts[i]) for i in nB:-1:1) # from most to least frequent blob
+    itr = ((i,b,h,f) for (i,b) in bitr for (h,f) in b.hybrid)
+    bnum = [x[1] for x in itr]
+    hedgenum = [blobedges[i][h] for (i,b,h,f) in itr]
+    function e2n(bnum, enum)
+        nn = netedge[enum].node
+        return (nn[1].intn1 == bnum ? nn[1].number : nn[2].number)
+    end
+    hybrid_data = (blob = bnum, edge = hedgenum, node = e2n.(bnum,hedgenum),
+        support_hybrid = [x[4]/nnets for x in itr],
+        cluster = [splitstring(b.partition[h]) for (i,b,h,f) in itr])
+    return hybrid_data
+end
+
 """
     expand_blobcycles!(net, blobnode_vector, edgeblockindices_vector,
         blobpartition_vector, nnets, outgroup=nothing)
@@ -1122,7 +1169,8 @@ function expand_blobcycles!(
         support_circorder = [o_bs[i] for (i,b) in bitr],
         support_hybrid = [h_bs[i] for (i,b) in bitr],
         partition = [partitionstring(b) for (i,b) in bitr])
-    itr = ((i,b,h,f) for (i,b) in bitr for (h,f) in b.hybrid)
+    hybrid_data = hybriddata_onToB(blobparts, blobedges, nnets, net.edge)
+    #=itr = ((i,b,h,f) for (i,b) in bitr for (h,f) in b.hybrid)
     bnum = [x[1] for x in itr]
     hedgenum = [blobedges[i][h] for (i,b,h,f) in itr]
     function e2n(bnum, enum)
@@ -1132,6 +1180,7 @@ function expand_blobcycles!(
     hybrid_data = (blob = bnum, edge = hedgenum, node = e2n.(bnum,hedgenum),
         support_hybrid = [x[4]/nnets for x in itr],
         cluster = [splitstring(b.partition[h]) for (i,b,h,f) in itr])
+    =#
     return blob_data, hybrid_data
 end
 function expand_blobcycleat!(

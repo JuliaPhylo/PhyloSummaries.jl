@@ -107,12 +107,12 @@ blobs, bps = PS.count_blobpartitions(net, taxa, 3)
 @test bps[1].split == (true, true, true, false, false)
 @test PS.freq(bps[1]) == 1
 
-tob = consensus_treeofblobs(net, minimumblobdegree=3)
+tob,_ = consensus_treeofblobs(net, minimumblobdegree=3)
 @test writenewick(tob) == "(d,e,(c,b,a))blob_1;"
 @test [n.fvalue for n in tob.node] ≈ [-1,-1,-1,-1,-1, 2/3, -1]
 @test [e.y for e in tob.edge] ≈ [-1,-1,-1,-1,-1, 1/3]
 
-tob = consensus_treeofblobs(net)
+tob,_ = consensus_treeofblobs(net)
 @test writenewick(tob) == "(d,e,(c,b,a));"
 @test all(n.fvalue == -1 for n in tob.node)
 @test [e.y for e in tob.edge] ≈ [-1,-1,-1,-1,-1, 1]
@@ -122,7 +122,7 @@ end
 # nets 1,2,4,5: same blob AE|B|C|D, same hybrid C, same circular order
 # net 3; blob AD|C|B(hybrid)|E
 net = readnewick.(nwk)
-tob = @test_logs (:warn, r"^non-binary") consensus_treeofblobs(net)
+tob,_ = @test_logs (:warn, r"^non-binary") consensus_treeofblobs(net)
 @test writenewick(tob) == "(A,E,(D,C,B)blob_1);"
 @test tob.node[7].fvalue == 0.8 # blob in 4/5 input nets
 
@@ -141,13 +141,13 @@ for (i,n) in enumerate(net)
 end
 =#
 # consensus tree-of-blobs: star, blob support 60%:
-tob = consensus_treeofblobs(net)
+tob,_ = consensus_treeofblobs(net)
 @test writenewick(tob) == "(t1,t2,t3,t4,t5,t6)blob_1;"
 @test getroot(tob).fvalue == 6/10
-tob = consensus_treeofblobs(net[[2,3,4,9]])
+tob,_ = consensus_treeofblobs(net[[2,3,4,9]])
 @test writenewick(tob) == "(t5,t6,(t4,t3,t2,t1)blob_1);" # blob from nets 4,9
 @test tob.node[8].fvalue == 0.5
-tob = consensus_treeofblobs(net[[4,9,3,2]])
+tob,_ = consensus_treeofblobs(net[[4,9,3,2]])
 @test writenewick(tob) == "(t3,t4,t5,t6,(t2,t1))blob_1;" # blob from nets 2,3
 @test getroot(tob).fvalue == 0.5
 # fixit: make consensus_treeofblobs return a data table, and test it
