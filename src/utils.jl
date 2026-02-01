@@ -1,4 +1,5 @@
 const SplitTuple = NTuple{N,Bool} where N # tuple used to represent a bipartition
+splitstring(obj::SplitTuple) = join(findall(obj),",")
 
 """
     startree(taxa)

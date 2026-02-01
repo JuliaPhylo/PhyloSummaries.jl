@@ -150,7 +150,7 @@ tob = consensus_treeofblobs(net[[2,3,4,9]])
 tob = consensus_treeofblobs(net[[4,9,3,2]])
 @test writenewick(tob) == "(t3,t4,t5,t6,(t2,t1));" # blob from nets 2,3
 @test getroot(tob).fvalue == 0.5
-conl1 = consensus_level1network(net)
+conl1, _ = consensus_level1network(net)
 @test writenewick(conl1) == "(t2,(t4,(t3,(t5,#H1))),(t1,(t6)#H1));"
 # or different ismajor: "(t2,(t4,(t3,(t5,(t6)#H0))),(#H0,t1));"
 @test [e.inte1 for e in conl1.edge] == repeat([-1,1], inner=6)
@@ -158,16 +158,17 @@ conl1 = consensus_level1network(net)
 @test [n.fvalue for n in conl1.node if n.hybrid] == [.5] # hybrid support
 @test getroot(conl1).fvalue == 0.6 # blob support
 @test all(i -> conl1.node[i].fvalue == 0.6, [8,9,10,12]) # circular order support
+# fixit: text returned data frames, here and below
 
 nfile = joinpath(@__DIR__,"..","test","level1_7taxa_abc.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","level1_7taxa_abc.nwk")
 net = readmultinewick(nfile)
-conl1 = consensus_level1network(net, minimumblobdegree=3)
+conl1,_ = consensus_level1network(net, minimumblobdegree=3)
 @test writenewick(conl1) == "(a3,(a4,#H2),(a2,(a1,(((c2,(c1,(b1)#H1)),#H1))#H2)));"
 @test [n.fvalue for n in conl1.node if n.hybrid] == [.6, .2]
 @test [n.fvalue for n in conl1.node if !n.leaf && !n.hybrid] == [.4,.6,.6,.6,.6,.4,.4]
 @test [conl1.edge[i].inte1 for i in 8:17] == [-1, 2,2,2,2,2, 1,1,1,1]
-conl1 = consensus_level1network(net, minimumblobdegree=3, outgroup="a2")
+conl1,_ = consensus_level1network(net, minimumblobdegree=3, outgroup="a2")
 @test writenewick(conl1) == "(a2,((a1,(((c2,(c1,(b1)#H1)),#H1))#H2),(a3,(a4,#H2))));"
 @test [n.fvalue for n in conl1.node if !n.leaf] == [.4,.6,-1,.6,.6,.6,.6,.4,.4,.2]
 @test [conl1.edge[i].inte1 for i in 8:18] == [-1,-1, 2,2,2,2,2, 1,1,1,1]

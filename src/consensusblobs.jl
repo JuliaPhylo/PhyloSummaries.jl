@@ -72,7 +72,7 @@ struct SplitFreq{N}
     "frequency of the bipartition. mutable: use freq and freq! to get/set this value."
     freq::Base.RefValue{Int}
 end
-splitstring(obj::SplitFreq) = join(findall(obj.split),",")
+splitstring(obj::SplitFreq) = splitstring(obj.split)
 Base.show(io::IO, obj::SplitFreq{N}) where {N} = print(io,
     "SplitFreq on $N taxa, taxa in split cluster: " * splitstring(obj) *
     ", frequency: $(freq(obj))")
@@ -179,7 +179,8 @@ function consensus_treeofblobs(
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
     nnets = length(networks)
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
-    tob, _, _ = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
+    tob, _ = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
+    # fixit: return named tuple with blob support and hybrid support, and test it
     return tob
 end
 
@@ -224,8 +225,8 @@ function consensus_level1network(
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
     update_hybridclusterfrequency!(blobvec, hybdict)
     net, bn, bei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, false)
-    expand_blobcycles!(net, bn, bei, blobvec, nnets, outgroup)
-    return net
+    bdat, hdat = expand_blobcycles!(net, bn, bei, blobvec, nnets, outgroup)
+    return net, bdat, hdat, taxa
 end
 
 """
@@ -1082,8 +1083,8 @@ stored in specific nodes' `.fvalue`:
   non-entry tree nodes in the cycle.
 - The weight of a hybrid clade is stored the hybrid node's fvalue.
 
-In each cycle, the edges' `.inte1` is set to a blob identifier (its index
-in the input vectors).
+In each cycle, the edges' `.inte1` and the nodes' `intn1` are set to a
+blob identifier (its index in the input vectors).
 """
 function expand_blobcycles!(
     net::PN.HybridNetwork,
@@ -1103,12 +1104,33 @@ function expand_blobcycles!(
     nnum = Ref(maximum(n.number for n in net.node)+1)
     enum = Ref(maximum(e.number for e in net.edge)+1)
     nB = length(blobnode)
+    o_bs = Vector{Float64}(undef, nB) # order: bootstrap support
+    h_bs = Vector{Float64}(undef, nB) # hybrid: bootstrap support
+    h_num = Vector{Int}(undef, nB) # hybrid: node number
     @assert nB == length(blobedges) == length(blobparts)
     for i in nB:-1:1 # reverse: from highest to lowest frequency
-        expand_blobcycleat!(net, nnum, enum, i,
+        o_bs[i], h_bs[i], h_num[i] = expand_blobcycleat!(net, nnum, enum, i,
             blobnode[i],blobedges[i],blobparts[i], nnets, fixdirection)
     end
-    return nothing
+    blob_data = (blob = collect(1:nB),
+        degree = [length(b.partition) for b in blobparts],
+        node = [n.number for n in blobnode],
+        hybrid = h_num,
+        support_partition = [freq(b)/nnets for b in blobparts],
+        support_circorder = o_bs,
+        support_hybrid = h_bs,
+        partition = [partitionstring(b) for b in blobparts])
+    itr = ((i,b,h,f) for (i,b) in enumerate(blobparts) for (h,f) in b.hybrid)
+    bnum = [x[1] for x in itr]
+    hedgenum = [blobedges[i][h] for (i,b,h,f) in itr]
+    function e2n(bnum, enum)
+        nn = net.edge[enum].node
+        return (nn[1].intn1 == bnum ? nn[1].number : nn[2].number)
+    end
+    hybrid_data = (blob = bnum, edge = hedgenum, node = e2n.(bnum,hedgenum),
+        support_hybrid = [x[4]/nnets for x in itr],
+        cluster = [splitstring(b.partition[h]) for (i,b,h,f) in itr])
+    return blob_data, hybrid_data
 end
 function expand_blobcycleat!(
     net::PN.HybridNetwork,
@@ -1121,9 +1143,6 @@ function expand_blobcycleat!(
     nnets::Number,
     fixdirection::Bool,
 ) where {N,P}
-    #@info "start: expand blob $bnum\nbnode at node $(bnode.number).\ncurrent net: $(writenewick(net))"
-    #printedges(net); printnodes(net)
-    #show(stdout, MIME"text/plain"(), bpart); println()
     # 1. find a taxon block / edge to be the hybrid block
     hblock = argmax(bpart.hybrid) # most frequent hybrid block
     hedge = net.edge[bedges[hblock]]
@@ -1174,6 +1193,7 @@ function expand_blobcycleat!(
             if ishyb_n
                 newnode.name = "H$bnum"
             end
+            newnode.intn1 = bnum
             nnum[] += 1
             PN.removeEdge!(bnode, ee)
             ee.node[findfirst(x -> x === bnode, ee.node)] = newnode
@@ -1182,6 +1202,7 @@ function expand_blobcycleat!(
             newnode = getparent(ee) # created at first iteration
           end
         end
+        newnode.intn1 = bnum
         if !isnothing(neighbor) # last P blocks: create new edge
             ishyb_e = ishyb_n || neighbor.hybrid
             gam = (ishyb_e ? -1.0 : 1.0)
@@ -1202,7 +1223,7 @@ function expand_blobcycleat!(
     if containroot # to update edges' containroot. ischild1 already correct
         PN.traverseDirectEdges!(getparent(hedge), hedge, false)
     end
-    return nothing
+    return circweight, hweight, getparent(hedge).number
 end
 
 """
