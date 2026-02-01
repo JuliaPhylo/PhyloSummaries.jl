@@ -170,14 +170,18 @@ con,_ = consensus_level1network(net, minimumblobdegree=3) # 2 blobs, 0 bps
 @test [n.fvalue for n in con.node if !n.leaf && !n.hybrid] == [.4,.6,.6,.6,.6,.4,.4]
 @test [con.edge[i].inte1 for i in 8:17] == [-1, 2,2,2,2,2, 1,1,1,1]
 @test [n.intn1 for n in con.node if !n.leaf] == [1, 2,2,2,2,2, 1,1,1]
-con,_ = consensus_level1network(net, outgroup="a2") # 1 blob, 1 bps
+con,_ = consensus_level1network(net, outgroup="a2") # 1 blob, 1 bps, hyb edge reversed
 @test writenewick(con) == "(a2,((a1,((b1,(c1,c2)))#H1),(a3,(a4,#H1))));"
 @test [n.fvalue for n in con.node if !n.leaf] == [-1,.6,-1,-1,.6,.6,.6,.6]
 @test [e.inte1 for e in con.edge if !isexternal(e)] == [-1,-1,-1, 1,1,1,1,1]
 @test [n.intn1 for n in con.node if !n.leaf] == [-1, 1, -1,-1, 1,1,1,1]
+con,_ = consensus_level1network(net[1:4], minimumblobdegree=3) # hedge of weight 0
+@test writenewick(con) == "(a3,(a4,#H2),(a2,(a1,((((c1,c2),(b1)#H1),#H1))#H2)));"
+@test [n.fvalue for n in con.node if n.hybrid] == [.5, 0]
+con,_ = consensus_level1network(net[[1,3,4]], minimumblobdegree=3)
+@test writenewick(con) == "(c1,c2,((b1,(((a2,a1),(a4,a3)))#H1),#H1));"
+@test [n.fvalue for n in con.node if n.intn1 ≠ -1] ≈ [1,1,2]./3
 # fixit: test returned data frames
-# fixit: add test when expand_blobcycle re-roots at node to change hedge direction
-# fixit: add test when hedge has weight 0
 end
 
 @testset "blob compatibility filtering, show" begin

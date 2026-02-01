@@ -1162,7 +1162,7 @@ function expand_blobcycleat!(
         hedge = net.edge[bedges[hblock]]
         isparentof(bnode, hedge) || error("blob node with 2 parents?")
     end
-    hweight = bpart.hybrid[hblock]/nnets
+    hweight = get(bpart.hybrid, hblock, 0)/nnets
     # 2. find a block / edge to remain connected to blob node
     if isrootof(bnode, net) # no parent: pick block 1 (or 2)
         pblock = (hblock == 1 ? 2 : 1)
