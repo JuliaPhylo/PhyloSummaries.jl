@@ -47,7 +47,7 @@ function Base.show(io::IO, ::MIME"text/plain", obj::BlobFreq{N,P}) where {N,P}
     print(io, "\nhybrid block => frequency: ")
     show(io, MIME"text/plain"(), obj.hybrid)
 end
-
+blobnodename(i) = "blob_$i"
 
 """
     SplitFreq{N}
@@ -905,9 +905,10 @@ function tree_from_blobpartitions(
     net = startree(taxa) # root numbered -2
     ni = Ref(-3) # internal nodes: numbered -3,-4 etc., as done by readnewick
     ei = Ref(N+1)
-    for bpart in blobparts
+    for (bnum, bpart) in enumerate(blobparts)
         weight = freq(bpart)/nnets
         bn, be = add_blobnode!(net, ni, ei, bpart.partition, weight)
+        bn.name = blobnodename(bnum)
         push!(blobnode, bn)
         push!(blobedges, be)
     end

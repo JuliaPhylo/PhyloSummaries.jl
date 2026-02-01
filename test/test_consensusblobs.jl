@@ -108,7 +108,7 @@ blobs, bps = PS.count_blobpartitions(net, taxa, 3)
 @test PS.freq(bps[1]) == 1
 
 tob = consensus_treeofblobs(net, minimumblobdegree=3)
-@test writenewick(tob) == "(d,e,(c,b,a));"
+@test writenewick(tob) == "(d,e,(c,b,a))blob_1;"
 @test [n.fvalue for n in tob.node] ≈ [-1,-1,-1,-1,-1, 2/3, -1]
 @test [e.y for e in tob.edge] ≈ [-1,-1,-1,-1,-1, 1/3]
 
@@ -123,7 +123,7 @@ end
 # net 3; blob AD|C|B(hybrid)|E
 net = readnewick.(nwk)
 tob = @test_logs (:warn, r"^non-binary") consensus_treeofblobs(net)
-@test writenewick(tob) == "(A,E,(D,C,B));"
+@test writenewick(tob) == "(A,E,(D,C,B)blob_1);"
 @test tob.node[7].fvalue == 0.8 # blob in 4/5 input nets
 
 nfile = joinpath(@__DIR__,"..","test","bootstrapnets_h1.nwk")
@@ -142,17 +142,17 @@ end
 =#
 # consensus tree-of-blobs: star, blob support 60%:
 tob = consensus_treeofblobs(net)
-@test writenewick(tob) == "(t1,t2,t3,t4,t5,t6);"
+@test writenewick(tob) == "(t1,t2,t3,t4,t5,t6)blob_1;"
 @test getroot(tob).fvalue == 6/10
 tob = consensus_treeofblobs(net[[2,3,4,9]])
-@test writenewick(tob) == "(t5,t6,(t4,t3,t2,t1));" # blob from nets 4,9
+@test writenewick(tob) == "(t5,t6,(t4,t3,t2,t1)blob_1);" # blob from nets 4,9
 @test tob.node[8].fvalue == 0.5
 tob = consensus_treeofblobs(net[[4,9,3,2]])
-@test writenewick(tob) == "(t3,t4,t5,t6,(t2,t1));" # blob from nets 2,3
+@test writenewick(tob) == "(t3,t4,t5,t6,(t2,t1))blob_1;" # blob from nets 2,3
 @test getroot(tob).fvalue == 0.5
 # fixit: make consensus_treeofblobs return a data table, and test it
 conl1, _ = consensus_level1network(net)
-@test writenewick(conl1) == "(t2,(t4,(t3,(t5,#H1))),(t1,(t6)#H1));"
+@test writenewick(conl1) == "(t2,(t4,(t3,(t5,#H1))),(t1,(t6)#H1))blob_1;"
 # or different ismajor: "(t2,(t4,(t3,(t5,(t6)#H0))),(#H0,t1));"
 @test [e.inte1 for e in conl1.edge] == repeat([-1,1], inner=6)
 @test all(e -> e.y==-1, conl1.edge)
@@ -165,21 +165,21 @@ nfile = joinpath(@__DIR__,"..","test","level1_7taxa_abc.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","level1_7taxa_abc.nwk")
 net = readmultinewick(nfile)
 con,_ = consensus_level1network(net, minimumblobdegree=3) # 2 blobs, 0 bps
-@test writenewick(con) == "(a3,(a4,#H2),(a2,(a1,(((c2,(c1,(b1)#H1)),#H1))#H2)));"
+@test writenewick(con) == "(a3,(a4,#H2),(a2,(a1,(((c2,(c1,(b1)#H1)),#H1)blob_1)#H2)))blob_2;"
 @test [n.fvalue for n in con.node if n.hybrid] == [.6, .2]
 @test [n.fvalue for n in con.node if !n.leaf && !n.hybrid] == [.4,.6,.6,.6,.6,.4,.4]
 @test [con.edge[i].inte1 for i in 8:17] == [-1, 2,2,2,2,2, 1,1,1,1]
 @test [n.intn1 for n in con.node if !n.leaf] == [1, 2,2,2,2,2, 1,1,1]
 con,_ = consensus_level1network(net, outgroup="a2") # 1 blob, 1 bps, hyb edge reversed
-@test writenewick(con) == "(a2,((a1,((b1,(c1,c2)))#H1),(a3,(a4,#H1))));"
+@test writenewick(con) == "(a2,((a1,((b1,(c1,c2)))#H1),(a3,(a4,#H1)))blob_1);"
 @test [n.fvalue for n in con.node if !n.leaf] == [-1,.6,-1,-1,.6,.6,.6,.6]
 @test [e.inte1 for e in con.edge if !isexternal(e)] == [-1,-1,-1, 1,1,1,1,1]
 @test [n.intn1 for n in con.node if !n.leaf] == [-1, 1, -1,-1, 1,1,1,1]
 con,_ = consensus_level1network(net[1:4], minimumblobdegree=3) # hedge of weight 0
-@test writenewick(con) == "(a3,(a4,#H2),(a2,(a1,((((c1,c2),(b1)#H1),#H1))#H2)));"
+@test writenewick(con) == "(a3,(a4,#H2),(a2,(a1,((((c1,c2),(b1)#H1),#H1)blob_1)#H2)))blob_2;"
 @test [n.fvalue for n in con.node if n.hybrid] == [.5, 0]
 con,_ = consensus_level1network(net[[1,3,4]], minimumblobdegree=3)
-@test writenewick(con) == "(c1,c2,((b1,(((a2,a1),(a4,a3)))#H1),#H1));"
+@test writenewick(con) == "(c1,c2,((b1,(((a2,a1),(a4,a3)))#H1),#H1)blob_1);"
 @test [n.fvalue for n in con.node if n.intn1 ≠ -1] ≈ [1,1,2]./3
 # fixit: test returned data frames
 end
