@@ -179,14 +179,16 @@ function consensus_treeofblobs(
         throw(ArgumentError("minimumblobdegree should be 3 or 4, not $(minimumblobdegree)"))
     taxa = sort(tiplabels(networks[1]))
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
+    hybdict = count_hybridclusters(blobvec) # before filtering
     nnets = length(networks)
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
-    tob, bn, bei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
-    bdat, odat = blobdata_onToB(blobvec, bn, nnets)
-    hdat = hybriddata_onToB(blobvec, bei, nnets, tob.edge)
-    sdat = nothing # fixit: build split data (non-redundant bipartitions)
-    # fixit: test it output named tuples
-    return tob, bdat, odat, hdat, sdat
+    update_hybridclusterfrequency!(blobvec, hybdict)
+    tob, bbn, bbei, bpei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
+    bdat, odat = blobdata_onToB(blobvec, bbn, nnets)
+    hdat = hybriddata_onToB(blobvec, bbei, nnets, tob.edge)
+    sdat = bipartdata_onToB(bpvec, bpei, nnets)
+    return (tob=tob, blob_table=bdat, circorder_table=odat,
+        hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
 
 """
@@ -229,9 +231,11 @@ function consensus_level1network(
     nnets = length(networks)
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
     update_hybridclusterfrequency!(blobvec, hybdict)
-    net, bn, bei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, false)
-    bdat, hdat = expand_blobcycles!(net, bn, bei, blobvec, nnets, outgroup)
-    return net, bdat, hdat, taxa
+    net, bbn, bbei, bpei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, false)
+    bdat, hdat = expand_blobcycles!(net, bbn, bbei, blobvec, nnets, outgroup)
+    sdat = bipartdata_onToB(bpvec, bpei, nnets)
+    return (net=net, blob_table=bdat,
+        hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
 
 """
@@ -874,10 +878,10 @@ and an edge (if not redundant) for each input bipartition.
 This tree should be considered unrooted, in part because blob partitions
 do not have root information (all their taxon blocks are listed).
 
-Output: `(tree, blobnode_vector, edgeblockindices_vector)`
-where the last two components list the nodes (in the tree) corresponding
-to each input blob, and the edges corresponding to each taxon block in
-each input blob.
+Output: `(tree, blobnode_vec, blockedgeindices_vec, bipartedgeindices_vec)`
+where the last 3 components list the nodes (in the tree) corresponding to each
+input blob, the edges corresponding to each taxon block in each input blob, and
+the edges corresponding to each non-redundant bipartition.
 
 A blob's weight is stored in the corresponding node's `.fvalue`.
 A bipartition's weight is stored in the corresponding edge's field `.y`.
@@ -917,12 +921,14 @@ function tree_from_blobpartitions(
         push!(blobnode, bn)
         push!(blobedges, be)
     end
+    bpedges = Int[] # edge indices, one for each bipartition
     for bpart in biparts
         bpart.split[N] && error("bipartition side that contains the last taxon")
         weight = freq(bpart)/nnets
-        add_clusteredge_weight!(net, ni, ei, bpart.split, weight, supportaslength)
+        e = add_clusteredge_weight!(net, ni, ei, bpart.split, weight, supportaslength)
+        push!(bpedges, e.number)
     end
-    return net, blobnode, blobedges
+    return net, blobnode, blobedges, bpedges
 end
 
 """
@@ -932,10 +938,10 @@ Add nodes (numbered `ni` etc.) and edges (numbered `ei` etc.) in `tree`
 to add `blobpartition`, assumed compatible with edges already in `tree`.
 The node index `ni` is decremented, and the edge index `ei` is incremented.
 
-Output: `(n, e)` where
+Output: `(n, ei)` where
 - `n` is the newly created node in `tree` whose removal disconnects the
   taxon set into the input blob partition, and
-- `e` is a vector of edge indices in `tree.edge`: `tree.edge[e[j]]` is
+- `ei` is a vector of edge indices in `tree.edge`: `tree.edge[e[j]]` is
   the edge whose removal disconnects taxon block `j` of `blobpartition`
   from its complement.
 
@@ -1089,6 +1095,7 @@ function blobdata_onToB(
         partition = [partitionstring(b.partition, co) for (i,b,co,f) in itr])
     return blob_data, co_data
 end
+
 function hybriddata_onToB(
     blobparts::Vector{BlobFreq{N}},
     blobedges::Vector{Vector{Int}},
@@ -1105,10 +1112,24 @@ function hybriddata_onToB(
         nn = netedge[enum].node
         return (nn[1].intn1 == bnum ? nn[1].number : nn[2].number)
     end
-    hybrid_data = (blob = bnum, edge = hedgenum, node = e2n.(bnum,hedgenum),
+    hybrid_data = (blob = bnum, node = e2n.(bnum,hedgenum), edge = hedgenum,
         support_hybrid = [x[4]/nnets for x in itr],
         cluster = [splitstring(b.partition[h]) for (i,b,h,f) in itr])
     return hybrid_data
+end
+
+function bipartdata_onToB(
+    biparts::Vector{SplitFreq{N}},
+    blobedges::Vector{Int},
+    nnets::Number,
+) where N
+    nB = length(biparts)
+    @assert nB == length(blobedges)
+    bitr = ((i,biparts[i]) for i in nB:-1:1) # from most to least frequent
+    dat = (edge = [blobedges[i] for (i,b) in bitr],
+    support_nonredundant = [freq(b)/nnets for (i,b) in bitr],
+    cluster = [splitstring(b) for (i,b) in bitr])
+    return dat
 end
 
 """
