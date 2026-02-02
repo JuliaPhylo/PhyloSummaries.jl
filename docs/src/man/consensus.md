@@ -82,3 +82,40 @@ nothing # hide
 ```
 ![majority rule consensus tree](../assets/figures/raxmltree_con.svg)
 
+## consensus tree of blob
+
+Given a set of input phylogenetic networks (which may be trees or not),
+we can obtain a consensus of their "tree of blobs".
+
+For a given network, the tree of blob is obtained by contracting each
+blob (2-edge connected component) in the network into a single node.
+We get a tree, whose edges are exactly the "cut edges" of the network:
+the edges that, when removed from the network, cut it into disconnected
+components.
+
+The example below uses a set of 10 networks from a file that comes with the
+package, all of which have a single reticulation:
+
+```@repl
+netfile = joinpath(dirname(pathof(PhyloSummaries)), "..",
+    "test","bootstrapnets_h1.nwk");
+netsample = readmultinewick(netfile);
+length(netsample) # 10 networks
+netsample[1] # first network. taxa: t1 through t6
+```
+
+Let's look at the first and third, say:
+
+```@example
+R"svg"(figname("bootstrapnets_h1_13.svg"), width=7, height=3) # hide
+R"layout"([1 2])       # hide
+R"par"(mar=[0,0,1,0])  # hide
+plot(netsample[1], showedgelength=true);
+R"mtext"("net 1");     # hide
+plot(netsample[3], showedgelength=true);
+R"mtext"("net 3");
+R"dev.off()"; # hide
+nothing # hide
+```
+![nets 1 & 3, from bootstrapnets_h1](../assets/figures/bootstrapnets_h1_13.svg)
+
