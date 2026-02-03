@@ -38,13 +38,13 @@ end
 
 @testset "utilities" begin
 t = PS.startree(["t1","t2","t3"])
-ni = Ref(-30); ei = Ref(4)
+ni = Ref(30); ei = Ref(4)
 ne = @test_logs (:warn, r"^will skip trivial clade") PS.add_clusteredge!(t,ni,ei,(true,true,true),10,false)
 @test isnothing(ne)
 ne = @test_logs (:warn, r"^clade already in tree") PS.add_clusteredge!(t,ni,ei,(true,false,false),10,false)
 @test isnothing(ne)
 ne = PS.add_clusteredge!(t,ni,ei,(true,true,false),10,false)
-@test getchild(ne).number == -30
+@test getchild(ne).number == 30
 @test t.edge[4].y == 10
 ## only warning from an incompatible cluster:
 # PS.add_clusteredge!(t,ni,ei,(false,true,true),0,false)
@@ -67,21 +67,22 @@ end
 # 4 taxa, 5 trees, missing edge lengths
 trees = [tree2,tree3,tree1,tree4,tree5]
 con = consensustree(trees; rooted=true, proportion=0.8)
-writenewick(con) == "(A,B,C,D);"
+@test writenewick(con, internallabel=false) == "(A,B,C,D);"
 con = consensustree(trees; proportion=0.7)
-writenewick(con,round=true,support=true) == "(C,D,(B,A)::0.8);"
+@test writenewick(con,round=true,support=true,internallabel=false) == "(C,D,(B,A)::0.8);"
 con = consensustree(trees; rooted=true, supportaslength=true) # greedy
-@test writenewick(con,round=true) == "((D,C):0.4,(B,A):0.8);"
+@test writenewick(con,round=true) == "((D,C)_6:0.4,(B,A)_7:0.8)_5;"
 @test all(n.fvalue == -1 for n in con.node)
 @test [e.y for e in con.edge if !isexternal(e)] == [.4,.8]
 
 tfile = joinpath(@__DIR__,"..","test","raxmltrees.tre")
 # tfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","raxmltrees.tre")
 trees = readmultinewick(tfile)
-@test writenewick(consensustree(trees, proportion=1)) == "(A,B,E,O,(D,C));"
-@test writenewick(consensustree(trees),round=true,support=true) == "(E,O,((A,B)::0.833,(C,D)::1.0)::0.533);"
+@test writenewick(consensustree(trees, proportion=1)) == "(A,B,E,O,(D,C)_8)_7;"
+@test writenewick(consensustree(trees),round=true,support=true,
+    internallabel=false) == "(E,O,((A,B)::0.833,(C,D)::1.0)::0.533);"
 con = consensustree(trees; rooted=true, supportaslength=true)
-@test writenewick(con, round=true) == "((O,E):0.033,((A,B):0.767,(C,D):1.0):0.5);"
+@test writenewick(con, round=true) == "((O,E)_8:0.033,((A,B)_10:0.767,(C,D)_11:1.0)_9:0.5)_7;"
 #=
 checked correctness with ape::consensus
 ```r

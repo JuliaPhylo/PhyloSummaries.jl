@@ -289,7 +289,7 @@ function tree_from_bipartitions(
 )
     n = length(taxa)
     net = startree(taxa)
-    ni = Ref(-3) # internal nodes: numbered -3,-4 etc., as done by readnewick
+    ni = Ref(n+2) # leaves: 1:n, root n+1. next: n+2
     ei = Ref(n+1)
     for (bv,weight) in pairs(bipartitions)
         add_clusteredge!(net, ni, ei, bv, weight/ntrees, supportaslength)
@@ -406,7 +406,8 @@ To be called after _lca_newcluster()
 =#
 @inline function _resolveclade_belowlca(net, lca,ci, ni,ei, wgt, supportaslength)
     newnode = PN.Node(ni[],false)
-    ni[] -= 1
+    newnode.name = "_$(ni[])"
+    ni[] += 1
     # new edge: store clade support in .y, and as edge length if desired
     elen = (supportaslength ? wgt : -1.0)
     newe = PN.Edge(ei[],elen,false,wgt,-1.0,1.0, # z=-1, gamma=1

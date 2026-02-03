@@ -49,7 +49,8 @@ function Base.show(io::IO, ::MIME"text/plain", obj::BlobFreq{N,P}) where {N,P}
     print(io, "\nhybrid block => frequency: ")
     show(io, MIME"text/plain"(), obj.hybrid)
 end
-blobnodename(i) = "blob_$i"
+
+blobnodename(i) = "_blob$i"
 
 """
     SplitFreq{N}
@@ -175,8 +176,8 @@ function consensus_treeofblobs(
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot get a consensus"))
-    minimumblobdegree ∈ (3,4) ||
-        throw(ArgumentError("minimumblobdegree should be 3 or 4, not $(minimumblobdegree)"))
+    minimumblobdegree ≥ 3 ||
+        throw(ArgumentError("minimumblobdegree should be 3 or higher, not $(minimumblobdegree)"))
     taxa = sort(tiplabels(networks[1]))
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
     hybdict = count_hybridclusters(blobvec) # before filtering
@@ -221,8 +222,8 @@ function consensus_level1network(
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot get a consensus"))
-    minimumblobdegree ∈ (3,4) ||
-        throw(ArgumentError("minimumblobdegree should be 3 or 4, not $(minimumblobdegree)"))
+    minimumblobdegree ≥ 3 ||
+        throw(ArgumentError("minimumblobdegree should be 3 or higher, not $(minimumblobdegree)"))
     taxa = sort(tiplabels(networks[1]))
     isnothing(outgroup) || outgroup ∈ taxa || # early problem detection
         error("outgroup $outgroup is not in the taxon list: $taxa")
@@ -911,13 +912,13 @@ function tree_from_blobpartitions(
     N == length(taxa) || error("N ($N) != number of taxa $(length(taxa))")
     blobnode = PN.Node[]
     blobedges = Vector{Int}[] # edge indices, one for each taxon block
-    net = startree(taxa) # root numbered -2
-    ni = Ref(-3) # internal nodes: numbered -3,-4 etc., as done by readnewick
+    net = startree(taxa) # leaves numbered 1:N and root numbered N+1
+    ni = Ref(N+2)
     ei = Ref(N+1)
     for (bnum, bpart) in enumerate(blobparts)
         weight = freq(bpart)/nnets
         bn, be = add_blobnode!(net, ni, ei, bpart.partition, weight)
-        bn.name = blobnodename(bnum)
+        bn.name *= blobnodename(bnum) # append: keep info about node number
         push!(blobnode, bn)
         push!(blobedges, be)
     end
@@ -1262,9 +1263,7 @@ function expand_blobcycleat!(
           if isnothing(neighbor) || ii!=1 # first P blocks: create new node
             newnode = PN.Node(nnum[], false, ishyb_n,
                 (ishyb_n ? hweight : circweight), [ee]) # fvalue, edge
-            if ishyb_n
-                newnode.name = "H$bnum"
-            end
+            newnode.name = (ishyb_n ? "H$bnum" : "_$(nnum[])")
             newnode.intn1 = bnum
             nnum[] += 1
             PN.removeEdge!(bnode, ee)

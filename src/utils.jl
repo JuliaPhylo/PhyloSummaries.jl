@@ -2,18 +2,47 @@ const SplitTuple = NTuple{N,Bool} where N # tuple used to represent a bipartitio
 splitstring(obj::SplitTuple) = join(findall(obj),",")
 
 """
+    check_nonnumericnames(taxa)
+
+Check that the vector of `taxa` contains names that do not start with "_"
+followed by a positive integer, such as "_12".
+The exception is that the ith taxon `taxa[i]` is allowed to be "_i".
+
+Output: `nothing` if the conditions are met, otherwise the first index
+`i` such that `taxa[i]` is `_n` with `n` ≠ `i`.
+"""
+function check_nonnumericnames(taxa::AbstractVector{<:AbstractString})
+    r = r"^_([1-9]\d*)$"
+    i_bad = nothing
+    for (i,label) in enumerate(taxa)
+        m = match(r, label)
+        (isnothing(m) || tryparse(Int, m.captures[1]) == i) && continue
+        i_bad = i
+        break
+    end
+    return i_bad
+end
+
+"""
     startree(taxa)
 
 Star tree `t` such that `t.node` lists all leaves named after the N `taxa`
 in that order: for `i` in 1 through N: node `n = t.node[i]` has `n.number = i`
 and `n.name = taxa[i]`.
 It is incident to edge `e = t.edge[i]` which has `e.number = i`.
-The root node is last, `t.node[N+1]`, and has number `-2`.
+The root node is last, `t.node[N+1]`, has number `N+1` and name "_`N+1`".
 """
 function startree(taxa::Vector{String})
+    i = check_nonnumericnames(taxa)
+    isnothing(i) ||
+        error("""taxon names need be non-numeric (or ith taxon should be "i").
+        $(i)th taxon is $(taxa[i]).
+        Numeric names will be used for internal node labels here.""")
     net = PN.HybridNetwork()
-    root = PN.Node(-2,false) # root has number -2
-    # push leaves first, numbered 1:n. we will have taxa[i] = label of net.node[i]
+    ntax = length(taxa)
+    root = PN.Node(ntax+1, false) # root has number N+1
+    root.name = "_$(ntax+1)"
+    # push leaves first, numbered 1:N. we will have taxa[i] = label of net.node[i]
     for (i,t) in enumerate(taxa)
         edge = PN.Edge(i,-1.0) # ischild1 is true by default. length=-1 for NA
         leaf = PN.Node(i,true,false, # true: leaf
@@ -24,7 +53,7 @@ function startree(taxa::Vector{String})
         push!(root.edge, edge)
     end
     PN.pushNode!(net, root)
-    net.rooti = length(taxa) + 1 # n leaves listed first, root listed next in net.node
+    net.rooti = ntax + 1 # N leaves listed first, root listed next in net.node
     return net
 end
 
