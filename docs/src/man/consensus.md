@@ -119,3 +119,24 @@ nothing # hide
 ```
 ![nets 1 & 3, from bootstrapnets_h1](../assets/figures/bootstrapnets_h1_13.svg)
 
+
+fixit: write this tutorial.
+The code below only shows the basic workflow.
+The tutorial should use this workflow, but piece by piece,
+explaining what is being done, and interpreting the output.
+
+```@repl
+res = consensus_treeofblobs(netsample);
+keys(res)
+tree = res[:tob]
+writenewick(tree, internallabel=false) # star tree! 1 big blob
+plot(tree, shownodenumber=true, showedgenumber=true, tipoffset=0.2);
+```
+
+```@repl
+using DataFrames
+res[:taxa]
+blb_df = DataFrame(res[:blob_table], copycols=false) # use same columns in memory
+bip_df = DataFrame(res[:bipartition_table], copycols=false)
+hyb_df = DataFrame(res[:hybrid_table], copycols=false)
+```
