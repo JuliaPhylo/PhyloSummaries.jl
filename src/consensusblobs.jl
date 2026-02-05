@@ -186,8 +186,8 @@ function consensus_treeofblobs(
     update_hybridclusterfrequency!(blobvec, hybdict)
     tob, bbn, bbei, bpei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
     bdat, odat = blobdata_onToB(blobvec, bbn, nnets)
-    hdat = hybriddata_onToB(blobvec, bbei, nnets, tob.edge)
-    sdat = bipartdata_onToB(bpvec, bpei, nnets)
+    hdat = hybriddata_onToB(blobvec, bbn, bbei, nnets, tob.edge)
+    sdat = bipartdata_onToB(bpvec, bpei, nnets, tob.edge)
     return (tob=tob, blob_table=bdat, circorder_table=odat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
@@ -234,7 +234,7 @@ function consensus_level1network(
     update_hybridclusterfrequency!(blobvec, hybdict)
     net, bbn, bbei, bpei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, false)
     bdat, hdat = expand_blobcycles!(net, bbn, bbei, blobvec, nnets, outgroup)
-    sdat = bipartdata_onToB(bpvec, bpei, nnets)
+    sdat = bipartdata_onToB(bpvec, bpei, nnets, net.edge)
     return (net=net, blob_table=bdat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
@@ -680,7 +680,7 @@ function blobtaxonsetpartition!(
     end
     return nothing
 end
-#Tstore the edge that connects blobs we dont count
+
 """
     count_nonredundantbipartitions!(bipart_vec, blobdegree, net, ...)
 
@@ -1099,6 +1099,7 @@ end
 
 function hybriddata_onToB(
     blobparts::Vector{BlobFreq{N}},
+    blobnode::Vector{PN.Node},
     blobedges::Vector{Vector{Int}},
     nnets::Number,
     netedge::Vector{PN.Edge},
@@ -1109,11 +1110,16 @@ function hybriddata_onToB(
     itr = ((i,b,h,f) for (i,b) in bitr for (h,f) in b.hybrid)
     bnum = [x[1] for x in itr]
     hedgenum = [blobedges[i][h] for (i,b,h,f) in itr]
-    function e2n(bnum, enum)
-        nn = netedge[enum].node
-        return (nn[1].intn1 == bnum ? nn[1].number : nn[2].number)
+    nE = length(hedgenum)
+    pnum = Vector{Int}(undef, nE) # parent & child node numbers: if
+    cnum = Vector{Int}(undef, nE) # edge directed p-->c -> hybrid clade
+    for (j,bi,ei) in zip(1:nE, bnum, hedgenum)
+        nn = netedge[ei].node
+        from1 = nn[1] === blobnode[bi] || nn[1].intn1 == bi # .intn1 not set for ToB
+        pnum[j] = nn[(from1 ? 1 : 2)].number
+        cnum[j] = nn[(from1 ? 2 : 1)].number
     end
-    hybrid_data = (blob = bnum, node = e2n.(bnum,hedgenum), edge = hedgenum,
+    hybrid_data = (blob = bnum, node_from = pnum, node_to = cnum, edge = hedgenum,
         support_hybrid = [x[4]/nnets for x in itr],
         cluster = [splitstring(b.partition[h]) for (i,b,h,f) in itr])
     return hybrid_data
@@ -1121,15 +1127,24 @@ end
 
 function bipartdata_onToB(
     biparts::Vector{SplitFreq{N}},
-    blobedges::Vector{Int},
+    biedges::Vector{Int},
     nnets::Number,
+    netedge::Vector{PN.Edge},
 ) where N
     nB = length(biparts)
-    @assert nB == length(blobedges)
+    @assert nB == length(biedges)
     bitr = ((i,biparts[i]) for i in nB:-1:1) # from most to least frequent
-    dat = (edge = [blobedges[i] for (i,b) in bitr],
-    support_nonredundant = [freq(b)/nnets for (i,b) in bitr],
-    cluster = [splitstring(b) for (i,b) in bitr])
+    enum = [biedges[i] for (i,b) in bitr]
+    pnum = Vector{Int}(undef, length(enum)) # parent & child node numbers
+    cnum = Vector{Int}(undef, length(enum))
+    for i in nB:-1:1
+        ee = netedge[enum[i]]
+        pnum[i] = getparent(ee).number
+        cnum[i] = getchild(ee).number
+    end
+    dat = (node1 = pnum, node2 = cnum, edge = enum,
+        support_nonredundant = [freq(b)/nnets for (i,b) in bitr],
+        cluster = [splitstring(b) for (i,b) in bitr])
     return dat
 end
 
@@ -1183,6 +1198,9 @@ function expand_blobcycles!(
         o_bs[i], h_bs[i], h_num[i] = expand_blobcycleat!(net, nnum, enum, i,
             blobnode[i],blobedges[i],b, nnets, fixdirection)
     end
+    hblock(i) = findfirst(isequal(getchildedge(net.node[h_num[i]]).number), blobedges[i])
+    # hblock(i) should never be 'nothing'
+    # hcluster(i,b) = begin k = hblock(i); (isnothing(k) ? "" : splitstring(b.partition[k])); end
     blob_data = (blob = [i for (i,b) in bitr],
         degree = [length(b.partition) for (i,b) in bitr],
         node = [blobnode[i].number for (i,b) in bitr],
@@ -1190,19 +1208,10 @@ function expand_blobcycles!(
         support_partition = [freq(b)/nnets for (i,b) in bitr],
         support_circorder = [o_bs[i] for (i,b) in bitr],
         support_hybrid = [h_bs[i] for (i,b) in bitr],
-        partition = [partitionstring(b) for (i,b) in bitr])
-    hybrid_data = hybriddata_onToB(blobparts, blobedges, nnets, net.edge)
-    #=itr = ((i,b,h,f) for (i,b) in bitr for (h,f) in b.hybrid)
-    bnum = [x[1] for x in itr]
-    hedgenum = [blobedges[i][h] for (i,b,h,f) in itr]
-    function e2n(bnum, enum)
-        nn = net.edge[enum].node
-        return (nn[1].intn1 == bnum ? nn[1].number : nn[2].number)
-    end
-    hybrid_data = (blob = bnum, edge = hedgenum, node = e2n.(bnum,hedgenum),
-        support_hybrid = [x[4]/nnets for x in itr],
-        cluster = [splitstring(b.partition[h]) for (i,b,h,f) in itr])
-    =#
+        partition = [partitionstring(b) for (i,b) in bitr],
+        hybrid_cluster = [splitstring(b.partition[hblock(i)]) for (i,b) in bitr],
+    )
+    hybrid_data = hybriddata_onToB(blobparts, blobnode, blobedges, nnets, net.edge)
     return blob_data, hybrid_data
 end
 function expand_blobcycleat!(
