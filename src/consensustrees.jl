@@ -102,9 +102,8 @@ function consensustree(
     ntrees = length(trees)
     consensus_bipartitions!(splitcounts, proportion, ntrees)
     tree = tree_from_bipartitions(taxa, splitcounts, ntrees, supportaslength)
-    #clear names of internal nodes
-    for n in tree.node
-        if !n.leaf
+    for n in tree.node # clear internal non-hybrid node names
+        if !n.leaf && !n.hybrid
             n.name = ""
         end
     end
