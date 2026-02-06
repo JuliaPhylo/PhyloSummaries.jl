@@ -134,9 +134,11 @@ If A or B is given as a single cluster, it is considered as unrooted, as one
 part of the bipartition (A,Aᶜ) or (B, Bᶜ) where Aᶜ denotes the complement of A.
 """
 function blobcompatible(
-    A::NTuple{Ka, NTuple{N,Bool}},
-    B::NTuple{Kb, NTuple{N,Bool}}
-) where {N, Ka, Kb}
+    A::AbstractVector{NTuple{N,Bool}},
+    B::AbstractVector{NTuple{N,Bool}}
+) where N
+    Ka = length(A)
+    Kb = length(B)
     if Ka == 0 # a partition must have at least 1 part, assuming N > 0
         ArgumentError("$Ka parts in partition A")
     end
@@ -163,9 +165,9 @@ end
 
 function splitblobcompatible(
     split::NTuple{N,Bool},
-    B::NTuple{Kb, NTuple{N,Bool}}
-) where {N, Kb}
+    B::AbstractVector{NTuple{N,Bool}}
+) where N
     splitcomplement = ntuple(i -> !split[i], N)
-    A = (split, splitcomplement)
+    A = [split, splitcomplement]
     return blobcompatible(A, B)
 end

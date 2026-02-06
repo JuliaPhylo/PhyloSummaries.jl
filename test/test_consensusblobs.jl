@@ -15,19 +15,19 @@ nwk = [ # some rooted, some unrooted
 end
 
 @testset "blobcompatible" begin
-    A = ((true,true,false,false,false),   # {A,B}
+    A = [(true,true,false,false,false),   # {A,B}
          (false,false,true,false,false),  # {C}
-         (false,false,false,true,true))   # {D,E}
+         (false,false,false,true,true)]   # {D,E}
     B =  (true,true,true,false,false)     # ABC, not DE
     @test PS.splitblobcompatible(B, A)
-    A2 = ((true,true,true,false,false,false),  # {A,B,C}
-          (false,false,false,true,true,true))  # {D,E,F}
-    B2 = ((true,false,false,true,false,false), # {A,D}
+    A2 = [(true,true,true,false,false,false),  # {A,B,C}
+          (false,false,false,true,true,true)]  # {D,E,F}
+    B2 = [(true,false,false,true,false,false), # {A,D}
           (false,true,false,false,true,false), # {B,E}
-          (false,false,true,false,false,true)) # {C,F}
+          (false,false,true,false,false,true)] # {C,F}
     @test !PS.blobcompatible(A2, B2)
-    A2 = (B2[1], B2[2], # AD|BE|C|F
-          (false,false,true,false,false,false), (false,false,false,false,false,true))
+    A2 = [B2[1], B2[2], # AD|BE|C|F
+          (false,false,true,false,false,false), (false,false,false,false,false,true)]
     @test !PS.blobcompatible(A2, B2) # tree-compatible, but not blob-compatible
 end
 
@@ -36,8 +36,8 @@ taxa = ["D","C","B","A","E"] # not what consensusblob would use
 net = readnewick.(nwk)
 blobs, bps = @test_logs (:warn, r"^non-binary articulation") PS.count_blobpartitions(net, taxa, 4)
 @test [b.partition for b in blobs] == [
- ((0,0,0,1,1), (0,0,1,0,0), (0,1,0,0,0), (1,0,0,0,0)),
- ((1,0,0,1,0), (0,1,0,0,0), (0,0,1,0,0), (0,0,0,0,1)) ]
+ [(0,0,0,1,1), (0,0,1,0,0), (0,1,0,0,0), (1,0,0,0,0)],
+ [(1,0,0,1,0), (0,1,0,0,0), (0,0,1,0,0), (0,0,0,0,1)] ]
 @test [PS.freq(b) for b in blobs] == [4,1]
 @test [b.circorder for b in blobs] == [Dict((1,2,3,4)=>4), Dict((1,2,3,4)=>1)]
 @test [b.hybrid for b in blobs] == [Dict(2=>2, 3=>2), Dict(3=>1)]
@@ -70,8 +70,8 @@ bb, bp = PS.count_blobpartitions(net, taxa, 4)
 @test [x.split for x in bp] == [(0,1,1,0,0,0,0,0), (1,1,0,0,0,0,0,0)]
 @test [PS.freq(x) for x in bp] == [4,1]
 @test [x.partition for x in bb] == [
-  ((0,0,0,0,1,0,0,0),(0,0,0,1,0,0,0,0),(0,0,0,0,0,1,0,0),
-   (0,0,0,0,0,0,1,0),(0,0,0,0,0,0,0,1),(1,1,1,0,0,0,0,0))]
+  [(0,0,0,0,1,0,0,0),(0,0,0,1,0,0,0,0),(0,0,0,0,0,1,0,0),
+   (0,0,0,0,0,0,1,0),(0,0,0,0,0,0,0,1),(1,1,1,0,0,0,0,0)]]
 @test isempty(bb[1].circorder)
 @test bb[1].hybrid == Dict( # 6 total in only 5 networks because one has 2 hybrids
   3 => 5,  # h hybrid in all 5 nets,
@@ -100,7 +100,7 @@ blobs, bps = PS.count_blobpartitions(net, taxa, 4)
 @test PS.freq(bps[1]) == 3
 blobs, bps = PS.count_blobpartitions(net, taxa, 3)
 @test length(blobs) == 1
-@test blobs[1].partition == ((1,1,1,0,0),(0,0,0,0,1),(0,0,0,1,0))
+@test blobs[1].partition == [(1,1,1,0,0),(0,0,0,0,1),(0,0,0,1,0)]
 @test PS.freq(blobs[1]) == 2
 @test blobs[1].hybrid == Dict(2 => 2)
 @test blobs[1].circorder == Dict((1,2,3) => 2)

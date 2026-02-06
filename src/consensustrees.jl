@@ -101,7 +101,14 @@ function consensustree(
     end
     ntrees = length(trees)
     consensus_bipartitions!(splitcounts, proportion, ntrees)
-    return tree_from_bipartitions(taxa, splitcounts, ntrees, supportaslength)
+    tree = tree_from_bipartitions(taxa, splitcounts, ntrees, supportaslength)
+    #clear names of internal nodes
+    for n in tree.node
+        if !n.leaf
+            n.name = ""
+        end
+    end
+    return tree
 end
 
 """

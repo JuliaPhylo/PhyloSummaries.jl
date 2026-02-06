@@ -71,18 +71,18 @@ con = consensustree(trees; rooted=true, proportion=0.8)
 con = consensustree(trees; proportion=0.7)
 @test writenewick(con,round=true,support=true,internallabel=false) == "(C,D,(B,A)::0.8);"
 con = consensustree(trees; rooted=true, supportaslength=true) # greedy
-@test writenewick(con,round=true) == "((D,C)_6:0.4,(B,A)_7:0.8)_5;"
+@test writenewick(con,round=true) == "((D,C):0.4,(B,A):0.8);"
 @test all(n.fvalue == -1 for n in con.node)
 @test [e.y for e in con.edge if !isexternal(e)] == [.4,.8]
 
 tfile = joinpath(@__DIR__,"..","test","raxmltrees.tre")
 # tfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","raxmltrees.tre")
 trees = readmultinewick(tfile)
-@test writenewick(consensustree(trees, proportion=1)) == "(A,B,E,O,(D,C)_8)_7;"
+@test writenewick(consensustree(trees, proportion=1)) == "(A,B,E,O,(D,C));"
 @test writenewick(consensustree(trees),round=true,support=true,
     internallabel=false) == "(E,O,((A,B)::0.833,(C,D)::1.0)::0.533);"
 con = consensustree(trees; rooted=true, supportaslength=true)
-@test writenewick(con, round=true) == "((O,E)_8:0.033,((A,B)_10:0.767,(C,D)_11:1.0)_9:0.5)_7;"
+@test writenewick(con, round=true) == "((O,E):0.033,((A,B):0.767,(C,D):1.0):0.5);"
 #=
 checked correctness with ape::consensus
 ```r

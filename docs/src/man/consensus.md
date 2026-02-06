@@ -1,6 +1,7 @@
 ```@meta
 ShareDefaultModule = true
 ```
+
 ```@setup
 using PhyloSummaries
 using PhyloPlots, RCall # not below because it would generate "precompiling..." output
@@ -46,6 +47,7 @@ R"mtext"("tree 2")
 R"dev.off()"; # hide
 nothing # hide
 ```
+
 ![trees 1-2, from raxml.tre](../assets/figures/raxmltree_12.svg)
 
 By default, we get the greedy consensus tree of our input trees,
@@ -69,7 +71,7 @@ esup = DataFrame(
 ecol = Dict(r[:number] => (r[:support] < 70 ? "orange2" : "black") for r in eachrow(esup))
 ```
 
-```@example
+```@repl
 R"svg"(figname("raxmltree_con.svg"), width=7, height=3) # hide
 R"layout"([1 2])  # hide
 R"par"(mar=[0,0,1,0])  # hide
@@ -80,6 +82,7 @@ R"mtext"("support: % input trees", line=0)
 R"dev.off()"; # hide
 nothing # hide
 ```
+
 ![majority rule consensus tree](../assets/figures/raxmltree_con.svg)
 
 ## consensus tree of blob
@@ -117,8 +120,8 @@ R"mtext"("net 3");
 R"dev.off()"; # hide
 nothing # hide
 ```
-![nets 1 & 3, from bootstrapnets_h1](../assets/figures/bootstrapnets_h1_13.svg)
 
+![nets 1 & 3, from bootstrapnets_h1](../assets/figures/bootstrapnets_h1_13.svg)
 
 fixit: write this tutorial.
 The code below only shows the basic workflow.

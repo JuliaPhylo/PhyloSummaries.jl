@@ -12,16 +12,16 @@ and taxon blocks whose parent in the blob is a hybrid node.
   if taxon number `i` is in or out of this part.
 - Different blobs with the same partition can have different circular orders
   of their taxon blocks. A blob does not necessarily admits a circular order.
-- For each part in the partition, this part is a "hybrid" for this blob if it is
+- For each part in the partition, this part is a \"hybrid\" for this blob if it is
   adjacent to the blob at a hybrid node.
 
 `P` is the number of parts (taxon blocks) in the partition; 3 or more.
 `N` is the number of leaves (taxa) in the network. 3 or more.
 """
 struct BlobFreq{N,P}
-    """blob partition: P parts, each described as a tuple of of size N
+    """blob partition: P parts, each described as a tuple of size N
     (an immutable type, so partitions can be keys in sets or dictionaries)"""
-    partition::NTuple{P,NTuple{N,Bool}}
+    partition::Vector{NTuple{N,Bool}}
     "frequency of the blob partition. mutable: use freq and freq! to get/set this value."
     freq::Base.RefValue{Int}
     "frequencies of the different circular orders for blobs with this partition"
@@ -400,7 +400,7 @@ function count_blobpartitions!(
             cofreq = Dict{NTuple{nparts,Int},Int}()
         end
         hybmap = Dict(hybrids[1] => 1)
-        newblob = BlobFreq{N,nparts}(Tuple(splits), Ref(1), cofreq, hybmap)
+        newblob = BlobFreq{N,nparts}(splits, Ref(1), cofreq, hybmap)
         push!(blobvec, newblob)
     else # existing blob: increment frequencies of canonical partition slots
         bf = blobvec[matchidx]
@@ -968,9 +968,10 @@ function add_blobnode!(
     net::PN.HybridNetwork,
     ni::Base.RefValue{Int},
     ei::Base.RefValue{Int},
-    blobpartition::NTuple{P,NTuple{N,Bool}},
+    blobpartition::Vector{NTuple{N,Bool}},
     weight::Number,
-) where {P,N} # 2026-01: Aqua has a problem with this. "Unbound type parameters"
+) where N
+    P = length(blobpartition)
     bei = Vector{Int}(undef, P) # blob edge indices
     # 1. create (or find) blob node: its clade is the complement of the
     #    taxon block containing the outgroup (last taxon N)
