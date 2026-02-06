@@ -116,7 +116,7 @@ tob = res[:tob]
 @test [n.fvalue for n in tob.node] ≈ [-1,-1,-1,-1,-1, 2/3, -1]
 @test [e.y for e in tob.edge] ≈ [-1,-1,-1,-1,-1, 1/3]
 @test res[:blob_table] == (blob=[1], degree=[3], node=[6],
-  support_partition=[2/3], partition = ["1,2,3|5|4"])
+  support_partition=[2/3], partition_num =["1,2,3|5|4"], partition =["a,b,c|e|d"])
 @test res[:hybrid_table] == (blob=[1], node_from=[6], node_to=[5], edge=[5],
   support_hybrid = [2/3], cluster = ["5"])
 @test res[:bipartition_table] == (node1=[6], node2=[7], edge=[6],
@@ -136,7 +136,8 @@ res = @test_logs (:warn, r"^non-binary") consensus_treeofblobs(net)
 tob = res[:tob]
 @test writenewick(tob) == "(A,E,(D,C,B)_7_blob1)_6;"
 @test tob.node[7].fvalue == 0.8 # blob in 4/5 input nets
-@test res[:circorder_table] == (blob=[1], order=[(1,2,3,4)], support_circorder=[0.8], partition=["1,5|2|3|4"])
+@test res[:circorder_table] == (blob=[1], order=[(1,2,3,4)], support_circorder=[0.8],
+  partition_num = ["1,5|2|3|4"], partition = ["A,E|B|C|D"])
 @test res[:hybrid_table] == (blob=[1,1], node_from=[7,7], node_to=[2,3], edge=[2,3],
   support_hybrid=[.6,.4], cluster=["2","3"])
 
@@ -178,7 +179,9 @@ con = res[:net]
 @test res[:taxa] == ["t1","t2","t3","t4","t5","t6"]
 @test res[:blob_table] == (blob=[1], degree=[6], node=[7], hybrid=[11],
   support_partition=[0.6], support_circorder=[0.6], support_hybrid=[0.5],
-  partition = ["2|4|3|5|6|1"], hybrid_cluster=["6"])
+  partition_num = ["2|4|3|5|6|1"], hybrid_cluster_num=["6"],
+  partition = ["t2|t4|t3|t5|t6|t1"],
+)
 @test res[:hybrid_table] == (blob=[1,1], node_from=[11,12], node_to=[6,1], edge=[6,1],
   support_hybrid=[0.5,0.1], cluster=["6","1"])
 @test all(isempty(x) for x in res[:bipartition_table])
@@ -196,7 +199,10 @@ con = res[:net]
 @test [n.intn1 for n in con.node if !n.leaf] == [1, 2,2,2,2,2, 1,1,1]
 @test res[:blob_table] == (blob=[2,1], degree=[5,4], node=[9,8], hybrid=[11,16],
   support_partition=[.6,.4], support_circorder=[.6,.4], support_hybrid=[.6,.2],
-  partition = ["3|4|5,6,7|1|2", "6|7|1,2,3,4|5"], hybrid_cluster=["5,6,7","5"])
+  partition_num = ["3|4|5,6,7|1|2", "6|7|1,2,3,4|5"],
+  hybrid_cluster_num = ["5,6,7","5"],
+  partition = ["a3|a4|b1,c1,c2|a1|a2", "c1|c2|a1,a2,a3,a4|b1"],
+)
 @test res[:hybrid_table] == (blob=[2,1,1], node_from=[11,16,8], node_to=[8,5,11], edge=[8,5,8],
   support_hybrid=[.6,.2,.4], cluster=["5,6,7", "5", "1,2,3,4"])
 @test all(isempty(x) for x in res[:bipartition_table])
@@ -216,7 +222,9 @@ con = res[:net]
 @test [n.fvalue for n in con.node if n.hybrid] == [.5, 0]
 @test res[:blob_table] == (blob=[2,1], degree=[5,3], node=[10,9], hybrid=[12,15],
   support_partition = [.5,.25], support_circorder=[.5,.25], support_hybrid=[.5,0],
-  partition = ["3|4|5,6,7|1|2", "5|6,7|1,2,3,4"], hybrid_cluster = ["5,6,7", "5"])
+  partition_num = ["3|4|5,6,7|1|2", "5|6,7|1,2,3,4"], hybrid_cluster_num = ["5,6,7", "5"],
+  partition = ["a3|a4|b1,c1,c2|a1|a2", "b1|c1,c2|a1,a2,a3,a4"],
+)
 @test res[:hybrid_table] == (blob=[2,1], node_from=[12,9], node_to=[9,12], edge=[9,9],
   support_hybrid=[.5,.5], cluster=["5,6,7", "1,2,3,4"])
 @test res[:bipartition_table] == (node1=[16], node2=[8], edge=[8],
@@ -228,7 +236,9 @@ con = res[:net]
 @test [n.fvalue for n in con.node if n.intn1 ≠ -1] ≈ [1,1,2]./3
 @test res[:blob_table] == (blob=[1], degree=[3], node=[9], hybrid=[14],
   support_partition=[1/3], support_circorder=[1/3], support_hybrid=[2/3],
-  partition = ["5|6,7|1,2,3,4"], hybrid_cluster = ["1,2,3,4"])
+  partition_num = ["5|6,7|1,2,3,4"], hybrid_cluster_num = ["1,2,3,4"],
+  partition = ["b1|c1,c2|a1,a2,a3,a4"],
+)
 @test res[:bipartition_table] == (node1=[10,10,8], node2=[12,11,9], edge=[11,10,8],
   support_nonredundant = [2/3,2/3,1/3], cluster = ["3,4", "1,2", "1,2,3,4,5"])
 end
@@ -239,6 +249,7 @@ end
   net2 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")  # same as net1
   net3 = readnewick("((((A,C),(B)#H1),(#H1,D)),E);")  # blob: E|AC|B|D
   taxa = ["A","B","C","D","E"]
+  @test PS.partition_to_names("3,4|1|2,5", taxa) == "C,D|A|B,E"
   blobs, bps = PS.count_blobpartitions([net1, net2, net3], taxa, 4)
   s = IOBuffer(); show(s, MIME"text/plain"(), blobs)
   @test String(take!(s)) == """

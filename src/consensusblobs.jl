@@ -32,6 +32,11 @@ end
 partitionstring(vv) = join(join.(findall.(vv),","), "|")
 partitionstring(vv, itr) = join(join.([findall(vv[i]) for i in itr],","), "|")
 partitionstring(obj::BlobFreq) = partitionstring(obj.partition)
+partitionstring_names(vv, taxa::Vector) = join(
+    (join((taxa[j] for (j,b) in enumerate(v) if b), ",") for v in vv), "|")
+partitionstring_names(vv, taxa::Vector, itr) = join(
+    (join((taxa[j] for (j,b) in enumerate(vv[i]) if b), ",") for i in itr), "|")
+
 Base.show(io::IO, obj::BlobFreq{N,P}) where {N,P} = print(io,
     "BlobFreq on $N taxa, $P blocks " * partitionstring(obj) *
     ", frequency $(freq(obj))" *
@@ -49,6 +54,13 @@ function Base.show(io::IO, ::MIME"text/plain", obj::BlobFreq{N,P}) where {N,P}
     print(io, "\nhybrid block => frequency: ")
     show(io, MIME"text/plain"(), obj.hybrid)
 end
+# tested but not used so far
+function partition_to_names(io::IO, partition_numeric::AbstractString, taxa::Vector)
+    join(io, (join(
+        (taxa[parse(Int, jstr)] for jstr in eachsplit(str, ',')), ',')
+        for str in eachsplit(partition_numeric, '|')), '|')
+end
+partition_to_names(p::AbstractString, taxa::Vector) = sprint(partition_to_names, p, taxa)
 
 blobnodename(i) = "_blob$i"
 
@@ -185,7 +197,7 @@ function consensus_treeofblobs(
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
     update_hybridclusterfrequency!(blobvec, hybdict)
     tob, bbn, bbei, bpei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
-    bdat, odat = blobdata_onToB(blobvec, bbn, nnets)
+    bdat, odat = blobdata_onToB(blobvec, bbn, nnets, taxa)
     hdat = hybriddata_onToB(blobvec, bbn, bbei, nnets, tob.edge)
     sdat = bipartdata_onToB(bpvec, bpei, nnets, tob.edge)
     return (tob=tob, blob_table=bdat, circorder_table=odat,
@@ -233,7 +245,9 @@ function consensus_level1network(
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
     update_hybridclusterfrequency!(blobvec, hybdict)
     net, bbn, bbei, bpei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, false)
-    bdat, hdat = expand_blobcycles!(net, bbn, bbei, blobvec, nnets, outgroup)
+    res = expand_blobcycles!(net, bbn, bbei, blobvec, nnets, outgroup)
+    bdat = blobdata_onL1(blobvec, bbn, res..., nnets, taxa)
+    hdat = hybriddata_onToB(blobvec, bbn, bbei, nnets, net.edge)
     sdat = bipartdata_onToB(bpvec, bpei, nnets, net.edge)
     return (net=net, blob_table=bdat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
@@ -1081,6 +1095,7 @@ function blobdata_onToB(
     blobparts::Vector{BlobFreq{N}},
     blobnode::Vector{PN.Node},
     nnets::Number,
+    taxa::Vector{<:AbstractString},
 ) where N
     nB = length(blobparts)
     @assert nB == length(blobnode)
@@ -1089,13 +1104,43 @@ function blobdata_onToB(
         degree = [length(b.partition) for (i,b) in bitr],
         node = [blobnode[i].number for (i,b) in bitr],
         support_partition = [freq(b)/nnets for (i,b) in bitr],
-        partition = [partitionstring(b) for (i,b) in bitr])
+        partition_num = [partitionstring(b) for (i,b) in bitr],
+        partition = [partitionstring_names(b.partition, taxa) for (i,b) in bitr])
     itr = ((i,b,co,f) for (i,b) in bitr for (co,f) in b.circorder)
     co_data = (blob = [x[1] for x in itr],
         order = [x[3] for x in itr],
         support_circorder = [x[4]/nnets for x in itr],
-        partition = [partitionstring(b.partition, co) for (i,b,co,f) in itr])
+        partition_num = [partitionstring(b.partition, co) for (i,b,co,f) in itr],
+        partition = [partitionstring_names(b.partition, taxa, co) for (i,b,co,f) in itr])
     return blob_data, co_data
+end
+
+function blobdata_onL1( # for consensus level-1 network
+    blobparts::Vector{BlobFreq{N}},
+    blobnode::Vector{PN.Node},
+    o_bs::Vector,
+    h_bs::Vector,
+    h_num::Vector,
+    h_blk::Vector,
+    nnets::Number,
+    taxa::Vector{<:AbstractString},
+) where N
+    nB = length(blobparts)
+    @assert nB == length(blobnode)
+    bitr = ((i,blobparts[i]) for i in nB:-1:1) # from most to least frequent blob
+    blob_data = (
+        blob = [i for (i,b) in bitr],
+        degree = [length(b.partition) for (i,b) in bitr],
+        node = [blobnode[i].number for (i,b) in bitr],
+        hybrid = [h_num[i] for (i,b) in bitr],
+        support_partition = [freq(b)/nnets for (i,b) in bitr],
+        support_circorder = [o_bs[i] for (i,b) in bitr],
+        support_hybrid = [h_bs[i] for (i,b) in bitr],
+        partition_num = [partitionstring(b) for (i,b) in bitr],
+        hybrid_cluster_num = [splitstring(b.partition[h_blk[i]]) for (i,b) in bitr],
+        partition = [partitionstring_names(b.partition, taxa) for (i,b) in bitr],
+    )
+    return blob_data
 end
 
 function hybriddata_onToB(
@@ -1193,27 +1238,14 @@ function expand_blobcycles!(
     o_bs = Vector{Float64}(undef, nB) # order: bootstrap support
     h_bs = Vector{Float64}(undef, nB) # hybrid: bootstrap support
     h_num = Vector{Int}(undef, nB) # hybrid: node number
+    h_blk = Vector{Int}(undef, nB) # hybrid: block number in the mutipartition
     @assert nB == length(blobedges) == length(blobparts)
     bitr = ((i,blobparts[i]) for i in nB:-1:1) # from most to least frequent blob
     for (i,b) in bitr
-        o_bs[i], h_bs[i], h_num[i] = expand_blobcycleat!(net, nnum, enum, i,
-            blobnode[i],blobedges[i],b, nnets, fixdirection)
+        o_bs[i], h_bs[i], h_num[i], h_blk[i] = expand_blobcycleat!(net,
+            nnum, enum, i, blobnode[i],blobedges[i],b, nnets, fixdirection)
     end
-    hblock(i) = findfirst(isequal(getchildedge(net.node[h_num[i]]).number), blobedges[i])
-    # hblock(i) should never be 'nothing'
-    # hcluster(i,b) = begin k = hblock(i); (isnothing(k) ? "" : splitstring(b.partition[k])); end
-    blob_data = (blob = [i for (i,b) in bitr],
-        degree = [length(b.partition) for (i,b) in bitr],
-        node = [blobnode[i].number for (i,b) in bitr],
-        hybrid = [h_num[i] for (i,b) in bitr],
-        support_partition = [freq(b)/nnets for (i,b) in bitr],
-        support_circorder = [o_bs[i] for (i,b) in bitr],
-        support_hybrid = [h_bs[i] for (i,b) in bitr],
-        partition = [partitionstring(b) for (i,b) in bitr],
-        hybrid_cluster = [splitstring(b.partition[hblock(i)]) for (i,b) in bitr],
-    )
-    hybrid_data = hybriddata_onToB(blobparts, blobnode, blobedges, nnets, net.edge)
-    return blob_data, hybrid_data
+    return o_bs, h_bs, h_num, h_blk
 end
 function expand_blobcycleat!(
     net::PN.HybridNetwork,
@@ -1304,51 +1336,5 @@ function expand_blobcycleat!(
     if containroot # to update edges' containroot. ischild1 already correct
         PN.traverseDirectEdges!(getparent(hedge), hedge, false)
     end
-    return circweight, hweight, getparent(hedge).number
-end
-
-"""
-    _hybridsupport_cladesintree(hybdict, tre, taxa, nnets)
-
-Dictionary `(j,b)` => `w` where
-- `j` is the index of an edge `e = tree.edge[j]`, assumed to be `e.number`
-- `b` is true or false ("should we traverse `e` reverse?") and
-- `w` is the weight (like hybrid support) for the taxon block that is `e`'s
-  cluster of descendant taxa if `b` is true, or its complement if `b` is false.
-
-assumption: `tre` is a tree, and unrooted (with a root of degree ≥ 3)
-
-fixit: delete this function?
-"""
-function _hybridsupport_cladesintree(
-    hybdict::Dict{NTuple{N,Bool},Int},
-    tre::PN.HybridNetwork,
-    taxa::AbstractVector{<:String},
-    nnets::Number,
-) where {N}
-    hwm = hardwiredclusters(tre, taxa) # excludes external edges
-    # tree assumed unrooted: otherwise a cluster and its complement are
-    # represented by 2 different edges, not by 1 edge in either direction
-    edge2hyb = Dict{Tuple{Int,Bool},Float64}() # (edge_number, inreverse?) => %
-    for row in axes(hwm,1)
-        clade = ntuple(j -> Bool(hwm[row, j+1]), N)
-        if haskey(hybdict, clade)
-            edge2hyb[(hwm[row,1],true)]  = hybdict[clade]/nnets
-        end
-        cladecomp = .!clade
-        if haskey(hybdict, cladecomp)
-            edge2hyb[(hwm[row,1],false)] = hybdict[cladecomp]/nnets
-        end
-    end
-    for j in 1:N # external edges: assume numbered 1:N, from startree()
-        clade = ntuple(isequal(j), N)
-        if haskey(hybdict, clade)
-            edge2hyb[(j,true)]  = hybdict[clade]/nnets
-        end
-        cladecomp = .!clade
-        if haskey(hybdict, cladecomp)
-            edge2hyb[(j,false)] = hybdict[cladecomp]/nnets
-        end
-    end
-    return edge2hyb
+    return circweight, hweight, getparent(hedge).number, hblock
 end

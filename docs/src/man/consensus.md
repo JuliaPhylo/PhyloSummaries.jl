@@ -104,20 +104,20 @@ length(netsample) # 10 networks
 netsample[1] # first network. taxa: t1 through t6
 ```
 
-Let's look at the first and third, say:
+Let's look at the first and second, say:
 
 ```@example
-R"svg"(figname("bootstrapnets_h1_13.svg"), width=7, height=3) # hide
+R"svg"(figname("bootstrapnets_h1_12.svg"), width=7, height=3) # hide
 R"layout"([1 2])       # hide
 R"par"(mar=[0,0,1,0])  # hide
 plot(netsample[1], showedgelength=true);
 R"mtext"("net 1");     # hide
-plot(netsample[3], showedgelength=true);
-R"mtext"("net 3");
+plot(netsample[2], showedgelength=true);
+R"mtext"("net 2");
 R"dev.off()"; # hide
 nothing # hide
 ```
-![nets 1 & 3, from bootstrapnets_h1](../assets/figures/bootstrapnets_h1_13.svg)
+![nets 1 & 2, from bootstrapnets_h1](../assets/figures/bootstrapnets_h1_12.svg)
 
 
 fixit: write this tutorial.
@@ -130,7 +130,6 @@ res = consensus_treeofblobs(netsample);
 keys(res)
 tree = res[:tob]
 writenewick(tree, internallabel=false) # star tree! 1 big blob
-plot(tree, shownodenumber=true, showedgenumber=true, tipoffset=0.2);
 ```
 
 ```@repl
@@ -139,4 +138,27 @@ res[:taxa]
 blb_df = DataFrame(res[:blob_table], copycols=false) # use same columns in memory
 bip_df = DataFrame(res[:bipartition_table], copycols=false)
 hyb_df = DataFrame(res[:hybrid_table], copycols=false)
+```
+
+various plots.
+plot 2 shows support for each blob at the blob node (in blue),
+and support for its lowest hybrid descendants at each blob' edges (in black):
+
+```@example
+R"layout"([1 2 3]);
+R"par"(mar=[0,0,0.5,0]);
+plot(tree, shownodenumber=true, showedgenumber=true, tipoffset=0.05);
+R"mtext"("consensus tree of blobs: star", side=3, line=-1);
+R"mtext"("node & edge numbers, as in tables", side=1, line=-2);
+plot(tree, nodelabelcolor="deepskyblue",
+    nodelabeladj=1.1, edgelabeladj=[.5, -0.2],
+    nodelabel=select(blb_df, [:node, :support_partition]),
+    edgelabel=select(hyb_df, [:edge, :support_hybrid]));
+R"mtext"("consensus tree of blobs: same as\nToB of input net 1 (for example)",
+    side=3, line=-2);
+R"mtext"("support for blobs (blue) and hybrids (black)", side=1, line=-1.5);
+rotate!(netsample[8], -3);
+rotate!(netsample[8], -6); # to de-tangle crossing edges in plot below
+plot(netsample[8]);
+R"mtext"("input net 8: in which t1 is hybrid", side=3, line=-1);
 ```
