@@ -71,7 +71,7 @@ esup = DataFrame(
 ecol = Dict(r[:number] => (r[:support] < 70 ? "orange2" : "black") for r in eachrow(esup))
 ```
 
-```@repl
+```@example
 R"svg"(figname("raxmltree_con.svg"), width=7, height=3) # hide
 R"layout"([1 2])  # hide
 R"par"(mar=[0,0,1,0])  # hide
