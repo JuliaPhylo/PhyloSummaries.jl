@@ -1,0 +1,5 @@
+(a3,((a4,#H1))#H11,(a2,((((b1,(c2,c1)))#H1,a1),#H11))); # OLP, TC, lowest hybrid: bc
+(((b1,(c1,c2)))#H1,a1,(#H11,(a2,(a3,((a4,#H1))#H11)))); # same, re-rooted
+(a2,(((((b1,c1),c2))#H1,a1),#H11),(a3,((a4,#H1))#H11)); # b1c1, re-rooted
+((((#H1,b1))#H11,(c1,c2)),(((a1)#H1,#H11),(a3,a2)),a4); # OLP, not TC, lowest hybrid: a
+((((#H1,b1),#H11),(c1,c2)),(((a1)#H1)#H11,(a3,a2)),a4); # minor hybrid edge flipped

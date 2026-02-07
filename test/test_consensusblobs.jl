@@ -241,6 +241,21 @@ con = res[:net]
 )
 @test res[:bipartition_table] == (node1=[10,10,8], node2=[12,11,9], edge=[11,10,8],
   support_nonredundant = [2/3,2/3,1/3], cluster = ["3,4", "1,2", "1,2,3,4,5"])
+
+# frequent hybrid compatible with frequent blob, but never found together
+nfile = joinpath(@__DIR__,"..","test","level2_7taxa_abc.nwk")
+# nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","level2_7taxa_abc.nwk")
+net = readmultinewick(nfile)
+
+@test_throws "level > 1" consensus_level1network(net)
+res = consensus_treeofblobs(net)
+con = res[:tob]
+@test writenewick(con, support=:y) == "(c1,c2,((a4,a3,a2,a1)_9_blob1,b1)_10::0.4)_8;"
+@test all(isempty(x) for x in res[:circorder_table]) # because level-2
+@test_broken res[:hybrid_table] == (blob=[1,1], node_from=[9,9], node_to=[10,1],
+  edge=[8,1], support_hybrid=[.6,.2],
+  cluster_num = ["5,6,7", "1"], cluster = ["b1,c1,c2", "a1"])
+# fixit above: 2nd hybrid cluster missing, bc never found in that blob partition
 end
 
 @testset "blob compatibility filtering, show" begin

@@ -239,7 +239,7 @@ function consensus_level1network(
     taxa = sort(tiplabels(networks[1]))
     isnothing(outgroup) || outgroup ∈ taxa || # early problem detection
         error("outgroup $outgroup is not in the taxon list: $taxa")
-    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
+    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree, true)
     hybdict = count_hybridclusters(blobvec) # before filtering blobs out
     nnets = length(networks)
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
@@ -254,12 +254,14 @@ function consensus_level1network(
 end
 
 """
-    count_blobpartitions!(networks, taxa, minimumblobdegree)
+    count_blobpartitions!(networks, taxa, minimumblobdegree, require_level1=false)
 
-`(blob_vec, bipart_vec)` where `blob_vec` is a vector of [`BlobFreq{ntax}`](@ref)
-object and `bipart_vec` is a vector of [`SplitFreq{ntax}`](@ref) objects,
-`ntax` being the number of taxa.
+`(blob_vec, bipart_vec)` where `blob_vec` is a vector of
+[`BlobFreq{ntax}`](@ref) object (`ntax` being the number of taxa),
+`bipart_vec` is a vector of [`SplitFreq{ntax}`](@ref) objects.
 All input networks must have the same set of `taxa`.
+If `require_level1` is true, an error is thrown the first network with a blob
+whose level is not ≤ 1.
 
 In `blob_vec`, each entry is for a non-trivial blob multi-partition:
 a partition of all taxa into ≥ 3 taxon blocks.
@@ -293,6 +295,7 @@ function count_blobpartitions(
     networks::AbstractVector{PN.HybridNetwork},
     taxa::AbstractVector{<:String},
     minBdegree::Int,
+    require_level1::Bool=false,
 )
     ntaxa = length(taxa)
     all(n.numtaxa == ntaxa for n in networks) ||
@@ -301,13 +304,13 @@ function count_blobpartitions(
     blobvec = BlobFreq{ntaxa}[]
     bpvec = SplitFreq{ntaxa}[]  # bipartitions, frequency: if non-redundant
     for net in networks
-        count_blobpartitions!(blobvec, bpvec, net, taxa, minBdegree)
+        count_blobpartitions!(blobvec, bpvec, net, taxa, minBdegree, require_level1)
     end
     return blobvec, bpvec
 end
 
 """
-    count_blobpartitions!(blobs, biparts, net, taxa, minBdegree)
+    count_blobpartitions!(blobs, biparts, net, taxa, minBdegree, require_level1)
 
 Helper for [`count_blobpartitions`](@ref).
 Update the entries in the vector of `blobs` and in the vector of `biparts`
@@ -336,6 +339,7 @@ function count_blobpartitions!(
     net::PN.HybridNetwork,
     taxa::AbstractVector{<:String},
     minBdegree::Int,
+    require_level1::Bool,
 ) where N
     taxaindex = Dict(t => i for (i, t) in pairs(taxa))
     PN.process_biconnectedcomponents!(net)
@@ -368,7 +372,8 @@ function count_blobpartitions!(
         bidx ∈ visitedbcc && continue # bicomponent was already traversed
         PN.istrivial(bc) && continue
         blobdegree[bidx] = count_blobpartitions!(blobvec, visitedbcc,
-            net, taxaindex, minBdegree, bc, bidx, hwmatrix, edgemap)
+            net, taxaindex, minBdegree, bc, bidx, hwmatrix, edgemap,
+            require_level1)
     end
     # gather non-redundant cut-edges: from trivial bicomponents
     count_nonredundantbipartitions!(bpvec, blobdegree,
@@ -377,7 +382,8 @@ function count_blobpartitions!(
 end
 
 """
-    count_blobpartitions!(blobs, visitedbcc, net, taxaindex, minBdegree, blob, bidx, hwmatrix, edgemap)
+    count_blobpartitions!(blobs, visitedbcc, net, taxaindex, minBdegree,
+        blob, bidx, hwmatrix, edgemap, require_level1)
 
 Update the vector of `blobs` frequencies, and `visitedbcc` (to track
 biconnected components already visited) for a single potentially interesting
@@ -393,6 +399,7 @@ function count_blobpartitions!(
     bidx::Int,
     hwmatrix::AbstractMatrix,
     edgemap::Dict{<:Integer,<:Integer},
+    require_level1::Bool,
 ) where N
     blobdegree = (bidx==1 ? Ref(0) : Ref(1)) # parent edge: 0 if root, 1 ow
     splits, hybrids, islevel1 = blobtaxonsetpartition!(visitedbcc, blobdegree,
@@ -400,6 +407,8 @@ function count_blobpartitions!(
     if blobdegree[] < minBdegree
         return blobdegree[]
     end
+    !islevel1 && require_level1 &&
+        error("network with a blob of level > 1")
     isempty(splits)  && error("non-trivial blob without any split.")
     isempty(hybrids) && error("non-trivial blob without any hybrid.")
     nparts = length(splits)
