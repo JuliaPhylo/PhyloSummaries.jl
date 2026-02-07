@@ -1087,14 +1087,25 @@ function count_hybridclusters(blobvec::Vector{BlobFreq{N}}) where N
     return hybdict
 end
 
-# replace hybrid frequencies in blob.hybrid by those in hybvec
+"""
+    update_hybridclusterfrequency!(blobfreq_vector, clusterfreq_dict)
+
+In each `BlobFreq` item `blob` in `blobfreq_vector`, replace hybrid frequencies
+in `blob.hybrid` by those in `clusterfreq_dict`.
+Note that the list of hybrid clusters in `blob` may be expanded with clusters
+not yet listed but present in `clusterfreq_dict`, for any cluster compatible
+with the blob partition. Also, clusters are rooted here (hybrid descendants).
+Assumption: any part of a `blob` is a cluster (key) in `clusterfreq_dict`.
+"""
 function update_hybridclusterfrequency!(
     blobvec::Vector{BlobFreq{N}},
     hybdict::Dict{NTuple{N,Bool},Int},
 ) where N
     for bf in blobvec
-        for hi in keys(bf.hybrid)
-            bf.hybrid[hi] = hybdict[bf.partition[hi]]
+        for (hi,cluster) in enumerate(bf.partition)
+            if haskey(hybdict, cluster)
+                bf.hybrid[hi] = hybdict[cluster] # update of add item
+            end
         end
     end
     return nothing

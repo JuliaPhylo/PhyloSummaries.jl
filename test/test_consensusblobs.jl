@@ -182,8 +182,9 @@ con = res[:net]
   partition_num = ["2|4|3|5|6|1"], hybrid_cluster_num=["6"],
   partition = ["t2|t4|t3|t5|t6|t1"],
 )
-@test res[:hybrid_table] == (blob=[1,1], node_from=[11,12], node_to=[6,1], edge=[6,1],
-  support_hybrid=[0.5,0.1], cluster=["6","1"])
+@test res[:hybrid_table] == (blob=[1,1,1,1], node_from=[11,12,8,9],
+  node_to=[6,1,4,3], edge=[6,1,4,3],
+  support_hybrid=[.5,.1,.2,.2], cluster=["6","1","4","3"])
 @test all(isempty(x) for x in res[:bipartition_table])
 
 nfile = joinpath(@__DIR__,"..","test","level1_7taxa_abc.nwk")
@@ -252,10 +253,25 @@ res = consensus_treeofblobs(net)
 con = res[:tob]
 @test writenewick(con, support=:y) == "(c1,c2,((a4,a3,a2,a1)_9_blob1,b1)_10::0.4)_8;"
 @test all(isempty(x) for x in res[:circorder_table]) # because level-2
-@test_broken res[:hybrid_table] == (blob=[1,1], node_from=[9,9], node_to=[10,1],
-  edge=[8,1], support_hybrid=[.6,.2],
-  cluster_num = ["5,6,7", "1"], cluster = ["b1,c1,c2", "a1"])
-# fixit above: 2nd hybrid cluster missing, bc never found in that blob partition
+@test res[:hybrid_table] == (blob=[1,1], node_from=[9,9], node_to=[1,10],
+  edge=[1,8], support_hybrid=[.4,.6], cluster = ["1", "5,6,7"])
+  # cluster_num = ["1", "5,6,7"], cluster = ["a1", "b1,c1,c2"])
+# level-1 nets, and missing hybrid last alphabetically
+net = readnewick.(
+["(a3,(a2,(((b1,(c2,c1)),#H1),d1)),(a4)#H1);",
+ "(((b1,(c1,c2)))#H1,d1,(a2,(a3,(a4,#H1))));",
+ "(a4,((b1,(c2,c1)),(d1,(a2,(a3)#H1))),#H1);",
+ "(((c1,c2),(#H1,b1)),((a3,a2),(d1)#H1),a4);",
+ "(c1,c2,((#H1,b1),(((a3,a2),(d1)#H1),a4)));"])
+res = consensus_level1network(net)
+con = res[:net]
+@test writenewick(con, support=:y) == # d1 hybrid even though never in that blob
+  "(a3,(a2,#H1)_11,(a4,((b1,(c1,c2)_10::0.6)_9,(d1)#H1)_13)_14)_8_blob1;"
+@test res[:bipartition_table] == (node1=[9], node2=[10], edge=[9],
+  support_nonredundant=[.6], cluster=["5,6"])
+@test res[:hybrid_table] == (blob=[1,1,1,1], node_from=[14,13,12,8],
+  node_to=[3,9,7,2], edge=[3,8,7,2], support_hybrid=[.2,.2,.4,.2],
+  cluster = ["3","4,5,6","7","2"])
 end
 
 @testset "blob compatibility filtering, show" begin
