@@ -118,9 +118,9 @@ tob = res[:tob]
 @test res[:blob_table] == (blob=[1], degree=[3], node=[6],
   support_partition=[2/3], partition_num =["1,2,3|5|4"], partition =["a,b,c|e|d"])
 @test res[:hybrid_table] == (blob=[1], node_from=[6], node_to=[5], edge=[5],
-  support_hybrid = [2/3], cluster = ["5"])
+  support_hybrid = [2/3], cluster_num=["5"], cluster=["e"])
 @test res[:bipartition_table] == (node1=[6], node2=[7], edge=[6],
-  support_nonredundant=[1/3], cluster=["1,2,3"])
+  support_nonredundant=[1/3], cluster_num=["1,2,3"], cluster=["a,b,c"])
 
 tob,_ = consensus_treeofblobs(net)
 @test writenewick(tob, support=:y, round=true) == "(d,e,(c,b,a)_7::1.0)_6;"
@@ -139,7 +139,7 @@ tob = res[:tob]
 @test res[:circorder_table] == (blob=[1], order=[(1,2,3,4)], support_circorder=[0.8],
   partition_num = ["1,5|2|3|4"], partition = ["A,E|B|C|D"])
 @test res[:hybrid_table] == (blob=[1,1], node_from=[7,7], node_to=[2,3], edge=[2,3],
-  support_hybrid=[.6,.4], cluster=["2","3"])
+  support_hybrid=[.6,.4], cluster_num=["2","3"], cluster=["B","C"])
 
 nfile = joinpath(@__DIR__,"..","test","bootstrapnets_h1.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","bootstrapnets_h1.nwk")
@@ -180,11 +180,11 @@ con = res[:net]
 @test res[:blob_table] == (blob=[1], degree=[6], node=[7], hybrid=[11],
   support_partition=[0.6], support_circorder=[0.6], support_hybrid=[0.5],
   partition_num = ["2|4|3|5|6|1"], hybrid_cluster_num=["6"],
-  partition = ["t2|t4|t3|t5|t6|t1"],
+  partition = ["t2|t4|t3|t5|t6|t1"], hybrid_cluster=["t6"],
 )
 @test res[:hybrid_table] == (blob=[1,1,1,1], node_from=[11,12,8,9],
-  node_to=[6,1,4,3], edge=[6,1,4,3],
-  support_hybrid=[.5,.1,.2,.2], cluster=["6","1","4","3"])
+  node_to=[6,1,4,3], edge=[6,1,4,3], support_hybrid=[.5,.1,.2,.2],
+  cluster_num=["6","1","4","3"], cluster=["t6","t1","t4","t3"])
 @test all(isempty(x) for x in res[:bipartition_table])
 
 nfile = joinpath(@__DIR__,"..","test","level1_7taxa_abc.nwk")
@@ -203,9 +203,11 @@ con = res[:net]
   partition_num = ["3|4|5,6,7|1|2", "6|7|1,2,3,4|5"],
   hybrid_cluster_num = ["5,6,7","5"],
   partition = ["a3|a4|b1,c1,c2|a1|a2", "c1|c2|a1,a2,a3,a4|b1"],
+  hybrid_cluster = ["b1,c1,c2","b1"],
 )
-@test res[:hybrid_table] == (blob=[2,1,1], node_from=[11,16,8], node_to=[8,5,11], edge=[8,5,8],
-  support_hybrid=[.6,.2,.4], cluster=["5,6,7", "5", "1,2,3,4"])
+@test res[:hybrid_table] == (blob=[2,1,1], node_from=[11,16,8], node_to=[8,5,11],
+  edge=[8,5,8], support_hybrid=[.6,.2,.4], cluster_num=["5,6,7", "5", "1,2,3,4"],
+  cluster=["b1,c1,c2", "b1", "a1,a2,a3,a4"])
 @test all(isempty(x) for x in res[:bipartition_table])
 
 res = consensus_level1network(net, outgroup="a2") # 1 blob, 1 bps, hyb edge reversed
@@ -215,7 +217,8 @@ con = res[:net]
 @test [e.inte1 for e in con.edge if !isexternal(e)] == [-1,-1,-1, 1,1,1,1,1]
 @test [n.intn1 for n in con.node if !n.leaf] == [-1, 1, -1,-1, 1,1,1,1]
 @test res[:bipartition_table] == (node1=[10,14], node2=[8,10], edge=[9,8],
-  support_nonredundant=[.6,.2], cluster = ["1,2,3,4,5", "1,2,3,4"])
+  support_nonredundant=[.6,.2], cluster_num = ["1,2,3,4,5", "1,2,3,4"],
+  cluster=["a1,a2,a3,a4,b1", "a1,a2,a3,a4"])
 
 res = consensus_level1network(net[1:4], minimumblobdegree=3) # hedge of weight 0
 con = res[:net]
@@ -225,11 +228,13 @@ con = res[:net]
   support_partition = [.5,.25], support_circorder=[.5,.25], support_hybrid=[.5,0],
   partition_num = ["3|4|5,6,7|1|2", "5|6,7|1,2,3,4"], hybrid_cluster_num = ["5,6,7", "5"],
   partition = ["a3|a4|b1,c1,c2|a1|a2", "b1|c1,c2|a1,a2,a3,a4"],
+  hybrid_cluster = ["b1,c1,c2", "b1"]
 )
 @test res[:hybrid_table] == (blob=[2,1], node_from=[12,9], node_to=[9,12], edge=[9,9],
-  support_hybrid=[.5,.5], cluster=["5,6,7", "1,2,3,4"])
+  support_hybrid=[.5,.5], cluster_num=["5,6,7", "1,2,3,4"],
+  cluster=["b1,c1,c2", "a1,a2,a3,a4"])
 @test res[:bipartition_table] == (node1=[16], node2=[8], edge=[8],
-  support_nonredundant=[0.5], cluster=["1,2,3,4,5"])
+  support_nonredundant=[0.5], cluster_num=["1,2,3,4,5"], cluster=["a1,a2,a3,a4,b1"])
 
 res = consensus_level1network(net[[1,3,4]], minimumblobdegree=3)
 con = res[:net]
@@ -238,25 +243,25 @@ con = res[:net]
 @test res[:blob_table] == (blob=[1], degree=[3], node=[9], hybrid=[14],
   support_partition=[1/3], support_circorder=[1/3], support_hybrid=[2/3],
   partition_num = ["5|6,7|1,2,3,4"], hybrid_cluster_num = ["1,2,3,4"],
-  partition = ["b1|c1,c2|a1,a2,a3,a4"],
+  partition = ["b1|c1,c2|a1,a2,a3,a4"], hybrid_cluster = ["a1,a2,a3,a4"],
 )
 @test res[:bipartition_table] == (node1=[10,10,8], node2=[12,11,9], edge=[11,10,8],
-  support_nonredundant = [2/3,2/3,1/3], cluster = ["3,4", "1,2", "1,2,3,4,5"])
+  support_nonredundant = [2/3,2/3,1/3], cluster_num = ["3,4","1,2","1,2,3,4,5"],
+  cluster = ["a3,a4", "a1,a2", "a1,a2,a3,a4,b1"])
 
 # frequent hybrid compatible with frequent blob, but never found together
 nfile = joinpath(@__DIR__,"..","test","level2_7taxa_abc.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","level2_7taxa_abc.nwk")
 net = readmultinewick(nfile)
-
 @test_throws "level > 1" consensus_level1network(net)
 res = consensus_treeofblobs(net)
 con = res[:tob]
 @test writenewick(con, support=:y) == "(c1,c2,((a4,a3,a2,a1)_9_blob1,b1)_10::0.4)_8;"
 @test all(isempty(x) for x in res[:circorder_table]) # because level-2
-@test res[:hybrid_table] == (blob=[1,1], node_from=[9,9], node_to=[1,10],
-  edge=[1,8], support_hybrid=[.4,.6], cluster = ["1", "5,6,7"])
-  # cluster_num = ["1", "5,6,7"], cluster = ["a1", "b1,c1,c2"])
-# level-1 nets, and missing hybrid last alphabetically
+@test res[:hybrid_table] == (blob=[1,1], node_from=[9,9], node_to=[1,10], edge=[1,8],
+  support_hybrid=[.4,.6], cluster_num=["1","5,6,7"], cluster=["a1","b1,c1,c2"])
+
+  # level-1 nets, and missing hybrid last alphabetically
 net = readnewick.(
 ["(a3,(a2,(((b1,(c2,c1)),#H1),d1)),(a4)#H1);",
  "(((b1,(c1,c2)))#H1,d1,(a2,(a3,(a4,#H1))));",
@@ -268,10 +273,10 @@ con = res[:net]
 @test writenewick(con, support=:y) == # d1 hybrid even though never in that blob
   "(a3,(a2,#H1)_11,(a4,((b1,(c1,c2)_10::0.6)_9,(d1)#H1)_13)_14)_8_blob1;"
 @test res[:bipartition_table] == (node1=[9], node2=[10], edge=[9],
-  support_nonredundant=[.6], cluster=["5,6"])
+  support_nonredundant=[.6], cluster_num=["5,6"], cluster=["c1,c2"])
 @test res[:hybrid_table] == (blob=[1,1,1,1], node_from=[14,13,12,8],
   node_to=[3,9,7,2], edge=[3,8,7,2], support_hybrid=[.2,.2,.4,.2],
-  cluster = ["3","4,5,6","7","2"])
+  cluster_num=["3","4,5,6","7","2"], cluster=["a4","b1,c1,c2","d1","a3"])
 end
 
 @testset "blob compatibility filtering, show" begin

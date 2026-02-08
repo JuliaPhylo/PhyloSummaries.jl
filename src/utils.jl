@@ -1,5 +1,7 @@
 const SplitTuple = NTuple{N,Bool} where N # tuple used to represent a bipartition
 splitstring(obj::SplitTuple) = join(findall(obj),",")
+splitstring_names(v, taxa::Vector) =
+    join((taxa[j] for (j,b) in enumerate(v) if b), ",")
 
 """
     check_nonnumericnames(taxa)

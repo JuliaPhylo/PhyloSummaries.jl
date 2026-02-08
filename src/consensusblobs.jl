@@ -88,6 +88,8 @@ struct SplitFreq{N}
     freq::Base.RefValue{Int}
 end
 splitstring(obj::SplitFreq) = splitstring(obj.split)
+splitstring_names(obj::SplitFreq, taxa::Vector) = splitstring_names(obj.split, taxa)
+
 Base.show(io::IO, obj::SplitFreq{N}) where {N} = print(io,
     "SplitFreq on $N taxa, taxa in split cluster: " * splitstring(obj) *
     ", frequency: $(freq(obj))")
@@ -198,8 +200,8 @@ function consensus_treeofblobs(
     update_hybridclusterfrequency!(blobvec, hybdict)
     tob, bbn, bbei, bpei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
     bdat, odat = blobdata_onToB(blobvec, bbn, nnets, taxa)
-    hdat = hybriddata_onToB(blobvec, bbn, bbei, nnets, tob.edge)
-    sdat = bipartdata_onToB(bpvec, bpei, nnets, tob.edge)
+    hdat = hybriddata_onToB(blobvec, bbn, bbei, nnets, tob.edge, taxa)
+    sdat = bipartdata_onToB(bpvec, bpei, nnets, tob.edge, taxa)
     return (tob=tob, blob_table=bdat, circorder_table=odat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
@@ -247,8 +249,8 @@ function consensus_level1network(
     net, bbn, bbei, bpei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, false)
     res = expand_blobcycles!(net, bbn, bbei, blobvec, nnets, outgroup)
     bdat = blobdata_onL1(blobvec, bbn, res..., nnets, taxa)
-    hdat = hybriddata_onToB(blobvec, bbn, bbei, nnets, net.edge)
-    sdat = bipartdata_onToB(bpvec, bpei, nnets, net.edge)
+    hdat = hybriddata_onToB(blobvec, bbn, bbei, nnets, net.edge, taxa)
+    sdat = bipartdata_onToB(bpvec, bpei, nnets, net.edge, taxa)
     return (net=net, blob_table=bdat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
@@ -1159,6 +1161,7 @@ function blobdata_onL1( # for consensus level-1 network
         partition_num = [partitionstring(b) for (i,b) in bitr],
         hybrid_cluster_num = [splitstring(b.partition[h_blk[i]]) for (i,b) in bitr],
         partition = [partitionstring_names(b.partition, taxa) for (i,b) in bitr],
+        hybrid_cluster = [splitstring_names(b.partition[h_blk[i]], taxa) for (i,b) in bitr],
     )
     return blob_data
 end
@@ -1169,6 +1172,7 @@ function hybriddata_onToB(
     blobedges::Vector{Vector{Int}},
     nnets::Number,
     netedge::Vector{PN.Edge},
+    taxa::Vector{<:AbstractString},
 ) where N
     nB = length(blobparts)
     @assert nB == length(blobedges)
@@ -1187,7 +1191,9 @@ function hybriddata_onToB(
     end
     hybrid_data = (blob = bnum, node_from = pnum, node_to = cnum, edge = hedgenum,
         support_hybrid = [x[4]/nnets for x in itr],
-        cluster = [splitstring(b.partition[h]) for (i,b,h,f) in itr])
+        cluster_num = [splitstring(b.partition[h]) for (i,b,h,f) in itr],
+        cluster = [splitstring_names(b.partition[h], taxa) for (i,b,h,f) in itr],
+    )
     return hybrid_data
 end
 
@@ -1196,6 +1202,7 @@ function bipartdata_onToB(
     biedges::Vector{Int},
     nnets::Number,
     netedge::Vector{PN.Edge},
+    taxa::Vector{<:AbstractString},
 ) where N
     nB = length(biparts)
     @assert nB == length(biedges)
@@ -1210,7 +1217,8 @@ function bipartdata_onToB(
     end
     dat = (node1 = pnum, node2 = cnum, edge = enum,
         support_nonredundant = [freq(b)/nnets for (i,b) in bitr],
-        cluster = [splitstring(b) for (i,b) in bitr])
+        cluster_num = [splitstring(b) for (i,b) in bitr],
+        cluster = [splitstring_names(b, taxa) for (i,b) in bitr],)
     return dat
 end
 
