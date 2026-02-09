@@ -94,6 +94,12 @@ also by plotting them: tree #2 has (O,E). 15 trees have A-D: #1,4-7,11,16-17,20-
 ```
 =#
 
+tfile = joinpath(@__DIR__,"..","test","tobs20_15taxa.tre")
+# tfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","tobs20_15taxa.tre")
+trees = readmultinewick(tfile)
+con = (@test_logs consensustree(trees)) # fixit: broken
+# @test writenewick(con, support=:y) == fixit
+
 end # of sub-testset
 
 
