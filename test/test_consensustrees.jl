@@ -9,31 +9,17 @@ taxa = ["A","B","C","D"]
 
 @testset "count_bipartitions!" begin
 # unrooted
-counts = Dictionary{NTuple{4,Bool},Int}()
+counts = PS.SplitFreq{4}[]
 PS.count_bipartitions!(counts, tree1, taxa, false)
 PS.count_bipartitions!(counts, tree3, taxa, false)
-expected = Dict(
-    (true, true, false, false) => 1,
-    (true, false, true, false) => 1,
-)
-@test length(counts) == length(expected)
-for bp in keys(expected)
-    @test counts[bp] == expected[bp]
-end
+@test [PS.splitstring(s) * " -> $(PS.freq(s))" for s in counts] ==
+    ["1,2 -> 1", "1,3 -> 1"]
 # rooted
 empty!(counts)
 PS.count_bipartitions!(counts, tree1, taxa, true)
 PS.count_bipartitions!(counts, tree3, taxa, true)
-expected = Dict(
-    (true, true, false, false) => 1,
-    (false, false, true, true) => 1,
-    (true, false, true, false) => 1,
-    (false, true, false, true) => 1,
-)
-@test length(counts) == length(expected)
-for bp in keys(expected)
-    @test counts[bp] == expected[bp]
-end
+@test [PS.splitstring(s) * " -> $(PS.freq(s))" for s in counts] ==
+    ["1,2 -> 1", "3,4 -> 1", "1,3 -> 1", "2,4 -> 1"]
 end
 
 @testset "utilities" begin
@@ -94,12 +80,13 @@ also by plotting them: tree #2 has (O,E). 15 trees have A-D: #1,4-7,11,16-17,20-
 ```
 =#
 
+# more complex filtering (failed with Dictionaries and Iterators.reverse)
 tfile = joinpath(@__DIR__,"..","test","tobs20_15taxa.tre")
 # tfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","tobs20_15taxa.tre")
 trees = readmultinewick(tfile)
-con = (@test_logs consensustree(trees)) # fixit: broken
-# @test writenewick(con, support=:y) == fixit
-
+con = (@test_logs consensustree(trees))
+@test writenewick(con, support=:y) ==
+  "(S,T,(((((J,I)::0.45,((B,A)::0.35,(D,C)::0.3)::0.8)::0.2,(L,M)::0.25)::0.15,N)::0.2,((Q,R)::0.35,(O,P)::0.55)::0.1)::0.4);"
 end # of sub-testset
 
 

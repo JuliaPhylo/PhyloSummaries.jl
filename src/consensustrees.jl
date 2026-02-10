@@ -1,4 +1,80 @@
 """
+    SplitFreq{N}
+
+Frequency of one non-trivial taxon block, typically considered as describing an
+unrooted bipartition (or split) of the `N` taxa into P=2 parts.
+
+It is non-trivial if each part has at least 2 taxa, that is: the block is
+not empty, not full, does not contain a single taxon, or all but a single taxon.
+
+The taxon block is represented by an `N`-tuple of booleans, where entry `i`
+says whether taxon number `i` is in or out of this block.
+The canonical taxon block used to describe an unrooted bipartition is the block
+that does not contain the last taxon, such that its last entry `N` is false.
+"""
+struct SplitFreq{N}
+    """bipartition: block 1 does *not* contain the last taxon, block 2 does.
+    The bipartition is described by 1 tuple of size N for membership in block 1:
+    `split[i]` is `true` is taxon `i` is in block 1, `false` if it's in block 2.
+    """
+    split::NTuple{N,Bool}
+    "frequency of the bipartition. mutable: use freq and freq! to get/set this value."
+    freq::Base.RefValue{Int}
+end
+splitstring(obj::SplitFreq) = splitstring(obj.split)
+splitstring_names(obj::SplitFreq, taxa::Vector) = splitstring_names(obj.split, taxa)
+
+Base.show(io::IO, obj::SplitFreq{N}) where {N} = print(io,
+    "SplitFreq on $N taxa, taxa in split cluster: " * splitstring(obj) *
+    ", frequency: $(freq(obj))")
+
+freq(obj::SplitFreq) = obj.freq[]
+freq!(obj::SplitFreq, n) = obj.freq[] = n
+incrementfreq!(obj::SplitFreq) = obj.freq[] += 1
+
+"""
+    split_fromHmatrix(M, i, N)
+
+Tuple of booleans from row `i` of the hardwired-cluster matrix `M` on `N` taxa,
+considering the phylogeny as unrooted: 0/1 values are switched if necessary,
+to make sure that the last entry is `false`.
+
+See [`cluster_fromHmatrix`](@ref) for the rooted version.
+"""
+function split_fromHmatrix(hwm, row::Int, N::Int)
+    res = (hwm[row,N+1] == 1 ?
+        ntuple(j -> !Bool(hwm[row, j+1]), N) :
+        ntuple(j ->  Bool(hwm[row, j+1]), N)  )
+    return res
+end
+"""
+    cluster_fromHmatrix(M, i, N)
+
+Tuple of booleans from row `i` of the hardwired-cluster matrix `M` on `N` taxa,
+considering the phylogeny as *rooted*: 0/1 values as they are, *not* switched.
+
+See [`split_fromHmatrix`](@ref) for the unrooted version.
+"""
+cluster_fromHmatrix(hwm, row::Int, N::Int) = ntuple(j ->  Bool(hwm[row, j+1]), N)
+
+iscompatible(b1::SplitFreq{N}, b2::SplitFreq{N}) where N =
+    treecompatible(b1.split, b2.split) # in utils.jl
+
+function splitcomplement(splitvec::AbstractVector{NTuple{N,Bool}}) where N
+    isoutgroup(i) = !any(t[i] for t in splitvec)
+    return ntuple(isoutgroup, N)
+end
+
+function add_split!(bpvec::Vector{SplitFreq{N}}, split) where N
+    i = findfirst(bp -> bp.split == split, bpvec)
+    if isnothing(i)
+        push!(bpvec, SplitFreq{N}(split,Ref(1)))
+    else
+        incrementfreq!(bpvec[i])
+    end
+end
+
+"""
     consensustree(trees::AbstractVector{PN.HybridNetwork};
                   rooted=false,
                   proportion=0,
@@ -92,12 +168,12 @@ function consensustree(
         return net
     end
     taxa = sort!(tiplabels(trees[1]))
-    splitcounts = Dictionary{SplitTuple,Int}()
+    ntaxa = length(taxa)
+    splitcounts = SplitFreq{ntaxa}[]
     for net in trees
-        length(net.leaf) == length(taxa) ||
+        length(net.leaf) == ntaxa ||
             throw(ArgumentError("input trees do not share the same taxon set"))
-        # hardwiredclusters will error if different taxon sets
-        count_bipartitions!(splitcounts, net, taxa, rooted)
+        count_bipartitions!(splitcounts, net, taxa, rooted) # will enforce same taxon sets
     end
     ntrees = length(trees)
     consensus_bipartitions!(splitcounts, proportion, ntrees)
@@ -129,56 +205,33 @@ If the tip labels in `net` do not match those in `taxa` (as a set), then an
 error will be thrown indirectly (via `PhyloNetworks.hardwiredclusters`).
 """
 function count_bipartitions!(
-    counts::Dictionary{<:SplitTuple,Int},
+    counts::Vector{SplitFreq{N}},
     net::PN.HybridNetwork,
     taxa::Vector{String},
     rooted::Bool,
-)
+) where N
     if !rooted
         if length(getroot(net).edge) < 3
             net = deepcopy(net) # re-binds the variable 'net'
             suppressroot!(net)
         end
     end
+    getsplit = (rooted ? cluster_fromHmatrix : split_fromHmatrix)
     hw_matrix = hardwiredclusters(net, taxa)
-    N = length(taxa)
-    taxa_cols = 2:(N + 1)
     for row_idx in axes(hw_matrix, 1)
-        splitv = view(hw_matrix, row_idx, taxa_cols)
-        istrivialsplit(splitv) && continue
-        split = tuple_from_clustervector(splitv, rooted)
-        set!(counts, split, get(counts, split, 0) + 1)
+        split = getsplit(hw_matrix, row_idx, N)
+        istrivialsplit(split) && continue
+        add_split!(counts, split)
     end
     return counts
 end
 
 """
-    tuple_from_clustervector(cluster01vector, rooted)
-
-Tuple of booleans `t` with `t[i]` true / false if `taxa[i]` does / does not
-belong in the hardwired cluster vector `cluster01vector` of 0/1 integers;
-or `nothing` if the cluster is trivial (all 0s or all 1s).
-
-If `rooted` is false, then clusters are considered as bipartitions and the last
-taxon is used as an outgroup with a `false` entry.
-For example, clusters `0011` and `1100` represent the same bipartition, and
-both would return tuple `(true,true,false,false)`.
-"""
-function tuple_from_clustervector(cluster01vector::AbstractVector, rooted::Bool)
-    N = length(cluster01vector)
-    if !rooted && cluster01vector[N] == 1
-        return ntuple(i -> !Bool(cluster01vector[i]), N)
-    end
-    return ntuple(i -> Bool(cluster01vector[i]), N)
-end
-
-"""
-    consensus_bipartitions!(splitcounts::Dictionary{<:SplitTuple,Int},
+    consensus_bipartitions!(splitcounts::Vector{SplitFreq{N}},
         proportion::Number, numtrees::Number)
 
-Filter dictionary `splitcounts` to keep only the entries whose frequency
-(count value in the dictionary) are greater than `proportion × numtrees`,
-or equal to `numtrees` when `proportion` is 1.
+Filter `splitcounts` to keep only the bipartitions whose frequencies are greater
+than `proportion × numtrees`, or equal to `numtrees` when `proportion` is 1.
 Bipartitions with frequency weight over 50% must be compatible with each other.
 Bipartitions are retained one by one, from most to least frequent, so long as
 they are compatible with bipartititions previously kept.
@@ -194,85 +247,76 @@ by frequency (from least to most frequent) if `proportion<0.5`.
 
 Assumption: all counts are positive.
 
+Note that we use the term "bipartitions" here, which means splits of the taxon
+set when ignoring the root. But this function can equally be used for clusters
+(or clades) obtained as an edge's descendants when knowing the root position.
+
 # Example
 ```jldoctest
-julia> using Dictionaries
+julia> const PS = PhyloSummaries # to use internals with less typing
 
-julia> bp = [(true,false), (false,false), (true,true)]; freq=(3,1,4);
+julia> bp = [(true,false), (false,false), (true,true)]; freq=Ref.([3,1,4]);
 
-julia> splitcounts = dictionary(zip(bp, freq))
-3-element Dictionary{Tuple{Bool, Bool}, Int64}:
-  (true, false) │ 3
- (false, false) │ 1
-   (true, true) │ 4
+julia> splitcounts = [PS.SplitFreq(x,y) for (x,y) in zip(bp, freq)]
+3-element Vector{PhyloSummaries.SplitFreq{2}}:
+ SplitFreq on 2 taxa, taxa in split cluster: 1, frequency: 3
+ SplitFreq on 2 taxa, taxa in split cluster: , frequency: 1
+ SplitFreq on 2 taxa, taxa in split cluster: 1,2, frequency: 4
 
-julia> PhyloSummaries.consensus_bipartitions!(splitcounts, 0.5, 4)
-2-element Dictionary{Tuple{Bool, Bool}, Int64}:
- (true, false) │ 3
-  (true, true) │ 4
+julia> PS.consensus_bipartitions!(splitcounts, 0.5, 4)
+2-element Vector{PhyloSummaries.SplitFreq{2}}:
+ SplitFreq on 2 taxa, taxa in split cluster: 1, frequency: 3
+ SplitFreq on 2 taxa, taxa in split cluster: 1,2, frequency: 4
 
-julia> splitcounts = dictionary(zip(bp, freq)); # reset as earlier
+julia> splitcounts = [PS.SplitFreq(x,y) for (x,y) in zip(bp, freq)]; # reset
 
-julia> PhyloSummaries.consensus_bipartitions!(splitcounts, 0, 4)
-3-element Dictionary{Tuple{Bool, Bool}, Int64}:
- (false, false) │ 1
-  (true, false) │ 3
-   (true, true) │ 4
+julia> PS.consensus_bipartitions!(splitcounts, 0, 4) # sorted
+3-element Vector{PhyloSummaries.SplitFreq{2}}:
+ SplitFreq on 2 taxa, taxa in split cluster: , frequency: 1
+ SplitFreq on 2 taxa, taxa in split cluster: 1, frequency: 3
+ SplitFreq on 2 taxa, taxa in split cluster: 1,2, frequency: 4
 ```
 """
 function consensus_bipartitions!(
-    splitcounts::Dictionary{<:SplitTuple,Int},
+    splitcounts::Vector{SplitFreq{N}},
     proportion::Number, 
     numtrees::Number,
-)
-    threshold1 = max(0.5, proportion) * numtrees # all above must be compatible
-    threshold2 = proportion * numtrees  # applies if proportion < 0.5
+) where N
+    threshold2 = proportion * numtrees
+    if proportion ≈ 1 # strict consensus
+        filter!(v -> freq(v) ≈ numtrees, splitcounts)
+    elseif threshold2 > 0 # 0 for greedy consensus: frequent case
+        filter!(v -> freq(v) > threshold2, splitcounts)
+    end
+    sort!(splitcounts, by=freq, rev=false)
     if proportion >= 0.5
-        if proportion ≈ 1
-            filter!(v -> v ≈ numtrees, splitcounts)
-        else
-            filter!(v -> v > threshold1, splitcounts)
-        end
-        return(splitcounts)
+        return splitcounts
     end
-    if threshold2 > 0 # 0 for greedy consensus: frequent case
-        filter!(v -> v > threshold2, splitcounts)
-    end
-    sort!(splitcounts, rev=false) # works for a Dictionary, but not a Dict
-    nsplits = 0
+    threshold1 = numtrees / 2 # all above must be compatible
     # next: traverse 'splitcounts' in reverse because we will delete items
-    # use the "lazy" Iterators.reverse instead of Base.reverse, to avoid copying
-    splits_mostfrequent = Iterators.reverse(keys(splitcounts)) # create this object once only
-    for (candidate_bp, freq) in Iterators.reverse(pairs(splitcounts))
-        if freq > threshold1
-            nsplits += 1
-            continue
-        end
-        # freq > threshold2 ensured by previous filtering
+    nS = length(splitcounts)
+    for j_cs in nS:-1:1
+        candidates = splitcounts[j_cs]
+        freq(candidates) > threshold1 && continue
         iscompat = true
-        for (i_bp, bp) in enumerate(splits_mostfrequent) # up-to-date because no copy
-            i_bp > nsplits && break # only compare with previous splits
-            if !treecompatible(candidate_bp, bp)
+        for j_ks in (j_cs+1):length(splitcounts)
+            if !iscompatible(candidates, splitcounts[j_ks])
                 iscompat = false
                 break
             end
         end
-        if iscompat # then keep candidate bipartition
-            nsplits += 1
-        else
-            delete!(splitcounts, candidate_bp)
-        end
+        iscompat || deleteat!(splitcounts, j_cs)
     end
     return splitcounts
 end
 
 """
     tree_from_bipartitions(taxa::Vector{String},
-        clusters::Dictionary{SplitTuple,<:Number},
+        clustercounts::Vector{SplitFreq{N}},
         ntrees::Number,
         supportaslength::Bool)
 
-Construct a tree from a compatible set of cluster, as a
+Construct a tree on `N` taxa from a compatible set of clusters, as a
 `PhyloNetworks.HybridNetwork` object.
 Each cluster is represented as a tuple key `b`, and is given a weight:
 its value `clusters[b]` divided by `ntrees`.
@@ -282,23 +326,24 @@ whose descendant taxa is the set `taxa[i]` for indices `i` such that b[i] is tru
 The cluster's weight is stored in `e.y`.
 With option `supportaslength=true`, the cluster weight is also in `e.length`.
 
-Assumption: the input clusters are pairwise tree-compatible, which is the
-condition for them to be the clusters of a valid rooted tree.
+Assumptions:
+- `taxa` is of length `N`: same size as each cluster
+- the input clusters are pairwise tree-compatible, which is the
+  condition for them to be the clusters of a valid rooted tree.
 
 Used by: [`consensustree`](@ref)
 """
 function tree_from_bipartitions(
     taxa::Vector{String},
-    bipartitions::Dictionary{SplitTuple,<:Number},
+    clustercounts::Vector{SplitFreq{N}},
     ntrees::Number,
     supportaslength::Bool
-)
-    n = length(taxa)
+) where N
     net = startree(taxa)
-    ni = Ref(n+2) # leaves: 1:n, root n+1. next: n+2
-    ei = Ref(n+1)
-    for (bv,weight) in pairs(bipartitions)
-        add_clusteredge!(net, ni, ei, bv, weight/ntrees, supportaslength)
+    ni = Ref(N+2) # leaves: 1:n, root n+1. next: n+2
+    ei = Ref(N+1)
+    for cf in clustercounts
+        add_clusteredge!(net, ni, ei, cf.split, freq(cf)/ntrees, supportaslength)
     end
     return net
 end

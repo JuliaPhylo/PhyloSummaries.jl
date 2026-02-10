@@ -1,6 +1,5 @@
 module PhyloSummaries
 
-using Dictionaries
 using PhyloNetworks
 
 # import: to extend methods from another packages

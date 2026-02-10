@@ -37,6 +37,10 @@ partitionstring_names(vv, taxa::Vector) = join(
 partitionstring_names(vv, taxa::Vector, itr) = join(
     (join((taxa[j] for (j,b) in enumerate(vv[i]) if b), ",") for i in itr), "|")
 
+freq(obj::BlobFreq) = obj.freq[]
+freq!(obj::BlobFreq, n) = obj.freq[] = n
+incrementfreq!(obj::BlobFreq) = obj.freq[] += 1
+
 Base.show(io::IO, obj::BlobFreq{N,P}) where {N,P} = print(io,
     "BlobFreq on $N taxa, $P blocks " * partitionstring(obj) *
     ", frequency $(freq(obj))" *
@@ -64,71 +68,8 @@ partition_to_names(p::AbstractString, taxa::Vector) = sprint(partition_to_names,
 
 blobnodename(i) = "_blob$i"
 
-"""
-    SplitFreq{N}
-
-Frequency of one non-trivial taxon block, typically considered as describing an
-unrooted bipartition (or split) of the `N` taxa into P=2 parts.
-
-It is non-trivial if each part has at least 2 taxa, that is: the block is
-not empty, not full, does not contain a single taxon, or all but a single taxon.
-
-The taxon block is represented by an `N`-tuple of booleans, where entry `i`
-says whether taxon number `i` is in or out of this block.
-The canonical taxon block used to describe an unrooted bipartition is the block
-that does not contain the last taxon, such that its last entry `N` is false.
-"""
-struct SplitFreq{N}
-    """bipartition: block 1 does *not* contain the last taxon, block 2 does.
-    The bipartition is described by 1 tuple of size N for membership in block 1:
-    `split[i]` is `true` is taxon `i` is in block 1, `false` if it's in block 2.
-    """
-    split::NTuple{N,Bool}
-    "frequency of the bipartition. mutable: use freq and freq! to get/set this value."
-    freq::Base.RefValue{Int}
-end
-splitstring(obj::SplitFreq) = splitstring(obj.split)
-splitstring_names(obj::SplitFreq, taxa::Vector) = splitstring_names(obj.split, taxa)
-
-Base.show(io::IO, obj::SplitFreq{N}) where {N} = print(io,
-    "SplitFreq on $N taxa, taxa in split cluster: " * splitstring(obj) *
-    ", frequency: $(freq(obj))")
-
-freq(obj::Union{SplitFreq,BlobFreq}) = obj.freq[]
-function freq!(obj::Union{SplitFreq,BlobFreq}, n)
-    obj.freq[] = n
-    return obj
-end
-function incrementfreq!(obj::Union{SplitFreq,BlobFreq})
-    obj.freq[] += 1
-    return obj
-end
-
-"""
-    split_fromHmatrix(M, i, N)
-
-Tuple of booleans from row `i` of the hardwired-cluster matrix `M` on `N` taxa,
-considering the phylogeny as unrooted: 0/1 values are switched if necessary,
-to make sure that the last entry is `false`.
-
-Equivalent to `tuple_from_clustervector(M[i,2:(N+1)], false)`.
-"""
-function split_fromHmatrix(hwm, row::Int, N::Int)
-    res = (hwm[row,N+1] == 1 ?
-        ntuple(j -> !Bool(hwm[row, j+1]), N) :
-        ntuple(j ->  Bool(hwm[row, j+1]), N)  )
-    return res
-end
-
-function splitcomplement(splitvec::AbstractVector{NTuple{N,Bool}}) where N
-    isoutgroup(i) = !any(t[i] for t in splitvec)
-    return ntuple(isoutgroup, N)
-end
-
-iscompatible(b1::SplitFreq{N}, b2::SplitFreq{N}) where N =
-    treecompatible(b1.split, b2.split) # in utils.jl
 iscompatible(b1::SplitFreq{N}, b2::BlobFreq{N}) where N =
-    splitblobcompatible(b1.split, b2.partition)
+    splitblobcompatible(b1.split, b2.partition) # in utils.jl
 iscompatible(b1::BlobFreq{N}, b2::BlobFreq{N}) where N =
     blobcompatible(b1.partition, b2.partition)
 isredundantsplit(b1::SplitFreq{N}, b2::BlobFreq{N}) where N =
@@ -761,7 +702,7 @@ function count_nonredundantbipartitions!(
         row = get(edgemap, e.number, nothing)
         isnothing(row) && error("unmapped non-external edge $(e.number)")
         split = split_fromHmatrix(hwmatrix, row, N)
-        add_bipartition!(bpvec, split)
+        add_split!(bpvec, split)
     end
     # add 0 or 1 biparts for each 2-blob chain: match the 2 end edges for each
     # 1. edges that have no entry in hwmatrix. trivial: don't store them
@@ -793,21 +734,11 @@ function count_nonredundantbipartitions!(
         haskey(inchain_store, e2) || error("2-blob chain: edge $e2 was not detected")
         store2 = pop!(inchain_store, e2)
         if store1 && store2
-            add_bipartition!(bpvec, split)
+            add_split!(bpvec, split)
         end
     end
     return nothing
 end
-
-function add_bipartition!(bpvec::Vector{SplitFreq{N}}, split) where N
-    i = findfirst(bp -> bp.split == split, bpvec)
-    if isnothing(i)
-        push!(bpvec, SplitFreq{N}(split,Ref(1)))
-    else
-        incrementfreq!(bpvec[i])
-    end
-end
-
 
 """
     filter_sort_compatible_partitions!(blobpartitions, bipartitions, nnets, proportion)
