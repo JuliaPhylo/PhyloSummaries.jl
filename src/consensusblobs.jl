@@ -1264,7 +1264,7 @@ function expand_blobcycleat!(
           if isnothing(neighbor) || ii!=1 # first P blocks: create new node
             newnode = PN.Node(nnum[], false, ishyb_n,
                 (ishyb_n ? hweight : circweight), [ee]) # fvalue, edge
-            newnode.name = (ishyb_n ? "H$bnum" : "_$(nnum[])")
+            newnode.name = (ishyb_n ? "H$(nnum[])" : "_$(nnum[])")
             newnode.intn1 = bnum
             nnum[] += 1
             PN.removeEdge!(bnode, ee)

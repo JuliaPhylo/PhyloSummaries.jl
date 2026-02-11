@@ -8,9 +8,10 @@ import Base: show
 const PN = PhyloNetworks
 
 export
-consensustree,
+consensus_level1network,
 consensus_treeofblobs,
-consensus_level1network
+consensustree,
+resetnodenumbers_fromnames!
 
 include("utils.jl")
 include("consensustrees.jl")

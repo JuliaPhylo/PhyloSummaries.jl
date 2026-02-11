@@ -8,10 +8,21 @@ nwk = [ # some rooted, some unrooted
   "(C,((B)#H1,((#H1,(A,E)),D)));", # same as previous but rooted at C
 ]
 # sanity-check canonical order helper
-@testset "canonicalorders" begin
+@testset "canonicalorders, misc" begin
     cw, ccw = PS.canonicalorders([5, 1, 3, 2, 4], 2) # start at index 2
     @test cw == (1, 3, 2, 4, 5)
     @test ccw == (1, 5, 4, 2, 3)
+
+  net = readnewick("(t2,(t4,(t3,(t5,#H11)_10)_9)_8,(t1,(t6)#H11)_12)_7_blob1;");
+  resetnodenumbers_fromnames!(net)
+  @test [n.number for n in net.node] == [2,4,3,5,10,9,8,1,6,11,12,7]
+  net.node[5].name = ""; net.node[6].name = "_40"
+  resetnodenumbers_fromnames!(net)
+  @test [n.number for n in net.node] == [2,4,3,5,9,40,8,1,6,11,12,7]
+  net.node[5].name = "_10"; net.node[6].name = "_10"
+  @test_throws "multiple nodes" resetnodenumbers_fromnames!(net)
+  net.node[6].name = "_4"
+  @test_throws "≤ number of taxa" resetnodenumbers_fromnames!(net)
 end
 
 @testset "blobcompatible" begin
@@ -169,7 +180,7 @@ tob,_ = consensus_treeofblobs(net[[4,9,3,2]])
 res = consensus_level1network(net)
 @test keys(res) == (:net, :blob_table, :hybrid_table, :bipartition_table, :taxa)
 con = res[:net]
-@test writenewick(con, support=:y, round=true) == "(t2,(t4,(t3,(t5,#H1)_10)_9)_8,(t1,(t6)#H1)_12)_7_blob1;"
+@test writenewick(con, support=:y, round=true) == "(t2,(t4,(t3,(t5,#H11)_10)_9)_8,(t1,(t6)#H11)_12)_7_blob1;"
 # or different ismajor: "(t2,(t4,(t3,(t5,(t6)#H0))),(#H0,t1));"
 @test [e.inte1 for e in con.edge] == repeat([-1,1], inner=6)
 @test all(e -> e.y==-1, con.edge)
@@ -193,7 +204,7 @@ net = readmultinewick(nfile)
 
 res = consensus_level1network(net, minimumblobdegree=3) # 2 blobs, 0 bps
 con = res[:net]
-@test writenewick(con) == "(a3,(a4,#H2)_10,(a2,(a1,(((c2,(c1,(b1)#H1)_14)_15,#H1)_8_blob1)#H2)_12)_13)_9_blob2;"
+@test writenewick(con) == "(a3,(a4,#H11)_10,(a2,(a1,(((c2,(c1,(b1)#H16)_14)_15,#H16)_8_blob1)#H11)_12)_13)_9_blob2;"
 @test [n.fvalue for n in con.node if n.hybrid] == [.6, .2]
 @test [n.fvalue for n in con.node if !n.leaf && !n.hybrid] == [.4,.6,.6,.6,.6,.4,.4]
 @test [con.edge[i].inte1 for i in 8:17] == [-1, 2,2,2,2,2, 1,1,1,1]
@@ -212,7 +223,7 @@ con = res[:net]
 
 res = consensus_level1network(net, outgroup="a2") # 1 blob, 1 bps, hyb edge reversed
 con = res[:net]
-@test writenewick(con) == "(a2,((a1,((b1,(c1,c2)_8)_10)#H1)_15,(a3,(a4,#H1)_13)_12)_9_blob1);"
+@test writenewick(con) == "(a2,((a1,((b1,(c1,c2)_8)_10)#H14)_15,(a3,(a4,#H14)_13)_12)_9_blob1);"
 @test [n.fvalue for n in con.node if !n.leaf] == [-1,.6,-1,-1,.6,.6,.6,.6]
 @test [e.inte1 for e in con.edge if !isexternal(e)] == [-1,-1,-1, 1,1,1,1,1]
 @test [n.intn1 for n in con.node if !n.leaf] == [-1, 1, -1,-1, 1,1,1,1]
@@ -222,7 +233,7 @@ con = res[:net]
 
 res = consensus_level1network(net[1:4], minimumblobdegree=3) # hedge of weight 0
 con = res[:net]
-@test writenewick(con) == "(a3,(a4,#H2)_11,(a2,(a1,((((c1,c2)_8,(b1)#H1)_16,#H1)_9_blob1)#H2)_13)_14)_10_blob2;"
+@test writenewick(con) == "(a3,(a4,#H12)_11,(a2,(a1,((((c1,c2)_8,(b1)#H15)_16,#H15)_9_blob1)#H12)_13)_14)_10_blob2;"
 @test [n.fvalue for n in con.node if n.hybrid] == [.5, 0]
 @test res[:blob_table] == (blob=[2,1], degree=[5,3], node=[10,9], hybrid=[12,15],
   support_partition = [.5,.25], support_circorder=[.5,.25], support_hybrid=[.5,0],
@@ -238,7 +249,7 @@ con = res[:net]
 
 res = consensus_level1network(net[[1,3,4]], minimumblobdegree=3)
 con = res[:net]
-@test writenewick(con) == "(c1,c2,((b1,(((a2,a1)_11,(a4,a3)_12)_10)#H1)_13,#H1)_9_blob1)_8;"
+@test writenewick(con) == "(c1,c2,((b1,(((a2,a1)_11,(a4,a3)_12)_10)#H14)_13,#H14)_9_blob1)_8;"
 @test [n.fvalue for n in con.node if n.intn1 ≠ -1] ≈ [1,1,2]./3
 @test res[:blob_table] == (blob=[1], degree=[3], node=[9], hybrid=[14],
   support_partition=[1/3], support_circorder=[1/3], support_hybrid=[2/3],
@@ -271,7 +282,7 @@ net = readnewick.(
 res = consensus_level1network(net)
 con = res[:net]
 @test writenewick(con, support=:y) == # d1 hybrid even though never in that blob
-  "(a3,(a2,#H1)_11,(a4,((b1,(c1,c2)_10::0.6)_9,(d1)#H1)_13)_14)_8_blob1;"
+  "(a3,(a2,#H12)_11,(a4,((b1,(c1,c2)_10::0.6)_9,(d1)#H12)_13)_14)_8_blob1;"
 @test res[:bipartition_table] == (node1=[9], node2=[10], edge=[9],
   support_nonredundant=[.6], cluster_num=["5,6"], cluster=["c1,c2"])
 @test res[:hybrid_table] == (blob=[1,1,1,1], node_from=[14,13,12,8],

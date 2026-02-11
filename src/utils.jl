@@ -60,6 +60,94 @@ function startree(taxa::Vector{String})
 end
 
 """
+    resetnodenumbers_fromnames!(net)
+
+Reset node numbers so that:
+- leaves are numbered 1 through the number of taxa, in alphabetical order of
+  taxon names
+- any internal node named `_n*` is numbered `n`, which should be an integer
+  that is not starting with 0, and `*` is what comes after
+- any hybrid node named `Hn` is numbered `n`
+- any node with an empty name is given some other number, so that node numbers
+  are unique.
+
+An error occurs if an internal node has a name that cannot be parsed as
+described above, or results in a number that is ≤ the number of taxa,
+or results in duplicated numbers.
+
+See also: `PhyloNetworks.resetedgenumbers!` and
+`PhyloNetworks.resetnodenumbers!`.
+
+# example
+
+```jldoctest
+julia> net = readnewick("((t2,(t1,(t4,#H11)_10))_8,(t3)#H11)_7_blob1;");
+
+julia> printnodes(net)
+node leaf  hybrid name     i_cycle edges'numbers
+1    true  false  t2       -1      1   
+2    true  false  t1       -1      2   
+3    true  false  t4       -1      3   
+5    false false  _10      -1      3    4    5   
+-4   false false           -1      2    5    6   
+6    false false  _8       -1      1    6    7   
+7    true  false  t3       -1      8   
+4    false true   H11      -1      8    4    9   
+-2   false false  _7_blob1 -1      7    9   
+
+julia> resetnodenumbers_fromnames!(net);
+node leaf  hybrid name     i_cycle edges'numbers
+2    true  false  t2       -1      1   
+1    true  false  t1       -1      2   
+4    true  false  t4       -1      3   
+10   false false  _10      -1      3    4    5   
+5    false false           -1      2    5    6   
+8    false false  _8       -1      1    6    7   
+3    true  false  t3       -1      8   
+11   false true   H11      -1      8    4    9   
+7    false false  _7_blob1 -1      7    9   
+```
+"""
+function resetnodenumbers_fromnames!(net::PN.HybridNetwork)
+    taxa = sort!(tiplabels(net))
+    leafname2num = Dict(t => i for (i,t) in enumerate(taxa))
+    ntax = length(taxa)
+    nnod = length(net.node)
+    rx = r"^_([1-9]\d*)"
+    rh = r"^H([1-9]\d*)"
+    newnum = zeros(Int, nnod)
+    for (i,n) in enumerate(net.node)
+        if n.leaf
+            newnum[i] = leafname2num[n.name]
+        elseif n.name != ""
+            m = match((n.hybrid ? rh : rx), n.name)
+            isnothing(m) &&
+                error("node $(n.name): cannot find desired number")
+            nn = parse(Int, m.captures[1])
+            nn > ntax || error("node $(n.name): $nn is ≤ number of taxa $ntax")
+            any(newnum[j]==nn for j in 1:(i-1)) &&
+                error("multiple nodes with desired number $nn")
+            newnum[i] = nn
+        end
+    end
+    # if some internal nodes had no names: assign them unused numbers
+    i = findfirst(isequal(0), newnum)
+    if !isnothing(i)
+        unused = setdiff(1:nnod, newnum)
+        nextj = (isempty(unused) ? nnod+1 : popfirst!(unused))
+        while !isnothing(i)
+            newnum[i] = nextj
+            i = findnext(isequal(0), newnum, i+1)
+            nextj = (isempty(unused) ? nextj+1 : popfirst!(unused))
+        end
+    end
+    for i in 1:nnod
+        net.node[i].number = newnum[i]
+    end
+    return net
+end
+
+"""
     istrivialsplit(v)
 
 true/false if `v` does / does not represent a trivial split. `v` should contain
