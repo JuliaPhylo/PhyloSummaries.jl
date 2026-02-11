@@ -174,6 +174,10 @@ tob,_ = consensus_treeofblobs(net[[4,9,3,2]])
 
 res = consensus_level1network(net)
 @test keys(res) == (:net, :blob_table, :hybrid_table, :bipartition_table, :taxa)
+consensus_level1network_save(res, "fake")
+for pf in ["_net.nwk", "_blob.csv", "_hybrid.csv", "_bipartition.csv"]
+  rm("fake$pf")
+end
 con = res[:net]
 @test writenewick(con, support=:y, round=true) == "(t2,(t4,(t3,(t5,#H11)_10)_9)_8,(t1,(t6)#H11)_12)_7_blob1;"
 # or different ismajor: "(t2,(t4,(t3,(t5,(t6)#H0))),(#H0,t1));"

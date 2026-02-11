@@ -1,5 +1,6 @@
 module PhyloSummaries
 
+using CSV
 using PhyloNetworks
 
 # import: to extend methods from another packages
@@ -9,6 +10,7 @@ const PN = PhyloNetworks
 
 export
 consensus_level1network,
+consensus_level1network_save,
 consensus_treeofblobs,
 consensustree,
 resetnodenumbers_fromnames!

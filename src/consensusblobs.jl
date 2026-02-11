@@ -168,6 +168,8 @@ Consensus network summarizing a list of level-1 networks, by these steps:
    If an `outgroup` is provided, the hybrid node is chosen among those that
    do not conflict with this outgroup taxon being an outgroup: below the root,
    and not affected (below) any reticulation.
+
+See [`consensus_level1network_save`](@ref) to save the output.
 """
 function consensus_level1network(
     networks::AbstractVector{PN.HybridNetwork};
@@ -194,6 +196,43 @@ function consensus_level1network(
     sdat = bipartdata_onToB(bpvec, bpei, nnets, net.edge, taxa)
     return (net=net, blob_table=bdat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
+end
+
+"""
+    consensus_level1network_save(result_object, rootname=nothing)
+
+Write to files the results of [`consensus_level1network`](@ref) to 4 files,
+with file names starting with `rootname` and ending with "_net.nwk" for the
+consensus network (with bipartition support as non-redundant with blobs),
+"_blob.csv" for the table about blobs and their support,
+"_hybrid.csv" for the table about hybrid clusters and their support, and
+"_bipartition.csv" for the table about bipartitions and their support
+(as non-redundant with blobs).
+
+For the hybrid and bipartition tables, the column for the edge number is not saved
+because re-reading the network from the newick file would most likely lead to
+different internal edge numbers, and using obsolete edge numbers could then
+cause unintended errors. Node numbers will also be different when re-reading
+the network from the newick file, but the original node numbers can be recovered
+with [`resetnodenumbers_fromnames!`](@ref)
+
+!!! warn "Files will be overwritten, if they already exist"
+
+"""
+function consensus_level1network_save(
+    res::NamedTuple,
+    root::Union{AbstractString, Nothing}=nothing
+)
+    isnothing(root) && error("Please provide a root for the file names")
+    writenewick(res[:net], root * "_net.nwk", support=:y)
+    CSV.write(root * "_blob.csv", res[:blob_table])
+    CSV.write(root * "_hybrid.csv", res[:hybrid_table][ # do not save :edge column
+        [:blob, :node_from, :node_to, :support_hybrid, :cluster_num, :cluster]
+    ])
+    CSV.write(root * "_bipartition.csv", res[:bipartition_table][ # no edge number
+        [:node1, :node2, :support_nonredundant, :cluster_num, :cluster]
+    ])
+    return nothing
 end
 
 """
