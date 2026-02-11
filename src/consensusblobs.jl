@@ -422,25 +422,6 @@ function findmatchingblob(
 end
 
 """
-    canonicalorders(vector, startidx)
-
-Clockwise and counter-clockwise circular permutations of `vector`, starting at
-index `startidx`. Assumptions, not checked: `vector` is non-empty, and
-`startidx` is a valid index for it.
-
-fixit: delete, replaced by `add_canonical_circularorder!` to avoid calculating
-the backward order if it's not needed.
-"""
-function canonicalorders(vec::AbstractVector{T}, startidx::Int) where T
-    nB = length(vec) # nB for number of blocks in the partition
-    itr = Iterators.flatten((startidx:nB, 1:(startidx-1)))
-    forward  = Tuple(Iterators.map(i -> vec[i], itr))
-    itr = Iterators.flatten((startidx:-1:1, nB:-1:(startidx+1)))
-    backward = Tuple(Iterators.map(i -> vec[i], itr))
-    return forward, backward
-end
-
-"""
     add_canonical_circularorder!(circularorder_dictionary, indexmap)
 
 1. Find the clockwise (and counter-clockwise if necessary) circular permutation(s)

@@ -1,18 +1,6 @@
 @testset "consensus blobs" begin
 
-nwk = [ # some rooted, some unrooted
-  "(A,((((B,(C)#H1:::0.7),(#H1:::0.3,D)))#H0,#H0),E);",
-  "(A,(((B,(C)#H1:::0.65),(#H1:::0.35,D))#H0,#H0),E);", # 2 bicomp = 1 blob
-  "(A,((C,(B)#H1),(#H1,E)),D);",
-  "(D,((C,(B)#H1),(#H1,(A,E))));",
-  "(C,((B)#H1,((#H1,(A,E)),D)));", # same as previous but rooted at C
-]
-# sanity-check canonical order helper
-@testset "canonicalorders, misc" begin
-    cw, ccw = PS.canonicalorders([5, 1, 3, 2, 4], 2) # start at index 2
-    @test cw == (1, 3, 2, 4, 5)
-    @test ccw == (1, 5, 4, 2, 3)
-
+@testset "misc" begin
   net = readnewick("(t2,(t4,(t3,(t5,#H11)_10)_9)_8,(t1,(t6)#H11)_12)_7_blob1;");
   resetnodenumbers_fromnames!(net)
   @test [n.number for n in net.node] == [2,4,3,5,10,9,8,1,6,11,12,7]
@@ -42,6 +30,13 @@ end
     @test !PS.blobcompatible(A2, B2) # tree-compatible, but not blob-compatible
 end
 
+nwk = [ # some rooted, some unrooted
+  "(A,((((B,(C)#H1:::0.7),(#H1:::0.3,D)))#H0,#H0),E);",
+  "(A,(((B,(C)#H1:::0.65),(#H1:::0.35,D))#H0,#H0),E);", # 2 bicomp = 1 blob
+  "(A,((C,(B)#H1),(#H1,E)),D);",
+  "(D,((C,(B)#H1),(#H1,(A,E))));",
+  "(C,((B)#H1,((#H1,(A,E)),D)));", # same as previous but rooted at C
+]
 @testset "count blobs" begin
 taxa = ["D","C","B","A","E"] # not what consensusblob would use
 net = readnewick.(nwk)
