@@ -1,6 +1,7 @@
 ```@meta
 ShareDefaultModule = true
 ```
+
 ```@setup
 using PhyloSummaries
 using PhyloPlots, RCall # not below because it would generate "precompiling..." output
@@ -46,6 +47,7 @@ R"mtext"("tree 2")
 R"dev.off()"; # hide
 nothing # hide
 ```
+
 ![trees 1-2, from raxml.tre](../assets/figures/raxmltree_12.svg)
 
 By default, we get the greedy consensus tree of our input trees,
@@ -80,6 +82,7 @@ R"mtext"("support: % input trees", line=0)
 R"dev.off()"; # hide
 nothing # hide
 ```
+
 ![majority rule consensus tree](../assets/figures/raxmltree_con.svg)
 
 ## consensus tree of blob
@@ -117,13 +120,21 @@ R"mtext"("net 2");
 R"dev.off()"; # hide
 nothing # hide
 ```
+
 ![nets 1 & 2, from bootstrapnets_h1](../assets/figures/bootstrapnets_h1_12.svg)
 
+The function [`consensus_treeofblobs`](@ref) returns a `NamedTuple` with the following keys:
 
-fixit: write this tutorial.
-The code below only shows the basic workflow.
-The tutorial should use this workflow, but piece by piece,
-explaining what is being done, and interpreting the output.
+- `tob`: the consensus tree of blobs.
+- `taxa`: the list of taxon names.
+- `blob_table`: support for each blob partition in the consensus.
+- `circorder_table` (ToB only): support for circular orderings within each blob.
+- `hybrid_table`: support for hybrid clades within blobs.
+- `bipartition_table`: support for cut-edge bipartitions not adjacent to
+  an interesting blob (i.e. non-redundant bipartitions).
+
+The tables are row-oriented (NamedTuples of vectors) and can be converted
+to DataFrames.
 
 ```@repl
 res = consensus_treeofblobs(netsample);
@@ -132,33 +143,47 @@ tree = res[:tob]
 writenewick(tree, internallabel=false) # star tree! 1 big blob
 ```
 
+We can inspect the support for the blobs and other features.
+Here, we use the `DataFrames` package to display the tables.
+
 ```@repl
 using DataFrames
 res[:taxa]
 blb_df = DataFrame(res[:blob_table], copycols=false) # use same columns in memory
 bip_df = DataFrame(res[:bipartition_table], copycols=false)
 hyb_df = DataFrame(res[:hybrid_table], copycols=false)
+cir_df = DataFrame(res[:circorder_table], copycols=false)
 ```
 
-various plots.
-plot 2 shows support for each blob at the blob node (in blue),
-and support for its lowest hybrid descendants at each blob' edges (in black):
+Because the consensus is a star tree (a single blob, no cut edges),
+`bip_df` is empty here.
+The `blb_df` table shows the support for each blob partition.
+The `hyb_df` table shows which taxa were hybrid in the input networks.
+The `cir_df` table shows the support for circular orderings within blobs.
+
+We can visualize these supports on the consensus tree.
+The plot below shows:
+
+- Support for each blob at the blob node (in blue).
+- Support for its lowest hybrid descendants at each blob's edges (in black).
 
 ```@example
+R"svg"(figname("consensus_tob_support.svg"), width=9, height=3) # hide
 R"layout"([1 2 3]);
 R"par"(mar=[0,0,0.5,0]);
 plot(tree, shownodenumber=true, showedgenumber=true, tipoffset=0.05);
-R"mtext"("consensus tree of blobs: star", side=3, line=-1);
-R"mtext"("node & edge numbers, as in tables", side=1, line=-2);
+R"mtext"("node & edge numbers", side=3, line=-1);
 plot(tree, nodelabelcolor="deepskyblue",
     nodelabeladj=1.1, edgelabeladj=[.5, -0.2],
     nodelabel=select(blb_df, [:node, :support_partition]),
     edgelabel=select(hyb_df, [:edge, :support_hybrid]));
-R"mtext"("consensus tree of blobs: same as\nToB of input net 1 (for example)",
-    side=3, line=-2);
-R"mtext"("support for blobs (blue) and hybrids (black)", side=1, line=-1.5);
+R"mtext"("blob (blue) & hybrid (black) support", side=3, line=-1);
 rotate!(netsample[8], -3);
 rotate!(netsample[8], -6); # to de-tangle crossing edges in plot below
 plot(netsample[8]);
-R"mtext"("input net 8: in which t1 is hybrid", side=3, line=-1);
+R"mtext"("input net 8", side=3, line=-1);
+R"dev.off()"; # hide
+nothing # hide
 ```
+
+![consensus tree of blobs with support values](../assets/figures/consensus_tob_support.svg)

@@ -253,7 +253,7 @@ set when ignoring the root. But this function can equally be used for clusters
 
 # Example
 ```jldoctest
-julia> const PS = PhyloSummaries # to use internals with less typing
+julia> const PS = PhyloSummaries; # to use internals with less typing
 
 julia> bp = [(true,false), (false,false), (true,true)]; freq=Ref.([3,1,4]);
 

@@ -96,6 +96,8 @@ node leaf  hybrid name     i_cycle edges'numbers
 -2   false false  _7_blob1 -1      7    9   
 
 julia> resetnodenumbers_fromnames!(net);
+
+julia> printnodes(net)
 node leaf  hybrid name     i_cycle edges'numbers
 2    true  false  t2       -1      1   
 1    true  false  t1       -1      2   
