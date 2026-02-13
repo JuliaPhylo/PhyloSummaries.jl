@@ -187,3 +187,60 @@ nothing # hide
 ```
 
 ![consensus tree of blobs with support values](../assets/figures/consensus_tob_support.svg)
+
+## consensus level-1 network
+
+The function [`consensus_level1network`](@ref) expands each blob in the tree of blobs,
+choosing the best-supported circular ordering and hybrid clade for each blob.
+The result is a level-1 phylogenetic network.
+
+Using the same set of input networks:
+
+```@repl
+res_l1 = consensus_level1network(netsample);
+keys(res_l1)
+con = res_l1[:net]
+writenewick(con, internallabel=false)
+```
+
+The `blob_table` for a level-1 network includes additional columns compared
+to the tree-of-blobs version: `hybrid` (the hybrid node number),
+`support_circorder` (support for the chosen circular ordering) and
+`hybrid_cluster` (the taxon block chosen as the hybrid clade):
+
+```@repl
+blb_l1 = DataFrame(res_l1[:blob_table], copycols=false)
+hyb_l1 = DataFrame(res_l1[:hybrid_table], copycols=false)
+```
+
+We can plot the consensus level-1 network:
+
+```@example
+R"svg"(figname("consensus_l1net.svg"), width=7, height=3) # hide
+R"layout"([1 2])       # hide
+R"par"(mar=[0,0,0.5,0]);
+plot(con, shownodenumber=true, showedgenumber=true, tipoffset=0.05);
+R"mtext"("node & edge numbers", side=3, line=-1);
+plot(con, nodelabelcolor="deepskyblue",
+    nodelabeladj=1.1, edgelabeladj=[.5, -0.2],
+    nodelabel=select(blb_l1, [:node, :support_partition]),
+    edgelabel=select(hyb_l1, [:edge, :support_hybrid]));
+R"mtext"("blob (blue) & hybrid (black) support", side=3, line=-1);
+R"dev.off()"; # hide
+nothing # hide
+```
+
+![consensus level-1 network with support values](../assets/figures/consensus_l1net.svg)
+
+To save the consensus network and its data tables to files, use
+[`consensus_level1network_save`](@ref):
+
+```julia
+consensus_level1network_save(res_l1, "my_consensus")
+# creates: my_consensus_net.nwk, my_consensus_blob.csv,
+#   my_consensus_hybrid.csv, my_consensus_bipartition.csv
+```
+
+To re-read the network later and recover the original node numbers
+(which may change with `readnewick`), use
+[`resetnodenumbers_fromnames!`](@ref).
