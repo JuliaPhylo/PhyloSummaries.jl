@@ -36,6 +36,7 @@ makedocs(;
             "internal" => "lib/internal.md",
         ],
     ],
+    plugins=[links],
 )
 
 deploydocs(;

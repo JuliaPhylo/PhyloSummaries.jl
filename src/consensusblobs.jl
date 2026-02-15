@@ -128,6 +128,7 @@ function consensus_treeofblobs(
     proportion::Number=0,
     minimumblobdegree::Int=4,
     supportaslength::Bool=false,
+    suppressinfo::Bool=false,
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot get a consensus"))
@@ -143,6 +144,11 @@ function consensus_treeofblobs(
     bdat, odat = blobdata_onToB(blobvec, bbn, nnets, taxa)
     hdat = hybriddata_onToB(blobvec, bbn, bbei, nnets, tob.edge, taxa)
     sdat = bipartdata_onToB(bpvec, bpei, nnets, tob.edge, taxa)
+    suppressinfo || @info """
+    Node & edge numbers in tables correspond to current numbers in net.
+    If the network is modified or re-read from file, restore matching
+    numbers with `resetnodenumbers_fromnames!` and `edgenumber`.
+    """
     return (tob=tob, blob_table=bdat, circorder_table=odat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
@@ -176,6 +182,7 @@ function consensus_level1network(
     proportion::Number=0,
     minimumblobdegree::Int=4,
     outgroup::Union{Nothing,String}=nothing,
+    suppressinfo::Bool=false,
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot get a consensus"))
@@ -194,6 +201,11 @@ function consensus_level1network(
     bdat = blobdata_onL1(blobvec, bbn, res..., nnets, taxa)
     hdat = hybriddata_onToB(blobvec, bbn, bbei, nnets, net.edge, taxa)
     sdat = bipartdata_onToB(bpvec, bpei, nnets, net.edge, taxa)
+    suppressinfo || @info """
+    Node & edge numbers in tables correspond to current numbers in net.
+    If the network is modified or re-read from file, restore matching
+    numbers with `resetnodenumbers_fromnames!` and `edgenumber`.
+    """
     return (net=net, blob_table=bdat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end

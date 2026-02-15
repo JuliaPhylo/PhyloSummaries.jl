@@ -13,6 +13,7 @@ consensus_level1network,
 consensus_level1network_save,
 consensus_treeofblobs,
 consensustree,
+edgenumber,
 resetnodenumbers_fromnames!
 
 include("utils.jl")

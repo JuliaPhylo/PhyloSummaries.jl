@@ -114,7 +114,7 @@ blobs, bps = PS.count_blobpartitions(net, taxa, 3)
 @test bps[1].split == (true, true, true, false, false)
 @test PS.freq(bps[1]) == 1
 
-res = consensus_treeofblobs(net, minimumblobdegree=3)
+res = consensus_treeofblobs(net, minimumblobdegree=3, suppressinfo=true)
 @test keys(res) == (:tob, :blob_table, :circorder_table, :hybrid_table,
   :bipartition_table, :taxa)
 tob = res[:tob]
@@ -128,7 +128,7 @@ tob = res[:tob]
 @test res[:bipartition_table] == (node1=[6], node2=[7], edge=[6],
   support_nonredundant=[1/3], cluster_num=["1,2,3"], cluster=["a,b,c"])
 
-tob,_ = consensus_treeofblobs(net)
+tob,_ = consensus_treeofblobs(net, suppressinfo=true)
 @test writenewick(tob, support=:y, round=true) == "(d,e,(c,b,a)_7::1.0)_6;"
 @test all(n.fvalue == -1 for n in tob.node)
 @test [e.y for e in tob.edge] ≈ [-1,-1,-1,-1,-1, 1]
@@ -138,7 +138,7 @@ end
 # nets 1,2,4,5: same blob AE|B|C|D, same hybrid C, same circular order
 # net 3; blob AD|C|B(hybrid)|E
 net = readnewick.(nwk)
-res = @test_logs (:warn, r"^non-binary") consensus_treeofblobs(net)
+res = @test_logs (:warn, r"^non-binary") (:info, r"^Node & edge numbers in tables") consensus_treeofblobs(net)
 tob = res[:tob]
 @test writenewick(tob) == "(A,E,(D,C,B)_7_blob1)_6;"
 @test tob.node[7].fvalue == 0.8 # blob in 4/5 input nets
@@ -162,17 +162,17 @@ for (i,n) in enumerate(net)
 end
 =#
 # consensus tree-of-blobs: star, blob support 60%:
-tob,_ = consensus_treeofblobs(net)
+tob,_ = consensus_treeofblobs(net, suppressinfo=true)
 @test writenewick(tob) == "(t1,t2,t3,t4,t5,t6)_7_blob1;"
 @test getroot(tob).fvalue == 6/10
-tob,_ = consensus_treeofblobs(net[[2,3,4,9]])
+tob,_ = consensus_treeofblobs(net[[2,3,4,9]], suppressinfo=true)
 @test writenewick(tob) == "(t5,t6,(t4,t3,t2,t1)_8_blob1)_7;" # blob from nets 4,9
 @test tob.node[8].fvalue == 0.5
-tob,_ = consensus_treeofblobs(net[[4,9,3,2]])
+tob,_ = consensus_treeofblobs(net[[4,9,3,2]], suppressinfo=true)
 @test writenewick(tob) == "(t3,t4,t5,t6,(t2,t1)_8)_7_blob1;" # blob from nets 2,3
 @test getroot(tob).fvalue == 0.5
 
-res = consensus_level1network(net)
+res = @test_logs (:info, r"^Node & edge numbers") consensus_level1network(net)
 @test keys(res) == (:net, :blob_table, :hybrid_table, :bipartition_table, :taxa)
 consensus_level1network_save(res, "fake")
 for pf in ["_net.nwk", "_blob.csv", "_hybrid.csv", "_bipartition.csv"]
@@ -201,7 +201,7 @@ nfile = joinpath(@__DIR__,"..","test","level1_7taxa_abc.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","level1_7taxa_abc.nwk")
 net = readmultinewick(nfile)
 
-res = consensus_level1network(net, minimumblobdegree=3) # 2 blobs, 0 bps
+res = consensus_level1network(net, minimumblobdegree=3, suppressinfo=true) # 2 blobs, 0 bps
 con = res[:net]
 @test writenewick(con) == "(a3,(a4,#H11)_10,(a2,(a1,(((c2,(c1,(b1)#H16)_14)_15,#H16)_8_blob1)#H11)_12)_13)_9_blob2;"
 @test [n.fvalue for n in con.node if n.hybrid] == [.6, .2]
@@ -220,7 +220,7 @@ con = res[:net]
   cluster=["b1,c1,c2", "b1", "a1,a2,a3,a4"])
 @test all(isempty(x) for x in res[:bipartition_table])
 
-res = consensus_level1network(net, outgroup="a2") # 1 blob, 1 bps, hyb edge reversed
+res = consensus_level1network(net, outgroup="a2", suppressinfo=true) # 1 blob, 1 bps, hyb edge reversed
 con = res[:net]
 @test writenewick(con) == "(a2,((a1,((b1,(c1,c2)_8)_10)#H14)_15,(a3,(a4,#H14)_13)_12)_9_blob1);"
 @test [n.fvalue for n in con.node if !n.leaf] == [-1,.6,-1,-1,.6,.6,.6,.6]
@@ -230,7 +230,7 @@ con = res[:net]
   support_nonredundant=[.6,.2], cluster_num = ["1,2,3,4,5", "1,2,3,4"],
   cluster=["a1,a2,a3,a4,b1", "a1,a2,a3,a4"])
 
-res = consensus_level1network(net[1:4], minimumblobdegree=3) # hedge of weight 0
+res = consensus_level1network(net[1:4], minimumblobdegree=3, suppressinfo=true) # hedge of weight 0
 con = res[:net]
 @test writenewick(con) == "(a3,(a4,#H12)_11,(a2,(a1,((((c1,c2)_8,(b1)#H15)_16,#H15)_9_blob1)#H12)_13)_14)_10_blob2;"
 @test [n.fvalue for n in con.node if n.hybrid] == [.5, 0]
@@ -246,7 +246,7 @@ con = res[:net]
 @test res[:bipartition_table] == (node1=[16], node2=[8], edge=[8],
   support_nonredundant=[0.5], cluster_num=["1,2,3,4,5"], cluster=["a1,a2,a3,a4,b1"])
 
-res = consensus_level1network(net[[1,3,4]], minimumblobdegree=3)
+res = consensus_level1network(net[[1,3,4]], minimumblobdegree=3, suppressinfo=true)
 con = res[:net]
 @test writenewick(con) == "(c1,c2,((b1,(((a2,a1)_11,(a4,a3)_12)_10)#H14)_13,#H14)_9_blob1)_8;"
 @test [n.fvalue for n in con.node if n.intn1 ≠ -1] ≈ [1,1,2]./3
@@ -264,7 +264,7 @@ nfile = joinpath(@__DIR__,"..","test","level2_7taxa_abc.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","level2_7taxa_abc.nwk")
 net = readmultinewick(nfile)
 @test_throws "level > 1" consensus_level1network(net)
-res = consensus_treeofblobs(net)
+res = consensus_treeofblobs(net, suppressinfo=true)
 con = res[:tob]
 @test writenewick(con, support=:y) == "(c1,c2,((a4,a3,a2,a1)_9_blob1,b1)_10::0.4)_8;"
 @test all(isempty(x) for x in res[:circorder_table]) # because level-2
@@ -278,7 +278,7 @@ net = readnewick.(
  "(a4,((b1,(c2,c1)),(d1,(a2,(a3)#H1))),#H1);",
  "(((c1,c2),(#H1,b1)),((a3,a2),(d1)#H1),a4);",
  "(c1,c2,((#H1,b1),(((a3,a2),(d1)#H1),a4)));"])
-res = consensus_level1network(net)
+res = consensus_level1network(net, suppressinfo=true)
 con = res[:net]
 @test writenewick(con, support=:y) == # d1 hybrid even though never in that blob
   "(a3,(a2,#H12)_11,(a4,((b1,(c1,c2)_10::0.6)_9,(d1)#H12)_13)_14)_8_blob1;"

@@ -150,6 +150,44 @@ function resetnodenumbers_fromnames!(net::PN.HybridNetwork)
 end
 
 """
+    edgenumber(net::PN.HybridNetwork, n1_number::Int,  n2_number::Int)
+
+Number of the edge, in `net`, that is incident to nodes `n1` and `n2` with
+specified numbers; or `nothing` if no such edge exitst.
+Warning: if `net` has parallel edges, there might be 2 (hybrid and partner)
+edges between `n1` and `n2`. The number of one of them is returned, arbitrarily.
+"""
+function edgenumber(net::PN.HybridNetwork, n1num::Int, n2num::Int)
+    n1i = findfirst(n -> n.number == n1num, net.node)
+    isnothing(n1i) && error("no node numbered $n1num")
+    n1 = net.node[n1i]
+    for e in n1.edge
+        n2 = PN.getOtherNode(e,n1)
+        if n2.number == n2num
+            return e.number
+        end
+    end
+    return nothing
+end
+"""
+    edgenumber(net::PN.HybridNetwork, n1_nums::Vector, n2_nums::Vector)
+
+Vector of edge numbers, of edges in `net` between pairs of nodes of specified numbers.
+"""
+function edgenumber(net::PN.HybridNetwork, n1num::Vector, n2num::Vector)
+    ne = length(n1num)
+    length(n2num) == ne ||
+        error("node number lists of different lengths: $ne and $(length(n2num))")
+    enum = Vector{Int}(undef, ne) # Union{Nothing,Int}
+    for (i,(n1,n2)) in enumerate(zip(n1num, n2num))
+        ei = edgenumber(net, n1, n2)
+        isnothing(ei) && error("no edge between nodes $n1 and $n2")
+        enum[i] = ei
+    end
+    return enum
+end
+
+"""
     istrivialsplit(v)
 
 true/false if `v` does / does not represent a trivial split. `v` should contain

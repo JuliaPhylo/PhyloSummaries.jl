@@ -68,7 +68,8 @@ esup = DataFrame(
     number = [e.number for e in con.edge if !isexternal(e)],
     support = [round(100 * e.y, digits=1) for e in con.edge if !isexternal(e)]
 )
-ecol = Dict(r[:number] => (r[:support] < 70 ? "orange2" : "black") for r in eachrow(esup))
+ecol = Dict(r[:number] => (r[:support] < 70 ? "orange2" : "black")
+            for r in eachrow(esup))
 ```
 
 ```@example
@@ -274,11 +275,11 @@ R"layout"([1 2 3]);
 R"par"(mar=[0,0,0.5,0]);
 plot(tree, shownodenumber=true, showedgenumber=true, tipoffset=0.05);
 R"mtext"("node & edge numbers", side=3, line=-1);
-plot(tree, nodelabelcolor="deepskyblue",
+plot(tree, nodelabelcolor="orangered", edgelabelcolor="deepskyblue",
     nodelabeladj=1.1, edgelabeladj=[.5, -0.2],
     nodelabel=select(blb_df, [:node, :support_partition]),
     edgelabel=select(hyb_df, [:edge, :support_hybrid]));
-R"mtext"("blob (blue) & hybrid (black) support", side=3, line=-1);
+R"mtext"("blob (red) & hybrid (blue) support", side=3, line=-1);
 rotate!(netsample[8], -3);
 rotate!(netsample[8], -6); # to de-tangle crossing edges in plot below
 plot(netsample[8]);
@@ -367,11 +368,11 @@ R"layout"([1 2])       # hide
 R"par"(mar=[0,0,0.5,0]); # hide
 plot(con, shownodenumber=true, showedgenumber=true, tipoffset=0.05);
 R"mtext"("node & edge numbers", side=3, line=-.5);
-plot(con, nodelabelcolor="deepskyblue",
+plot(con, nodelabelcolor="orangered", edgelabelcolor="deepskyblue",
     nodelabeladj=-0.1, edgelabeladj=[.5, -0.2],
     nodelabel=select(blb_l1, [:node, :support_partition]),
     edgelabel=select(hyb_l1, [:edge, :support_hybrid]));
-R"mtext"("blob (blue) & hybrid (black) support", side=3, line=-.5);
+R"mtext"("blob (red) & hybrid (blue) support", side=3, line=-.5);
 R"dev.off()"; # hide
 nothing # hide
 ```
@@ -393,13 +394,16 @@ consensus_level1network_save(res_l1, "level1consensus")
 
 We can re-read these files later, like this:
 
-```@repl
+```@example
 con2 = readnewick("level1consensus_net.nwk");
 writenewick(con2) # internal node names give node numbers used in tables
+```
+```@example
 using CSV
 blb2 = CSV.read("level1consensus_blob.csv", DataFrame)
-hyb2  = CSV.read("level1consensus_hybrid.csv", DataFrame) # no edge column
-bip2  = CSV.read("level1consensus_bipartition.csv", DataFrame) # no edge
+hyb2  = CSV.read("level1consensus_hybrid.csv", DataFrame); # no edge column
+bip2  = CSV.read("level1consensus_bipartition.csv", DataFrame); # no edge
+nothing # hide
 ```
 
 However, care should be taken after re-reading the network from the newick
@@ -416,18 +420,29 @@ printnodes(con2) # new node numbers: now match names. everything else the same
 ```
 
 Now, we can re-do our plot, but the original edge number are not recovered.
-Edge support should be extracted from the network itself: these support
-values were saved in the newick file.
+Edge support, as non-redundant bipartitions, can be extracted from the network
+itself: these support values were saved in the newick file.
 
-```@repl
+```@example
 edgedf_bip = DataFrame(
   edgenumber  = [e.number for e in con2.edge if e.y != -1],
   edgesupport = [round(e.y, digits=2) for e in con2.edge if e.y != -1]
 )
+nothing #hide
 ```
 Here this is not interesting because no edge had support as
 a non-redundant bipartition, so this table is empty.
 But this code can be used reliably.
+
+To map hybrid support, or support for edges as coming off a hybrid node,
+we need to get the current number of each edges based on its nodes.
+
+```@repl
+hyb2 # no 'edge' column, because its old numbers are different after readnewick
+edgenumber(con2, 11, 6) # 11=node_from, 6=node_to
+hyb2.edge = edgenumber(con2, hyb2.node_from, hyb2.node_to);
+hyb2
+```
 
 ```@example
 R"svg"(figname("consensus_l1net2.svg"), width=7, height=3) # hide
@@ -435,15 +450,14 @@ R"layout"([1 2])       # hide
 R"par"(mar=[0,0,0.5,0]); # hide
 plot(con2, shownodenumber=true, showedgenumber=true, tipoffset=0.05);
 R"mtext"("node & edge numbers", side=3, line=-.5);
-R"mtext"("nodes: like before. edge: different", side=1, line=-1);
-plot(con2, nodelabelcolor="deepskyblue",
+R"mtext"("nodes: as before. edges: different", side=1, line=-1);
+plot(con2, nodelabelcolor="orangered", edgelabelcolor="deepskyblue",
     nodelabeladj=-0.1, edgelabeladj=[.5, -0.2],
     nodelabel = select(blb2, [:node, :support_partition]),
-    # fixit: doesn't work below. need function to get edge number from incident nodes
-    #edgelabel = select(hyb2, [:edge, :support_hybrid])
+    edgelabel = select(hyb2, [:edge, :support_hybrid])
     # edgelabel = edgedf_bip to show bipartition support (uninteresting here)
 );
-R"mtext"("blob (blue) & hybrid (black) support", side=3, line=-.5);
+R"mtext"("blob (red) & hybrid (blue) support", side=3, line=-.5);
 R"dev.off()"; # hide
 nothing # hide
 ```
@@ -469,28 +483,150 @@ frequent hybrid block is chosen instead of t6. We saw that t3 and t4 are tied
 next (in section [consensus tree of blob](@ref)).
 One of the 2 will be chosen arbitrarily, here t4:
 
-```@repl
-res_t6out = consensus_level1network(netsample; outgroup="t6");
+```@example
+res_t6out = consensus_level1network(netsample; outgroup="t6", suppressinfo=true);
 writenewick(res_t6out[:net], internallabel=false) # t4 below the hybrid H10
 ```
 
 ```@example
-R"svg"(figname("consensus_l1net_t6out.svg"), width=3.5, height=3) # hide
+R"svg"(figname("consensus_l1net_t6out.svg"), width=7, height=3) # hide
 R"layout"([1 2])       # hide
 R"par"(mar=[0,0,0.5,0]); # hide
 plot(res_t6out[:net], shownodenumber=true, tipoffset=0.05);
 R"mtext"("node numbers", side=3, line=-.5);
 R"mtext"("to see around which ones to rotate edges", side=1, line=-.5);
 for i in [13,9] rotate!(res_t6out[:net], i); end
-plot(res_t6out[:net], tipoffset=0.05, nodelabelcolor="deepskyblue",
-    nodelabeladj=-0.1, edgelabeladj=[.5, -0.2],
+plot(res_t6out[:net], tipoffset=0.05, nodelabeladj=-0.1, edgelabeladj=[.5,-0.2],
+    nodelabelcolor="orangered", edgelabelcolor="deepskyblue",
     nodelabel = DataFrame(res_t6out[:blob_table][[:node, :support_partition]]),
     edgelabel = DataFrame(res_t6out[:hybrid_table][[:edge, :support_hybrid]])
 );
-R"mtext"("blob (blue) & hybrid (black) support", side=3, line=-.5);
+R"mtext"("blob (red) & hybrid (blue) support", side=3, line=-.5);
+R"mtext"("we see t6 hybrid in 50% input nets", side=3, line=-.5);
 R"dev.off()"; # hide
 nothing # hide
 ```
 
-![consensus level-1 network with support values, after re-reading results from file](../assets/figures/consensus_l1net2.svg)
+![consensus level-1 network, required to be rooted with t6 as outgroup](../assets/figures/consensus_l1net_t6out.svg)
 
+### non-redundant bipartitions
+
+We use a different example for this: again a small set of small input networks,
+so it's easy to look at them. They are all of level 1.
+
+```@example
+netfile = joinpath(dirname(pathof(PhyloSummaries)), "..",
+    "test","level1_7taxa_abc.nwk");
+netsample = readmultinewick(netfile);
+length(netsample) # 5 networks: very small example
+```
+
+We first get the consensus tree of blobs, to check if there are multiple
+circular orders, and if the top ones may be tied (we don't get this info
+from the level-1 consensus):
+
+```@repl
+tob = consensus_treeofblobs(netsample, suppressinfo=true);
+DataFrame(tob[:circorder_table]) # no ties: only 1 order
+```
+
+We see only 1 circular order, meaning that the input networks with the
+top-ranking blob all share the same circular order.
+In particular, there's no tie (good to know).
+
+```@repl
+con = consensus_level1network(netsample, suppressinfo=true);
+writenewick(con[:net], support=true) # edges support: as non-redundant biparts
+bip_df = DataFrame(con[:bipartition_table])
+```
+
+Let's plot our level-1 consensus: with support values on edges that show
+support for hybrid clades (middle) or for
+bipartitions to be non-redundant with blobs (right):
+
+```@example
+net = con[:net]
+blb_df = DataFrame(con[:blob_table])
+hyb_df = DataFrame(con[:hybrid_table])
+bip_df = DataFrame(con[:bipartition_table])
+R"svg"(figname("consensus_7taxa_abc.svg"), width=9, height=3) # hide
+R"layout"([1 2 3]); # hide
+R"par"(mar=[0,0,0.5,0]); # hide
+plot(net, shownodenumber=true, tipoffset=0.05);
+R"mtext"("node numbers: to decide rotations", side=3, line=-1);
+for i in [14,13] rotate!(net, i); end
+plot(net, nodelabeladj=1.1, edgelabeladj=[.5,-0.2],
+    nodelabelcolor="orangered", edgelabelcolor="deepskyblue",
+    nodelabel=select(blb_df, [:node, :support_partition]),
+    edgelabel=select(hyb_df, [:edge, :support_hybrid]));
+R"mtext"("blob (red) & hybrid (blue) support", side=3, line=-1);
+plot(net, nodelabeladj=1.1, edgelabeladj=[.5,-0.2], nodelabelcolor="orangered",
+    nodelabel=select(blb_df, [:node, :support_partition]),
+    edgelabel=select(bip_df, [:edge, :support_nonredundant]));
+R"mtext"("support for edges as non-redundant (black)", side=3, line=-1);
+R"dev.off()"; # hide
+nothing # hide
+```
+
+![consensus level-1 network with support values, 5 input networks on 7 taxa](../assets/figures/consensus_7taxa_abc.svg)
+
+- (b1,c1,c2) has 20% support as a non-redundant bipartition.
+  We also know that this clade is in the 60% input networks that have the blob
+  (and redundant with the blob in these networks),
+  so it's in at least 80% of the input networks.
+- (c1,c2) has 60% support as a non-redundant bipartition. This clade may
+  be present in more than 60% networks, if it's connected to a blob in these
+  other networks, but we don't get to see this here.
+
+### support for hybrid sisters
+
+There may be high support for a clade to be of hybrid origin, in which case
+this clade has 2 sisters (in the simplest level-1 case).
+We may want to know if there is uncertainty about where gene flow came from,
+that is, what groups are its sisters. For this, we can use functions currently
+in PhyloNetworks, that map support onto a reference network:
+[`PhyloNetworks.treeedges_support`](@extref) and
+[`PhyloNetworks.hybridclades_support`](@extref).
+
+Below, we use these functions to map the support of more features (like hybrid sisters) onto our level-1 consensus network as a reference network.
+Note that, unlike the consensus functions here, the results of
+`treeedges_support` and `hybridclades_support` depend on which hybrid edges
+are *major* or *minor*, in the input networks.
+The support for an edge to be a "tree" edge is the proportion of input networks
+in which this edge is retained after deleting all the minor hybrid edges are
+deleted, to get the major tree of each input network.
+
+```@repl
+BSe_majortree, majortree = treeedges_support(netsample, net);
+BSn, BSe, BSc, BSgam, BSedgenum = hybridclades_support(netsample, net);
+```
+
+```@example
+R"svg"(figname("consensus_7taxa_abc_hybsisters.svg"), width=9, height=3) # hide
+R"layout"([1 2 3]); # hide
+R"par"(mar=[0,0,0.5,0]); # hide
+plot(net, edgelabel=BSe_majortree);
+R"mtext"("support for edges to be in major tree", side=3, line=-1);
+R"mtext"("support are in %, not proportions!", side=1, line=-1);
+plot(net, edgelabeladj=[.5,-.2], nodelabeladj=[.5,.5],
+    edgelabelcolor="orangered", nodelabelcolor="deepskyblue4",
+    edgelabel=select(BSe,[:edge, :BS_hybrid_edge]),
+    nodelabel=select(BSn,[:hybridnode,:BS_hybrid_samesisters])
+);
+R"mtext"("support for sister-hybrid relationships", side=3, line=-1);
+R"mtext"("blue: hybrid + both sisters", side=1, line=-1);
+plot(net, edgelabeladj=[.5,-.2],
+    edgelabel=filter(row->row[:BS_hybrid]>0, BSn)[!,[:edge,:BS_hybrid]]);
+R"mtext"("support for hybrid clades", side=3, line=-1);
+R"mtext"("b1 of hybrid origin in 20% nets", side=1, line=-1);
+R"dev.off()"; # hide
+nothing # hide
+```
+
+![support for major-tree edges and sister-relationships, 5 input networks on 7 taxa](../assets/figures/consensus_7taxa_abc_hybsisters.svg)
+
+From the left panel, we see that (b1,c1,c2) and (c1,c2) are in fact clades
+in the major tree of 100% of our input networks.
+
+See the section about PhyloNetworks's [Network support](@extref PhyloNetworks)
+for more details.
