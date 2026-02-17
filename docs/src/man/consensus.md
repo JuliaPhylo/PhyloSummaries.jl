@@ -407,7 +407,7 @@ nothing # hide
 ```
 
 However, care should be taken after re-reading the network from the newick
-file to recover the original node numbers, because `readnewick` may set
+file to recover the original node and edge numbers, because `readnewick` may set
 them differently. We want to recover internal node numbers in the network
 that match with those saved in the csv files.
 To get the original node numbers, which are part of the node labels,
@@ -419,30 +419,28 @@ resetnodenumbers_fromnames!(con2)
 printnodes(con2) # new node numbers: now match names. everything else the same
 ```
 
-Now, we can re-do our plot, but the original edge number are not recovered.
-Edge support, as non-redundant bipartitions, can be extracted from the network
-itself: these support values were saved in the newick file.
-
-```@example
-edgedf_bip = DataFrame(
-  edgenumber  = [e.number for e in con2.edge if e.y != -1],
-  edgesupport = [round(e.y, digits=2) for e in con2.edge if e.y != -1]
-)
-nothing #hide
-```
-Here this is not interesting because no edge had support as
-a non-redundant bipartition, so this table is empty.
-But this code can be used reliably.
-
+Now, we can re-do our plot, but the original edge numbers are not recovered.
 To map hybrid support, or support for edges as coming off a hybrid node,
-we need to get the current number of each edges based on its nodes.
+we need to get the current number of each edge based on its nodes.
 
 ```@repl
 hyb2 # no 'edge' column, because its old numbers are different after readnewick
-edgenumber(con2, 11, 6) # 11=node_from, 6=node_to
-hyb2.edge = edgenumber(con2, hyb2.node_from, hyb2.node_to);
-hyb2
+hyb2.edge = edgenumbers_fromnodenumbers(hyb2, con2);
+hyb2 # new edge column: with number that match those in "con2" network
 ```
+
+Edge support, as non-redundant bipartitions, can be extracted from the network
+itself: these support values were saved in the newick file.
+Or it can be recovered from the bipartition table like we did for the
+hybrid table above:
+
+```@example
+bip2.edge = edgenumbers_fromnodenumbers(bip2, con2)
+nothing # hide
+```
+
+Here this is not interesting because no edge had support as
+a non-redundant bipartition, so this table is empty.
 
 ```@example
 R"svg"(figname("consensus_l1net2.svg"), width=7, height=3) # hide
@@ -455,7 +453,6 @@ plot(con2, nodelabelcolor="orangered", edgelabelcolor="deepskyblue",
     nodelabeladj=-0.1, edgelabeladj=[.5, -0.2],
     nodelabel = select(blb2, [:node, :support_partition]),
     edgelabel = select(hyb2, [:edge, :support_hybrid])
-    # edgelabel = edgedf_bip to show bipartition support (uninteresting here)
 );
 R"mtext"("blob (red) & hybrid (blue) support", side=3, line=-.5);
 R"dev.off()"; # hide

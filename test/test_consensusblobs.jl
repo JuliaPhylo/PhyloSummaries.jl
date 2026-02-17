@@ -175,6 +175,10 @@ tob,_ = consensus_treeofblobs(net[[4,9,3,2]], suppressinfo=true)
 res = @test_logs (:info, r"^Node & edge numbers") consensus_level1network(net)
 @test keys(res) == (:net, :blob_table, :hybrid_table, :bipartition_table, :taxa)
 consensus_level1network_save(res, "fake")
+df = CSV.read("fake_hybrid.csv", NamedTuple)
+@test edgenumbers_fromnodenumbers(df, res[:net]) == res[:hybrid_table][:edge] # [6,1,4,3]
+df = CSV.read("fake_bipartition.csv", DataFrame)
+@test edgenumbers_fromnodenumbers(df, res[:net]) == Int[]
 for pf in ["_net.nwk", "_blob.csv", "_hybrid.csv", "_bipartition.csv"]
   rm("fake$pf")
 end

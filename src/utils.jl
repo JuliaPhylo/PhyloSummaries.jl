@@ -150,41 +150,45 @@ function resetnodenumbers_fromnames!(net::PN.HybridNetwork)
 end
 
 """
-    edgenumber(net::PN.HybridNetwork, n1_number::Int,  n2_number::Int)
-
-Number of the edge, in `net`, that is incident to nodes `n1` and `n2` with
-specified numbers; or `nothing` if no such edge exitst.
-Warning: if `net` has parallel edges, there might be 2 (hybrid and partner)
-edges between `n1` and `n2`. The number of one of them is returned, arbitrarily.
-"""
-function edgenumber(net::PN.HybridNetwork, n1num::Int, n2num::Int)
-    n1i = findfirst(n -> n.number == n1num, net.node)
-    isnothing(n1i) && error("no node numbered $n1num")
-    n1 = net.node[n1i]
-    for e in n1.edge
-        n2 = PN.getOtherNode(e,n1)
-        if n2.number == n2num
-            return e.number
-        end
-    end
-    return nothing
-end
-"""
-    edgenumber(net::PN.HybridNetwork, n1_nums::Vector, n2_nums::Vector)
+    edgenumbers_fromnodenumbers(n1_nums::Vector, n2_nums::Vector, net::PN.HybridNetwork)
 
 Vector of edge numbers, of edges in `net` between pairs of nodes of specified numbers.
+An error is thrown if, in one pair, the two nodes are not adjacent.
+This is to avoid unknowingly using wrong edge numbers for the other pairs of nodes.
+
+Uses `PhyloNetworks.getconnectingedge`.
 """
-function edgenumber(net::PN.HybridNetwork, n1num::Vector, n2num::Vector)
+function edgenumbers_fromnodenumbers(n1num::AbstractVector, n2num::AbstractVector, net::PN.HybridNetwork)
     ne = length(n1num)
     length(n2num) == ne ||
         error("node number lists of different lengths: $ne and $(length(n2num))")
-    enum = Vector{Int}(undef, ne) # Union{Nothing,Int}
-    for (i,(n1,n2)) in enumerate(zip(n1num, n2num))
-        ei = edgenumber(net, n1, n2)
-        isnothing(ei) && error("no edge between nodes $n1 and $n2")
-        enum[i] = ei
+    ne == 0 && return Int[]
+    enum = map(zip(n1num, n2num)) do (n1,n2)
+        e = PN.getconnectingedge(n1, n2, net)
+        isnothing(e) && error("no edge between nodes $n1 and $n2")
+        return e.number
     end
     return enum
+end
+"""
+    edgenumbers_fromnodenumbers(table, net::PN.HybridNetwork)
+
+Vector of edge numbers in `net`, with element `i` corresponding to the edge connecting
+(incident to) the two nodes listed in row `i` of the input table. This `table` may be
+a data frame or a named tuple, such as produced by [`consensus_treeofblobs`](@ref) and
+[`consensus_level1network`](@ref). It should have 2 columns with node numbers, either named
+`:node_from` and `:node_to`, or `:node1` and `:node2`.
+"""
+function edgenumbers_fromnodenumbers(df, net::PN.HybridNetwork)
+    colnames = propertynames(df) # works for NamedTuples and DataFrames
+    if (:node_from in colnames) && (:node_to in colnames)
+        edge = edgenumbers_fromnodenumbers(df.node_from, df.node_to, net)
+    elseif (:node1 in colnames) && (:node2 in colnames)
+        edge = edgenumbers_fromnodenumbers(df.node1, df.node1, net)
+    else
+        error("could not find the 2 columns with the node numbers")
+    end
+    return edge
 end
 
 """
