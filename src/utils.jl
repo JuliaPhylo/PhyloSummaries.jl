@@ -184,7 +184,7 @@ function edgenumbers_fromnodenumbers(df, net::PN.HybridNetwork)
     if (:node_from in colnames) && (:node_to in colnames)
         edge = edgenumbers_fromnodenumbers(df.node_from, df.node_to, net)
     elseif (:node1 in colnames) && (:node2 in colnames)
-        edge = edgenumbers_fromnodenumbers(df.node1, df.node1, net)
+        edge = edgenumbers_fromnodenumbers(df.node1, df.node2, net)
     else
         error("could not find the 2 columns with the node numbers")
     end
