@@ -476,13 +476,13 @@ end
     add_canonical_circularorder!(circularorder_dictionary, indexmap)
 
 1. Find the clockwise (and counter-clockwise if necessary) circular permutation(s)
-  of `indexmap`, starting at the index for value 1. For example, for vector
-  `[5, 1, 3, 2, 4]`, these are: `1,3,2,4,5` and `1,5,4,2,3`.
-  These are the 2 canonical ways of coding their shared circular order:
-  starting from value 1 and circling in one or the other direction.
+   of `indexmap`, starting at the index for value 1. For example, for vector
+   `[5, 1, 3, 2, 4]`, these are: `1,3,2,4,5` and `1,5,4,2,3`.
+   These are the 2 canonical ways of coding their shared circular order:
+   starting from value 1 and circling in one or the other direction.
 2. Add this circular order in the input dictionary: if already present
-  (in clockwise or counterwise direction) then its frequency is incremented.
-  Otherwise, a new entry with frequency 1 is added to the dictionary.
+   (in clockwise or counterwise direction) then its frequency is incremented.
+   Otherwise, a new entry with frequency 1 is added to the dictionary.
 """
 function add_canonical_circularorder!(
     codict::Dict{NTuple{P,Int},Int},
@@ -591,7 +591,7 @@ Internal fields:
   biconnected component.
 - `.intn1` updated to store the blob index that a visited node is in:
   index of the first biconnected component in this blob.
--`.boole1` set to `false` for all partners of an edge that will be traverered.
+- `.boole1` set to `false` for all partners of an edge that will be traverered.
 
 In `splits`, only the *children* taxon blocks are gathered, from exit cut-edges,
 but recursively across all bicomponents in the blob (which may occur in
