@@ -22,6 +22,13 @@ PS.count_bipartitions!(counts, tree3, taxa, true)
     ["1,2 -> 1", "3,4 -> 1", "1,3 -> 1", "2,4 -> 1"]
 end
 
+@testset "SplitFreq freq! setter" begin
+  sp = PS.SplitFreq{4}((true,true,false,false), Ref(1))
+  @test PS.freq(sp) == 1
+  PS.freq!(sp, 10)
+  @test PS.freq(sp) == 10
+end
+
 @testset "utilities" begin
 t = PS.startree(["t1","t2","t3"])
 ni = Ref(30); ei = Ref(4)

@@ -11,6 +11,23 @@
   @test_throws "multiple nodes" resetnodenumbers_fromnames!(net)
   net.node[6].name = "_4"
   @test_throws "≤ number of taxa" resetnodenumbers_fromnames!(net)
+
+  # freq! setter for BlobFreq
+  net1 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")
+  taxa = ["A","B","C","D","E"]
+  blobs, _ = PS.count_blobpartitions([net1], taxa, 4)
+  @test PS.freq(blobs[1]) == 1
+  PS.freq!(blobs[1], 42)
+  @test PS.freq(blobs[1]) == 42
+
+  # isredundantsplit(SplitFreq, BlobFreq) wrapper
+  sp = PS.SplitFreq{5}((true,true,false,false,false), Ref(1))
+  @test PS.isredundantsplit(sp, blobs[1])
+
+  # check_nonnumericnames and startree error on numeric taxon names
+  @test PS.check_nonnumericnames(["_2", "b", "c"]) == 1
+  @test isnothing(PS.check_nonnumericnames(["_1", "b", "c"]))
+  @test_throws "non-numeric" PS.startree(["_2", "b", "c"])
 end
 
 @testset "blobcompatible" begin
@@ -291,6 +308,15 @@ con = res[:net]
 @test res[:hybrid_table] == (blob=[1,1,1,1], node_from=[14,13,12,8],
   node_to=[3,9,7,2], edge=[3,8,7,2], support_hybrid=[.2,.2,.4,.2],
   cluster_num=["3","4,5,6","7","2"], cluster=["a4","b1,c1,c2","d1","a3"])
+  @test_throws ArgumentError consensus_level1network(PN.HybridNetwork[])
+  net1 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")
+  @test_throws ArgumentError consensus_level1network([net1], minimumblobdegree=2)
+  @test_throws "not in the taxon list" consensus_level1network([net1], outgroup="Z", suppressinfo=true)
+
+  nfile2 = joinpath(@__DIR__,"..","test","bootstrapnets_h1.nwk")
+  net2 = readmultinewick(nfile2)
+  res2 = @test_logs (:info, r"^Node") consensus_level1network(net2)
+  @test_throws "root" consensus_level1network_save(res2)
 end
 
 @testset "blob compatibility filtering, show" begin
@@ -327,3 +353,4 @@ end
 end
 
 end
+
