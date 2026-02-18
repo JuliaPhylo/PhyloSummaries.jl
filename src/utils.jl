@@ -244,14 +244,16 @@ if there exists some tree that has both clusters.
 This can be checked by the condition: A∩B is empty, or A⊆B, or B⊆A.
 """
 function treecompatible(a::NTuple{N,Bool}, b::NTuple{N,Bool})::Bool where N
-    inter = ntuple(i -> a[i] & b[i], length(a))
-    if !any(inter)
-        return true
+    has_inter = false
+    a_sub_b = true
+    b_sub_a = true
+    for i in 1:N
+        both = a[i] & b[i]
+        has_inter |= both
+        a_sub_b &= (!a[i] | b[i])
+        b_sub_a &= (!b[i] | a[i])
     end
-    if inter == a || inter == b
-        return true
-    end
-    return false
+    return !has_inter || a_sub_b || b_sub_a
 end
 
 """
@@ -274,7 +276,7 @@ function blobcompatible(
     Ka = length(A)
     Kb = length(B)
     if Ka == 0 # a partition must have at least 1 part, assuming N > 0
-        ArgumentError("$Ka parts in partition A")
+        throw(ArgumentError("$Ka parts in partition A"))
     end
     for i in 1:Ka
         j0 = 0 # j0 such that B[j0] ⊇ all but one A[i]

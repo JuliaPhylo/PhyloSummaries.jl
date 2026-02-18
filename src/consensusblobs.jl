@@ -248,7 +248,7 @@ function consensus_level1network_save(
 end
 
 """
-    count_blobpartitions!(networks, taxa, minimumblobdegree, require_level1=false)
+    count_blobpartitions(networks, taxa, minimumblobdegree, require_level1=false)
 
 `(blob_vec, bipart_vec)` where `blob_vec` is a vector of
 [`BlobFreq{ntax}`](@ref) object (`ntax` being the number of taxa),
@@ -793,7 +793,7 @@ function filter_sort_compatible_partitions!(
     proportion::Number,
 ) where N
     threshold2 = proportion * nnets
-    if proportion ≈ 1 # strict consensu
+    if proportion ≈ 1 # strict consensus
         filter!(v -> freq(v) ≈ nnets, blobparts)
         filter!(v -> freq(v) ≈ nnets, biparts)
     elseif threshold2 > 0 # 0 for greedy consensus: frequent case
