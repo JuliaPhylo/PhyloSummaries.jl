@@ -19,7 +19,7 @@ makedocs(;
     sitename="PhyloSummaries.jl",
     format=Documenter.HTML(;
         canonical="https://JuliaPhylo.github.io/PhyloSummaries.jl",
-        edit_link="main",
+        # edit_link="main",
         repolink="https://github.com/JuliaPhylo/PhyloSummaries.jl",
         assets=String[],
         prettyurls = get(ENV, "CI", nothing) == "true", # easier local build
