@@ -9,31 +9,41 @@ taxa = ["A","B","C","D"]
 
 @testset "count_bipartitions!" begin
 # unrooted
-counts = Dictionary{NTuple{4,Bool},Int}()
-PhyloSummaries.count_bipartitions!(counts, tree1, taxa, false)
-PhyloSummaries.count_bipartitions!(counts, tree3, taxa, false)
-expected = Dict(
-    (true, true, false, false) => 1,
-    (true, false, true, false) => 1,
-)
-@test length(counts) == length(expected)
-for bp in keys(expected)
-    @test counts[bp] == expected[bp]
-end
+counts = PS.SplitFreq{4}[]
+PS.count_bipartitions!(counts, tree1, taxa, false)
+PS.count_bipartitions!(counts, tree3, taxa, false)
+@test [PS.splitstring(s) * " -> $(PS.freq(s))" for s in counts] ==
+    ["1,2 -> 1", "1,3 -> 1"]
 # rooted
 empty!(counts)
-PhyloSummaries.count_bipartitions!(counts, tree1, taxa, true)
-PhyloSummaries.count_bipartitions!(counts, tree3, taxa, true)
-expected = Dict(
-    (true, true, false, false) => 1,
-    (false, false, true, true) => 1,
-    (true, false, true, false) => 1,
-    (false, true, false, true) => 1,
-)
-@test length(counts) == length(expected)
-for bp in keys(expected)
-    @test counts[bp] == expected[bp]
+PS.count_bipartitions!(counts, tree1, taxa, true)
+PS.count_bipartitions!(counts, tree3, taxa, true)
+@test [PS.splitstring(s) * " -> $(PS.freq(s))" for s in counts] ==
+    ["1,2 -> 1", "3,4 -> 1", "1,3 -> 1", "2,4 -> 1"]
 end
+
+@testset "SplitFreq freq! setter" begin
+  sp = PS.SplitFreq{4}((true,true,false,false), Ref(1))
+  @test PS.freq(sp) == 1
+  PS.freq!(sp, 10)
+  @test PS.freq(sp) == 10
+end
+
+@testset "utilities" begin
+t = PS.startree(["t1","t2","t3"])
+ni = Ref(30); ei = Ref(4)
+ne = @test_logs (:warn, r"^will skip trivial clade") PS.add_clusteredge!(t,ni,ei,(true,true,true),10,false)
+@test isnothing(ne)
+ne = @test_logs (:warn, r"^clade already in tree") PS.add_clusteredge!(t,ni,ei,(true,false,false),10,false)
+@test isnothing(ne)
+ne = PS.add_clusteredge!(t,ni,ei,(true,true,false),10,false)
+@test getchild(ne).number == 30
+@test t.edge[4].y == 10
+## only warning from an incompatible cluster:
+# PS.add_clusteredge!(t,ni,ei,(false,true,true),0,false)
+
+@test PS.isredundantsplit((true,true,true,false),
+  ((false,false,false,true), (true,true,false,false), (false,false,true,false)))
 end
 
 @testset "consensustree" begin
@@ -50,19 +60,20 @@ end
 # 4 taxa, 5 trees, missing edge lengths
 trees = [tree2,tree3,tree1,tree4,tree5]
 con = consensustree(trees; rooted=true, proportion=0.8)
-writenewick(con) == "(A,B,C,D);"
+@test writenewick(con, internallabel=false) == "(A,B,C,D);"
 con = consensustree(trees; proportion=0.7)
-writenewick(con,round=true,support=true) == "(C,D,(B,A)::0.8);"
+@test writenewick(con,round=true,support=true,internallabel=false) == "(C,D,(B,A)::0.8);"
 con = consensustree(trees; rooted=true, supportaslength=true) # greedy
 @test writenewick(con,round=true) == "((D,C):0.4,(B,A):0.8);"
-@test [n.fvalue for n in con.node if !n.leaf] == [-1,.4,.8]
+@test all(n.fvalue == -1 for n in con.node)
 @test [e.y for e in con.edge if !isexternal(e)] == [.4,.8]
 
 tfile = joinpath(@__DIR__,"..","test","raxmltrees.tre")
 # tfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","raxmltrees.tre")
 trees = readmultinewick(tfile)
 @test writenewick(consensustree(trees, proportion=1)) == "(A,B,E,O,(D,C));"
-@test writenewick(consensustree(trees),round=true,support=true) == "(E,O,((A,B)::0.833,(C,D)::1.0)::0.533);"
+@test writenewick(consensustree(trees),round=true,support=true,
+    internallabel=false) == "(E,O,((A,B)::0.833,(C,D)::1.0)::0.533);"
 con = consensustree(trees; rooted=true, supportaslength=true)
 @test writenewick(con, round=true) == "((O,E):0.033,((A,B):0.767,(C,D):1.0):0.5);"
 #=
@@ -76,6 +87,13 @@ also by plotting them: tree #2 has (O,E). 15 trees have A-D: #1,4-7,11,16-17,20-
 ```
 =#
 
+# more complex filtering (failed with Dictionaries and Iterators.reverse)
+tfile = joinpath(@__DIR__,"..","test","tobs20_15taxa.tre")
+# tfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","tobs20_15taxa.tre")
+trees = readmultinewick(tfile)
+con = (@test_logs consensustree(trees))
+@test writenewick(con, support=:y) ==
+  "(S,T,(((((J,I)::0.45,((B,A)::0.35,(D,C)::0.3)::0.8)::0.2,(L,M)::0.25)::0.15,N)::0.2,((Q,R)::0.35,(O,P)::0.55)::0.1)::0.4);"
 end # of sub-testset
 
 

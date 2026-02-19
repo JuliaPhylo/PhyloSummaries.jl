@@ -2,15 +2,14 @@ name = "PhyloSummaries"
 uuid = "431a9082-0c03-4c0b-a224-e592b0e14882"
 authors = ["Cécile Ané <cecileane@users.noreply.github.com>",
     "Ayush Sharma <ayusharma17@users.noreply.github.com>",
-    "Joshua Justison <jjustison@users.noreply.github.com>",
     "and contributors"]
 version = "0.1.0"
 
 [deps]
-Dictionaries = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 PhyloNetworks = "33ad39ac-ed31-50eb-9b15-43d0656eaa72"
 
 [compat]
-Dictionaries = "0.4.5"
-PhyloNetworks = "1.3"
+CSV = "0.8, 0.9, 0.10"
+PhyloNetworks = "1.3.1"
 julia = "1.2"
