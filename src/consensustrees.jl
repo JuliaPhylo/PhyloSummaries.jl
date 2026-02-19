@@ -462,7 +462,7 @@ To be called after _lca_newcluster()
     # new edge: store clade support in .y, and as edge length if desired
     elen = (supportaslength ? wgt : -1.0)
     newe = PN.Edge(ei[],elen,false,wgt,-1.0,1.0, # z=-1, gamma=1
-        [newnode,lca], true, # ischild1 is true: to agre with node ordering
+        [newnode,lca], true, # ischild1 is true: to agree with node ordering
         true,-1,true,true,false)
     ei[] += 1
     # Q2: loop over lca's children with .booln2 && .booln3

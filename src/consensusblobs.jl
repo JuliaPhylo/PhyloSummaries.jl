@@ -1229,7 +1229,7 @@ function expand_blobcycles!(
     o_bs = Vector{Float64}(undef, nB) # order: bootstrap support
     h_bs = Vector{Float64}(undef, nB) # hybrid: bootstrap support
     h_num = Vector{Int}(undef, nB) # hybrid: node number
-    h_blk = Vector{Int}(undef, nB) # hybrid: block number in the mutipartition
+    h_blk = Vector{Int}(undef, nB) # hybrid: block number in the multipartition
     @assert nB == length(blobedges) == length(blobparts)
     bitr = ((i,blobparts[i]) for i in nB:-1:1) # from most to least frequent blob
     for (i,b) in bitr
@@ -1272,7 +1272,7 @@ function expand_blobcycleat!(
     if isrootof(bnode, net) # no parent: pick block 1 (or 2)
         pblock = (hblock == 1 ? 2 : 1)
         pedge = net.edge[bedges[pblock]]
-    else # parent edge (and its block) will stay indicent to blob node
+    else # parent edge (and its block) will stay incident to blob node
         pedge = getparentedge(bnode)
         pblock = findfirst(i -> net.edge[i] === pedge, bedges)
         isnothing(pblock) && error("top block above blob node not found")

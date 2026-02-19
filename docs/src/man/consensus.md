@@ -491,7 +491,7 @@ R"layout"([1 2])       # hide
 R"par"(mar=[0,0,0.5,0]); # hide
 plot(res_t6out[:net], shownodenumber=true, tipoffset=0.05);
 R"mtext"("node numbers", side=3, line=-.5);
-R"mtext"("to see around which ones to rotate edges", side=1, line=-1); #TODO
+R"mtext"("to see around which ones to rotate edges", side=1, line=-1);
 for i in [13,9] rotate!(res_t6out[:net], i); end
 plot(res_t6out[:net], tipoffset=0.05, nodelabeladj=-0.1, edgelabeladj=[.5,-0.2],
     nodelabelcolor="orangered", edgelabelcolor="deepskyblue",
