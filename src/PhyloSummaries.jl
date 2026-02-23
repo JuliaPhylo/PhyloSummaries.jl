@@ -13,10 +13,12 @@ consensus_level1network,
 consensus_level1network_save,
 consensus_treeofblobs,
 consensustree,
+referencesupport,
 edgenumbers_fromnodenumbers,
 resetnodenumbers_fromnames!
 
 include("utils.jl")
 include("consensustrees.jl")
 include("consensusblobs.jl")
+include("referencesupport.jl")
 end
