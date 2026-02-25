@@ -111,7 +111,7 @@ Note that a node of degree 4 or more in the network's tree of blob may
 correspond to a polytomy in N: a single node incident to m cut-edges, but
 without any reticulation. These blobs are considered "non-interesting".
 A cut-edge incident to such a polytomy is then non-redundant,
-if the other blob it connects to is also non-intersting.
+if the other blob it connects to is also non-interesting.
 
 A chain of 2-blob leads to multiple cut-edge sharing the same bipartition.
 This bipartition is counted only once (if non-trivial and non-redundant)

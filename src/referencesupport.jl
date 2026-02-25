@@ -26,10 +26,12 @@ function referencesupport(
     minimumblobdegree ≥ 3 ||
         throw(ArgumentError("minimumblobdegree should be 3 or higher, not $minimumblobdegree"))
     taxa = sort(tiplabels(referencenet))
-
     nnets = length(networks)
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
-    refblobs, refbps = count_blobpartitions([referencenet], taxa, minimumblobdegree)
+    refblobs = BlobFreq{ntaxa}[]
+    refbps = SplitFreq{ntaxa}[]
+    # make count_blobpartitions! return the hwmatrix, to calculate the blob-edge-indices bbei's?
+    count_blobpartitions!(refblobs, refbps, referencenet, taxa, minimumblobdegree, false)
     # match each reference blob partition against sample frequencies
     blob_table = _refsupport_blobs(refblobs, blobvec, nnets, taxa)
     # match each reference bipartition against sample frequencies
@@ -53,6 +55,15 @@ function _refsupport_blobs(
     nparts      = Int[]
     frequencies = Int[]
     supports    = Float64[]
+    #= alternative: for each reference blob
+    * set its frequencies to 0 (partition, circular order, hybrid)
+    * find matching blob in sampleblobs
+    * if found:
+      + set/increment the frequency of the reference blob to that from sampleblobs
+      + add the circular order or increment its frequency, if level1 was required
+      + add the hybrid clade or increment its frequency
+    * return the initial refblobs: with its updated fields
+    =#
     for rb in refblobs
         matchidx, _ = findmatchingblob(sampleblobs, rb.partition)
         f = isnothing(matchidx) ? 0 : freq(sampleblobs[matchidx])
