@@ -87,10 +87,13 @@ function update_blobcircorderfrequency!(
         isnothing(matchidx) && continue # all frequencies were initialized to 0
         bf = sampleblobs[matchidx]
         freq!(rf, freq(bf))
-        # to copy the circular order bf.circorder into rb.circorder:
-        # permute the parts to match their order in rb.partition
-        # todo!
-        # add_canonical_circularorder!(bf.circorder, idxmap, netweight)
+        # copy each circular order from bf.circorder into rb.circorder
+        # rb.partition[k] = bf.partition[idxmap[k]] so order
+        for (co_block, co_freq) in bf.circorder
+            # todo: find block order in rb, corresponding to co_block in bf
+            idxmap_inrb = idxmap # wrong: fixit
+            add_canonical_circularorder!(rb.circorder, idxmap_inrb, co_freq)
+        end
     end
     return nothing
 end
