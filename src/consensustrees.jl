@@ -255,7 +255,7 @@ set when ignoring the root. But this function can equally be used for clusters
 ```jldoctest
 julia> const PS = PhyloSummaries; # to use internals with less typing
 
-julia> bp = [(true,false), (false,false), (true,true)]; freq=Ref.([3,1,4]);
+julia> bp = [(true,false), (false,false), (true,true)]; freq=Ref.([3.,1,4]);
 
 julia> splitcounts = [PS.SplitFreq(x,y) for (x,y) in zip(bp, freq)]
 3-element Vector{PhyloSummaries.SplitFreq{2}}:

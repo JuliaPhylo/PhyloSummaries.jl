@@ -100,6 +100,11 @@ This is stored in the corresponding edge's field `.y`.
 With option `supportaslength=true`, this is also stored in the edge's
 `.length`. This option is *not* recommended and may be removed.
 
+By default, all input networks have equal weight: the support for a feature
+(blob or bipartition) is the proportion of networks with this feature.
+Optionally, a vector of `network_weights` can be provided, to give networks
+unequal weights. There should be as many weights as there are input vectors.
+
 An "interesting" blob in an input network N is a non-trivial blob
 (with at least one hybrid node) of degree m ≥ 4 by default.
 The degree of a blob is the number of cut edges it is adjacent to,
@@ -183,6 +188,11 @@ Consensus network summarizing a list of level-1 networks, by these steps:
    If an `outgroup` is provided, the hybrid node is chosen among those that
    do not conflict with this outgroup taxon being an outgroup: below the root,
    and not affected (below) any reticulation.
+
+By default, all input networks have equal weight: the support for a feature
+(blob, circular order, hybrid clade, bipartition) is the proportion of networks
+with this feature. To give networks unequal weights, a `network_weights` vector
+can be provided. There should be as many weights as there are input vectors.
 
 See [`consensus_level1network_save`](@ref) to save the output.
 """
@@ -318,8 +328,10 @@ function count_blobpartitions(
     bpvec = SplitFreq{ntaxa}[]  # bipartitions, frequency: if non-redundant
     nweight = (isnothing(netweight) ? i -> 1.0 : i -> Float64(netweight[i]))
     for (i,net) in enumerate(networks)
+        nw = nweight(i)
+        nw > 0 || continue # do not add blobs/biparts of weight 0
         count_blobpartitions!(blobvec, bpvec, net, taxa, minBdegree,
-            require_level1, nweight(i))
+            require_level1, nw)
     end
     return blobvec, bpvec
 end
@@ -440,7 +452,7 @@ function count_blobpartitions!(
             # level > 1: do not store circular order
             cofreq = Dict{NTuple{nparts,Int},Float64}()
         end
-        hybmap = Dict(hybrids[1] => 1)
+        hybmap = Dict(hybrids[1] => netweight)
         newblob = BlobFreq{N,nparts}(splits, Ref(netweight), cofreq, hybmap)
         push!(blobvec, newblob)
     else # existing blob: increment frequencies of canonical partition slots
