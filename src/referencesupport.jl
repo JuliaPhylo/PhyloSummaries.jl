@@ -1,25 +1,39 @@
 """
-    referencesupport(networks, referencenet; minimumblobdegree=4)
+    blobpartitions_support(networks, referencenet;
+        minimumblobdegree=4, network_weights=nothing)
 
-Calculate the support for features (blob partitions, bipartitions, circular
-orders, hybrid clades) present in a reference network `referencenet`, based on
-their frequency in a sample of `networks`.
+Calculate the support for blob partitions and related features (circular orders,
+hybrid clades, bipartitions non-redundant with a blob) for the blobs present
+in a reference network `referencenet`,
+based on their frequency in a sample of `networks`.
 
+Sample networks are weighted equally by default, unless a vector of
+`network_weights` is provided (of same length as the vector of sample networks).
 
-# Output
-
-A `NamedTuple` with:
-- `blob_table`: support for each blob partition in the reference network.
-- `bipartition_table`: support for each non-redundant bipartition (cut-edge)
+Output: a `NamedTuple` of tables, named as follows
+- `:blob_table`: support for each blob partition in the reference network,
+  including support for the circular order of the taxon blocks if the sample
+  networks are of level 1.
+- `:hybrid_table`: support for each taxon block to be below a blob's
+  lowest hybrid node in a sample network.
+- `:bipartition_table`: support for each non-redundant bipartition (cut-edge)
   in the reference network.
-- `taxa`: sorted taxon labels shared by all networks.
+- `:taxa`: sorted taxon labels shared by all networks. `taxa[i]` is indicated
+  as taxon `i` in the other tables.
 
-See also: [`consensus_treeofblobs`](@ref), [`count_blobpartitions`](@ref)
+See also: [`consensus_treeofblobs`](@ref).
+
+# example
+
+```jldoctest
+todo
+```
 """
-function referencesupport(
+function blobpartitions_support(
     networks::AbstractVector{PN.HybridNetwork},
     referencenet::PN.HybridNetwork;
     minimumblobdegree::Int=4,
+    netweight::Union{Nothing,AbstractVector}=nothing,
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot compute reference support"))
@@ -27,79 +41,79 @@ function referencesupport(
         throw(ArgumentError("minimumblobdegree should be 3 or higher, not $minimumblobdegree"))
     taxa = sort(tiplabels(referencenet))
     nnets = length(networks)
+    if !isnothing(netweight)
+      length(netweight) == nnets ||
+          error("there should be $nnets network weights, got $(length(netweight))")
+      all(netweight .>= 0) || error("network weights should be > 0")
+      nnets = sum(netweight)
+    end
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
+    hybdict = count_hybridclusters(blobvec)
     refblobs = BlobFreq{ntaxa}[]
     refbps = SplitFreq{ntaxa}[]
-    # make count_blobpartitions! return the hwmatrix, to calculate the blob-edge-indices bbei's?
-    count_blobpartitions!(refblobs, refbps, referencenet, taxa,
-        minimumblobdegree, false, 1.0)
-    # match each reference blob partition against sample frequencies
-    blob_table = _refsupport_blobs(refblobs, blobvec, nnets, taxa)
+    hwmatrix, edgemap = count_blobpartitions!(refblobs, refbps, referencenet,
+        taxa, minimumblobdegree, false, 0.0) # frequencies initialized at 0
+    update_blobcircorderfrequency!(refblobs, blobvec, taxa)
+    update_hybridclusterfrequency!(refblobs, hybdict)
     # match each reference bipartition against sample frequencies
-    bp_table = _refsupport_bipartitions(refbps, bpvec, nnets, taxa)
+    update_bipartitionfrequency!(refbps, bpvec)
+    # todo: build tables. use hwmatrix, edgemap (from above)
+    # to calculate the blob-edge-indices bbei's, then
+    # call blobdata_*, hybriddata_onToB and bipartdata_onToB?
     return (blob_table=blob_table, bipartition_table=bp_table, taxa=taxa)
 end
 
 """
-    _refsupport_blobs(refblobs, sampleblobs, nnets, taxa)
+    update_blobcircorderfrequency!(refblobs, sampleblobs, taxa)
 
-For each blob partition in the reference network, find the matching partition
-in `sampleblobs` and report its frequency and support (frequency / nnets).
+Update the frequency and circular order dictionary of each "reference" blob
+partition blob (item in `refblobs`), to match that from `sampleblobs`.
+A reference blob partition not found in `sampleblobs` is not modified --
+which assumes that its frequencies had been initialized to 0.
+
+Note the blobs hybrid dictionaries are *not* updated. For this, see instead
+[`update_hybridclusterfrequency!`](@ref) to use the frequencies of hybrid
+clades aggregated over all sample blobs
+(a hybrid clade can originate below different blobs, of different partitions).
 """
-function _refsupport_blobs(
+function update_blobcircorderfrequency!(
     refblobs::Vector{BlobFreq{N}},
     sampleblobs::Vector{BlobFreq{N}},
-    nnets::Int,
     taxa::AbstractVector{<:String},
 ) where N
-    partitions  = String[]
-    nparts      = Int[]
-    frequencies = Int[]
-    supports    = Float64[]
-    #= alternative: for each reference blob
-    * set its frequencies to 0 (partition, circular order, hybrid)
-    * find matching blob in sampleblobs
-    * if found:
-      + set/increment the frequency of the reference blob to that from sampleblobs
-      + add the circular order or increment its frequency, if level1 was required
-      + add the hybrid clade or increment its frequency
-    * return the initial refblobs: with its updated fields
-    =#
+    # todo: update the circular order
     for rb in refblobs
         matchidx, _ = findmatchingblob(sampleblobs, rb.partition)
-        f = isnothing(matchidx) ? 0 : freq(sampleblobs[matchidx])
-        push!(partitions, partitionstring_names(rb.partition, taxa))
-        push!(nparts, length(rb.partition))
-        push!(frequencies, f)
-        push!(supports, f / nnets)
+        isnothing(matchidx) && continue # all frequencies were initialized to 0
+        bf = sampleblobs[matchidx]
+        freq!(rf, freq(bf))
+        # to copy the circular order bf.circorder into rb.circorder:
+        # permute the parts to match their order in rb.partition
+        # todo!
+        # add_canonical_circularorder!(bf.circorder, idxmap, netweight)
     end
-    return (partition=partitions, degree=nparts, frequency=frequencies,
-            support=supports)
+    return nothing
 end
 
 """
-    _refsupport_bipartitions(refbps, samplebps, nnets, taxa)
+    update_bipartitionfrequency!(refbps, samplebps)
 
-For each non-redundant bipartition in the reference network, find the matching
-bipartition in `samplebps` (unrooted: either orientation) and report its
-frequency and support (frequency / nnets).
+Update the frequency of each bipartition in `refbps` to match that from
+`samplebps`. A bipartition not found in `samplebps` is not modified --
+which assumes that its frequencies had been initialized to 0.
+
+Bipartitions are considered unrooted: so a bipartition in `samplebps` is a
+match if either its clade or its complement matches that from `refbps`.
 """
-function _refsupport_bipartitions(
+function update_bipartitionfrequency!(
     refbps::Vector{SplitFreq{N}},
     samplebps::Vector{SplitFreq{N}},
-    nnets::Int,
-    taxa::AbstractVector{<:String},
 ) where N
-    clusters    = String[]
-    frequencies = Int[]
-    supports    = Float64[]
     for rb in refbps
         i = findfirst(bp -> bp.split == rb.split || bp.split == .!rb.split, samplebps)
-        f = isnothing(i) ? 0 : freq(samplebps[i])
-        push!(clusters, splitstring_names(rb.split, taxa))
-        push!(frequencies, f)
-        push!(supports, f / nnets)
+        isnothing(i) && continue
+        freq!(rb, freq(samplebps[i]))
     end
-    return (cluster=clusters, frequency=frequencies, support=supports)
+    return nothing
 end
 

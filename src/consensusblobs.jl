@@ -127,7 +127,7 @@ By default, a greedy consensus consensus is calculated.
 The majority-rule tree can be obtained by using `proportion=0.5`,
 and the strict consensus using `proportion=1`.
 
-See also: [`count_blobpartitions!`](@ref)
+See also: [`consensus_level1network`](@ref), [`count_blobpartitions!`](@ref)
 """
 function consensus_treeofblobs(
     networks::AbstractVector{PN.HybridNetwork};
@@ -348,6 +348,10 @@ interesting blob, in one network `net`.
 If a new blob partition or non-redundant bipartition if found, that was absent
 from `blobs` or `biparts` respectively, a new entry is created in the vector.
 
+Output: `(hwmatrix, edgemap)` where `hwmatrix` is the matrix describing
+`net`'s hardwired clusters (1 per internal edge), and `edgemap` is a
+dictionary mapping each edge number to its row in `hwmatrix`.
+
 Notes:
 - A "blob" here means a non-trivial blob with at least 1 hybrid node.
 - A blob may be the union of 1 or more biconnected components
@@ -407,7 +411,7 @@ function count_blobpartitions!(
     # gather non-redundant cut-edges: from trivial bicomponents
     count_nonredundantbipartitions!(bpvec, blobdegree,
             net, taxaindex, minBdegree, hwmatrix, edgemap, netweight)
-    return nothing
+    return hwmatrix, edgemap
 end
 
 """
@@ -417,6 +421,9 @@ end
 Update the vector of `blobs` frequencies, and `visitedbcc` (to track
 biconnected components already visited) for a single potentially interesting
 non-trivial blob, starting from the `bidx`-th biconnected component in `net`.
+
+Output: degree of the blob starting at the `bidx`-th biconnected component,
+that is, number of cut-edges adjacent to that blob.
 """
 function count_blobpartitions!(
     blobvec::Vector{BlobFreq{N}}, # shared number of taxa
@@ -1108,7 +1115,7 @@ function update_hybridclusterfrequency!(
     for bf in blobvec
         for (hi,cluster) in enumerate(bf.partition)
             if haskey(hybdict, cluster)
-                bf.hybrid[hi] = hybdict[cluster] # update of add item
+                bf.hybrid[hi] = hybdict[cluster] # update or add item
             end
         end
     end
