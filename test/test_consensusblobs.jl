@@ -13,16 +13,15 @@
   @test_throws "≤ number of taxa" resetnodenumbers_fromnames!(net)
 
   # freq! setter for BlobFreq
-  net1 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")
-  taxa = ["A","B","C","D","E"]
-  blobs, _ = PS.count_blobpartitions([net1], taxa, 4)
-  @test PS.freq(blobs[1]) == 1
-  PS.freq!(blobs[1], 42)
-  @test PS.freq(blobs[1]) == 42
+  blob = PS.BlobFreq{4,3}(
+    [(true,true,false,false),(false,false,true,false),(false,false,false,true)],
+    Ref(3.0), Dict((1,3,2) => 1.0), Dict(1 => 1.0))
+  PS.freq!(blob, 42)
+  @test PS.freq(blob) == 42
 
   # isredundantsplit(SplitFreq, BlobFreq) wrapper
-  sp = PS.SplitFreq{5}((true,true,false,false,false), Ref(1))
-  @test PS.isredundantsplit(sp, blobs[1])
+  sp = PS.SplitFreq{4}((true,true,true,false), Ref(1.))
+  @test PS.isredundantsplit(sp, blob)
 
   # check_nonnumericnames and startree error on numeric taxon names
   @test PS.check_nonnumericnames(["_2", "b", "c"]) == 1

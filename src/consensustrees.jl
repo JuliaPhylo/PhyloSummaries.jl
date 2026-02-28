@@ -19,18 +19,18 @@ struct SplitFreq{N}
     """
     split::NTuple{N,Bool}
     "frequency of the bipartition. mutable: use freq and freq! to get/set this value."
-    freq::Base.RefValue{Int}
+    freq::Base.RefValue{Float64}
 end
 splitstring(obj::SplitFreq) = splitstring(obj.split)
 splitstring_names(obj::SplitFreq, taxa::Vector) = splitstring_names(obj.split, taxa)
 
 Base.show(io::IO, obj::SplitFreq{N}) where {N} = print(io,
     "SplitFreq on $N taxa, taxa in split cluster: " * splitstring(obj) *
-    ", frequency: $(freq(obj))")
+    ", frequency: $(Int(round(freq(obj))))")
 
 freq(obj::SplitFreq) = obj.freq[]
-freq!(obj::SplitFreq, n) = obj.freq[] = n
-incrementfreq!(obj::SplitFreq) = obj.freq[] += 1
+freq!(obj::SplitFreq, n) = obj.freq[] = Float64(n)
+incrementfreq!(obj::SplitFreq, x=1) = obj.freq[] += x
 
 """
     split_fromHmatrix(M, i, N)
@@ -65,12 +65,12 @@ function splitcomplement(splitvec::AbstractVector{NTuple{N,Bool}}) where N
     return ntuple(isoutgroup, N)
 end
 
-function add_split!(bpvec::Vector{SplitFreq{N}}, split) where N
+function add_split!(bpvec::Vector{SplitFreq{N}}, split, x=1.0) where N
     i = findfirst(bp -> bp.split == split, bpvec)
     if isnothing(i)
-        push!(bpvec, SplitFreq{N}(split,Ref(1)))
+        push!(bpvec, SplitFreq{N}(split, Ref(x)))
     else
-        incrementfreq!(bpvec[i])
+        incrementfreq!(bpvec[i], x)
     end
 end
 

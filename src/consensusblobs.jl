@@ -23,11 +23,11 @@ struct BlobFreq{N,P}
     (an immutable type, so partitions can be keys in sets or dictionaries)"""
     partition::Vector{NTuple{N,Bool}}
     "frequency of the blob partition. mutable: use freq and freq! to get/set this value."
-    freq::Base.RefValue{Int}
+    freq::Base.RefValue{Float64}
     "frequencies of the different circular orders for blobs with this partition"
-    circorder::Dict{NTuple{P,Int},Int}
+    circorder::Dict{NTuple{P,Int},Float64}
     "frequencies of the different hybrid parts for blobs with this partition"
-    hybrid::Dict{Int,Int}
+    hybrid::Dict{Int,Float64}
 end
 partitionstring(vv) = join(join.(findall.(vv),","), "|")
 partitionstring(vv, itr) = join(join.([findall(vv[i]) for i in itr],","), "|")
@@ -38,12 +38,12 @@ partitionstring_names(vv, taxa::Vector, itr) = join(
     (join((taxa[j] for (j,b) in enumerate(vv[i]) if b), ",") for i in itr), "|")
 
 freq(obj::BlobFreq) = obj.freq[]
-freq!(obj::BlobFreq, n) = obj.freq[] = n
-incrementfreq!(obj::BlobFreq) = obj.freq[] += 1
+freq!(obj::BlobFreq, n) = obj.freq[] = Float64(n)
+incrementfreq!(obj::BlobFreq, x=1) = obj.freq[] += x
 
 Base.show(io::IO, obj::BlobFreq{N,P}) where {N,P} = print(io,
     "BlobFreq on $N taxa, $P blocks " * partitionstring(obj) *
-    ", frequency $(freq(obj))" *
+    ", frequency $(Int(round(freq(obj))))" *
     ", $(length(obj.circorder)) circular orders, $(length(obj.hybrid)) hybrid blocks")
 function Base.show(io::IO, ::MIME"text/plain", obj::BlobFreq{N,P}) where {N,P}
     println(io, "BlobFreq on $N taxa, partitioned into $P blocks")
@@ -76,7 +76,8 @@ isredundantsplit(b1::SplitFreq{N}, b2::BlobFreq{N}) where N =
     isredundantsplit(b1.split, b2.partition)
 
 """
-    consensus_treeofblobs(networks; proportion=0, minimumblobdegree=4)
+    consensus_treeofblobs(networks; proportion=0,
+        minimumblobdegree=4, network_weights=nothing)
 
 Consensus tree summarizing the partitions of "interesting" blobs (nodes in
 the tree of blobs) and the non-redundant bipartitions
@@ -129,15 +130,23 @@ function consensus_treeofblobs(
     minimumblobdegree::Int=4,
     supportaslength::Bool=false,
     suppressinfo::Bool=false,
+    netweight::Union{Nothing,AbstractVector}=nothing,
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot get a consensus"))
     minimumblobdegree ≥ 3 ||
         throw(ArgumentError("minimumblobdegree should be 3 or higher, not $(minimumblobdegree)"))
     taxa = sort(tiplabels(networks[1]))
-    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
-    hybdict = count_hybridclusters(blobvec) # before filtering
     nnets = length(networks)
+    if !isnothing(netweight)
+      length(netweight) == nnets ||
+          error("there should be $nnets network weights, got $(length(netweight))")
+      all(netweight .>= 0) || error("network weights should be > 0")
+      nnets = sum(netweight)
+    end
+    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree,
+        false, netweight)
+    hybdict = count_hybridclusters(blobvec) # before filtering
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
     update_hybridclusterfrequency!(blobvec, hybdict)
     tob, bbn, bbei, bpei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, supportaslength)
@@ -154,8 +163,8 @@ function consensus_treeofblobs(
 end
 
 """
-    consensus_level1network(networks; proportion=0, minimumblobdegree=4,
-        outgroup=nothing)
+    consensus_level1network(networks; proportion=0,
+        minimumblobdegree=4, outgroup=nothing, network_weights=nothing)
 
 Consensus network summarizing a list of level-1 networks, by these steps:
 1. A consensus tree of blobs is built as in [`consensus_treeofblobs`](@ref),
@@ -183,6 +192,7 @@ function consensus_level1network(
     minimumblobdegree::Int=4,
     outgroup::Union{Nothing,String}=nothing,
     suppressinfo::Bool=false,
+    netweight::Union{Nothing,AbstractVector}=nothing,
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot get a consensus"))
@@ -191,9 +201,16 @@ function consensus_level1network(
     taxa = sort(tiplabels(networks[1]))
     isnothing(outgroup) || outgroup ∈ taxa || # early problem detection
         error("outgroup $outgroup is not in the taxon list: $taxa")
-    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree, true)
-    hybdict = count_hybridclusters(blobvec) # before filtering blobs out
     nnets = length(networks)
+    if !isnothing(netweight)
+      length(netweight) == nnets ||
+          error("there should be $nnets network weights, got $(length(netweight))")
+      all(netweight .>= 0) || error("network weights should be > 0")
+      nnets = sum(netweight)
+    end
+    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree,
+        true, netweight)
+    hybdict = count_hybridclusters(blobvec) # before filtering blobs out
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
     update_hybridclusterfrequency!(blobvec, hybdict)
     net, bbn, bbei, bpei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, false)
@@ -248,7 +265,8 @@ function consensus_level1network_save(
 end
 
 """
-    count_blobpartitions(networks, taxa, minimumblobdegree, require_level1=false)
+    count_blobpartitions(networks, taxa, minimumblobdegree,
+        require_level1=false, netweight=nothing)
 
 `(blob_vec, bipart_vec)` where `blob_vec` is a vector of
 [`BlobFreq{ntax}`](@ref) object (`ntax` being the number of taxa),
@@ -290,6 +308,7 @@ function count_blobpartitions(
     taxa::AbstractVector{<:String},
     minBdegree::Int,
     require_level1::Bool=false,
+    netweight::Union{Nothing,AbstractVector}=nothing,
 )
     ntaxa = length(taxa)
     all(n.numtaxa == ntaxa for n in networks) ||
@@ -297,14 +316,17 @@ function count_blobpartitions(
     # hardwiredclusters will error if different taxon sets
     blobvec = BlobFreq{ntaxa}[]
     bpvec = SplitFreq{ntaxa}[]  # bipartitions, frequency: if non-redundant
-    for net in networks
-        count_blobpartitions!(blobvec, bpvec, net, taxa, minBdegree, require_level1)
+    nweight = (isnothing(netweight) ? i -> 1.0 : i -> Float64(netweight[i]))
+    for (i,net) in enumerate(networks)
+        count_blobpartitions!(blobvec, bpvec, net, taxa, minBdegree,
+            require_level1, nweight(i))
     end
     return blobvec, bpvec
 end
 
 """
-    count_blobpartitions!(blobs, biparts, net, taxa, minBdegree, require_level1)
+    count_blobpartitions!(blobs, biparts, net, netweight, taxa, minBdegree,
+        require_level1, netweight)
 
 Helper for [`count_blobpartitions`](@ref).
 Update the entries in the vector of `blobs` and in the vector of `biparts`
@@ -334,6 +356,7 @@ function count_blobpartitions!(
     taxa::AbstractVector{<:String},
     minBdegree::Int,
     require_level1::Bool,
+    netweight::Float64,
 ) where N
     taxaindex = Dict(t => i for (i, t) in pairs(taxa))
     PN.process_biconnectedcomponents!(net)
@@ -367,17 +390,17 @@ function count_blobpartitions!(
         PN.istrivial(bc) && continue
         blobdegree[bidx] = count_blobpartitions!(blobvec, visitedbcc,
             net, taxaindex, minBdegree, bc, bidx, hwmatrix, edgemap,
-            require_level1)
+            require_level1, netweight)
     end
     # gather non-redundant cut-edges: from trivial bicomponents
     count_nonredundantbipartitions!(bpvec, blobdegree,
-            net, taxaindex, minBdegree, hwmatrix, edgemap)
+            net, taxaindex, minBdegree, hwmatrix, edgemap, netweight)
     return nothing
 end
 
 """
     count_blobpartitions!(blobs, visitedbcc, net, taxaindex, minBdegree,
-        blob, bidx, hwmatrix, edgemap, require_level1)
+        blob, bidx, hwmatrix, edgemap, require_level1, netweight)
 
 Update the vector of `blobs` frequencies, and `visitedbcc` (to track
 biconnected components already visited) for a single potentially interesting
@@ -394,6 +417,7 @@ function count_blobpartitions!(
     hwmatrix::AbstractMatrix,
     edgemap::Dict{<:Integer,<:Integer},
     require_level1::Bool,
+    netweight::Float64,
 ) where N
     blobdegree = (bidx==1 ? Ref(0) : Ref(1)) # parent edge: 0 if root, 1 ow
     splits, hybrids, islevel1 = blobtaxonsetpartition!(visitedbcc, blobdegree,
@@ -411,26 +435,26 @@ function count_blobpartitions!(
     if isnothing(matchidx) # add new blob to blobvec
         if islevel1
             defaultorder = ntuple(identity, nparts)
-            cofreq = Dict(defaultorder => 1)
+            cofreq = Dict(defaultorder => netweight)
         else
             # level > 1: do not store circular order
-            cofreq = Dict{NTuple{nparts,Int},Int}()
+            cofreq = Dict{NTuple{nparts,Int},Float64}()
         end
         hybmap = Dict(hybrids[1] => 1)
-        newblob = BlobFreq{N,nparts}(splits, Ref(1), cofreq, hybmap)
+        newblob = BlobFreq{N,nparts}(splits, Ref(netweight), cofreq, hybmap)
         push!(blobvec, newblob)
     else # existing blob: increment frequencies of canonical partition slots
         bf = blobvec[matchidx]
         for k in hybrids
             canonk = idxmap[k]
-            bf.hybrid[canonk] = get(bf.hybrid, canonk, 0) + 1
+            bf.hybrid[canonk] = get(bf.hybrid, canonk, 0.0) + netweight
         end
         # calculate & store circular order if level-1 blob with 1 lowest hybrid
         # a level-1 blob of >1 bicomponents could have >1 lowest hybrids
         if islevel1 && length(hybrids) == 1
-            add_canonical_circularorder!(bf.circorder, idxmap)
+            add_canonical_circularorder!(bf.circorder, idxmap, netweight)
         end
-        incrementfreq!(bf)
+        incrementfreq!(bf, netweight)
     end
     return blobdegree[]
 end
@@ -473,21 +497,23 @@ function findmatchingblob(
 end
 
 """
-    add_canonical_circularorder!(circularorder_dictionary, indexmap)
+    add_canonical_circularorder!(circularorder_dictionary, indexmap, netweight)
 
 1. Find the clockwise (and counter-clockwise if necessary) circular permutation(s)
    of `indexmap`, starting at the index for value 1. For example, for vector
    `[5, 1, 3, 2, 4]`, these are: `1,3,2,4,5` and `1,5,4,2,3`.
    These are the 2 canonical ways of coding their shared circular order:
    starting from value 1 and circling in one or the other direction.
-2. Add this circular order in the input dictionary: if already present
-   (in clockwise or counterwise direction) then its frequency is incremented.
-   Otherwise, a new entry with frequency 1 is added to the dictionary.
+2. Add this circular order to the input dictionary: if already present
+   (in clockwise or counterwise direction) then its frequency is increased by
+   `netweight`.
+   Otherwise, a new entry with frequency `netweight` is added to the dictionary.
 """
 function add_canonical_circularorder!(
-    codict::Dict{NTuple{P,Int},Int},
+    codict::Dict{NTuple{P,Int},T},
     idxmap::AbstractVector{Int},
-) where P
+    netweight::T,
+) where {P,T}
     startidx = findfirst(==(1), idxmap)
     isnothing(startidx) &&
         error("block 1 not found in idxmap: $idxmap (should span 1:$P)")
@@ -496,14 +522,14 @@ function add_canonical_circularorder!(
     length(circorderkey) == P ||
         error("circular order key of length $(length(circorderkey)) instead of $P")
     if haskey(codict, circorderkey)
-        codict[circorderkey] += 1
+        codict[circorderkey] += netweight
     else
         itr = Iterators.flatten((startidx:-1:1, P:-1:(startidx+1)))
         reversekey = Tuple(Iterators.map(i -> idxmap[i], itr))
         if haskey(codict, reversekey)
-            codict[reversekey] += 1
+            codict[reversekey] += netweight
         else
-            codict[circorderkey] = 1
+            codict[circorderkey] = netweight
         end
     end
 end
@@ -695,6 +721,7 @@ function count_nonredundantbipartitions!(
     minBdegree::Int,
     hwmatrix::AbstractMatrix,
     edgemap::Dict{<:Integer,<:Integer},
+    netweight::Float64,
 ) where N
     inchain_store = Dict{Int,Bool}()
     inchain_leaf = Dict{Int,Union{String,Nothing}}()
@@ -734,7 +761,7 @@ function count_nonredundantbipartitions!(
         row = get(edgemap, e.number, nothing)
         isnothing(row) && error("unmapped non-external edge $(e.number)")
         split = split_fromHmatrix(hwmatrix, row, N)
-        add_split!(bpvec, split)
+        add_split!(bpvec, split, netweight)
     end
     # add 0 or 1 biparts for each 2-blob chain: match the 2 end edges for each
     # 1. edges that have no entry in hwmatrix. trivial: don't store them
@@ -766,7 +793,7 @@ function count_nonredundantbipartitions!(
         haskey(inchain_store, e2) || error("2-blob chain: edge $e2 was not detected")
         store2 = pop!(inchain_store, e2)
         if store1 && store2
-            add_split!(bpvec, split)
+            add_split!(bpvec, split, netweight)
         end
     end
     return nothing
@@ -1042,7 +1069,7 @@ end
 
 # for each hybrid clade, sum its frequency over all blobs that may have it
 function count_hybridclusters(blobvec::Vector{BlobFreq{N}}) where N
-    hybdict = Dict{NTuple{N,Bool},Int}()
+    hybdict = Dict{NTuple{N,Bool},Float64}()
     for bf in blobvec
         for (hi, hf) in bf.hybrid
             hcluster = bf.partition[hi]
@@ -1064,7 +1091,7 @@ Assumption: any part of a `blob` is a cluster (key) in `clusterfreq_dict`.
 """
 function update_hybridclusterfrequency!(
     blobvec::Vector{BlobFreq{N}},
-    hybdict::Dict{NTuple{N,Bool},Int},
+    hybdict::Dict{NTuple{N,Bool},Float64},
 ) where N
     for bf in blobvec
         for (hi,cluster) in enumerate(bf.partition)

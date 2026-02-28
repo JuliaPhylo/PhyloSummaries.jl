@@ -31,7 +31,8 @@ function referencesupport(
     refblobs = BlobFreq{ntaxa}[]
     refbps = SplitFreq{ntaxa}[]
     # make count_blobpartitions! return the hwmatrix, to calculate the blob-edge-indices bbei's?
-    count_blobpartitions!(refblobs, refbps, referencenet, taxa, minimumblobdegree, false)
+    count_blobpartitions!(refblobs, refbps, referencenet, taxa,
+        minimumblobdegree, false, 1.0)
     # match each reference blob partition against sample frequencies
     blob_table = _refsupport_blobs(refblobs, blobvec, nnets, taxa)
     # match each reference bipartition against sample frequencies
