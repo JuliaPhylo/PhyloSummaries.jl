@@ -41,6 +41,8 @@ freq(obj::BlobFreq) = obj.freq[]
 freq!(obj::BlobFreq, n) = obj.freq[] = Float64(n)
 incrementfreq!(obj::BlobFreq, x=1) = obj.freq[] += x
 
+nblocks(::BlobFreq{N,P}) where {N,P} = P
+
 Base.show(io::IO, obj::BlobFreq{N,P}) where {N,P} = print(io,
     "BlobFreq on $N taxa, $P blocks " * partitionstring(obj) *
     ", frequency $(Int(round(freq(obj))))" *
@@ -500,7 +502,6 @@ function findmatchingblob(
         P = length(splits)
         length(partition) == P || continue
         idxmap = Vector{Int}(undef, P)
-        # used = falses(length(partition)) ## removed because blocks are distincts
         equalblob = true
         for (k, s) in pairs(splits)
             pos = findfirst(isequal(s), partition)
@@ -1132,7 +1133,7 @@ function blobdata_onToB(
     @assert nB == length(blobnode)
     bitr = ((i,blobparts[i]) for i in nB:-1:1) # from most to least frequent blob
     blob_data = (blob = [i for (i,b) in bitr],
-        degree = [length(b.partition) for (i,b) in bitr],
+        degree = [nblocks(b) for (i,b) in bitr],
         node = [blobnode[i].number for (i,b) in bitr],
         support_partition = [freq(b)/nnets for (i,b) in bitr],
         partition_num = [partitionstring(b) for (i,b) in bitr],

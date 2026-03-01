@@ -9,11 +9,11 @@ import Base: show
 const PN = PhyloNetworks
 
 export
+blobpartitions_support,
 consensus_level1network,
 consensus_level1network_save,
 consensus_treeofblobs,
 consensustree,
-referencesupport,
 edgenumbers_fromnodenumbers,
 resetnodenumbers_fromnames!
 

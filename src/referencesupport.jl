@@ -21,7 +21,11 @@ Output: a `NamedTuple` of tables, named as follows
 - `:taxa`: sorted taxon labels shared by all networks. `taxa[i]` is indicated
   as taxon `i` in the other tables.
 
-See also: [`consensus_treeofblobs`](@ref).
+See also:
+[`PhyloNetworks.treeedges_support`](@extref),
+[`PhyloNetworks.hybridclades_support`](@extref),
+[`consensus_treeofblobs`](@ref),
+[`PhyloSummaries.count_blobpartitions`](@ref).
 
 # example
 
@@ -40,6 +44,7 @@ function blobpartitions_support(
     minimumblobdegree ≥ 3 ||
         throw(ArgumentError("minimumblobdegree should be 3 or higher, not $minimumblobdegree"))
     taxa = sort(tiplabels(referencenet))
+    ntaxa = length(taxa)
     nnets = length(networks)
     if !isnothing(netweight)
       length(netweight) == nnets ||
@@ -55,12 +60,16 @@ function blobpartitions_support(
         taxa, minimumblobdegree, false, 0.0) # frequencies initialized at 0
     update_blobcircorderfrequency!(refblobs, blobvec, taxa)
     update_hybridclusterfrequency!(refblobs, hybdict)
-    # match each reference bipartition against sample frequencies
     update_bipartitionfrequency!(refbps, bpvec)
-    # todo: build tables. use hwmatrix, edgemap (from above)
-    # to calculate the blob-edge-indices bbei's, then
-    # call blobdata_*, hybriddata_onToB and bipartdata_onToB?
-    return (blob_table=blob_table, bipartition_table=bp_table, taxa=taxa)
+    bbn, bbeis = _blobnode_blobedges(net, hwmatrix, edgemap, refblobs, taxa)
+    # todo: build tables. use bbn, bbeis to
+    # call blobdata_onToB, hybriddata_onToB and bipartdata_onToB?
+    # caution: those function may assume that bbeis are edge indices, not numbers
+    return bbn, bbeis # todo: temporary. replace with what's below
+    #=
+    return (blob_table=bdat, circorder_table=odat,
+        hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
+    =#
 end
 
 """
@@ -86,7 +95,7 @@ function update_blobcircorderfrequency!(
         matchidx, _ = findmatchingblob(sampleblobs, rb.partition)
         isnothing(matchidx) && continue # all frequencies were initialized to 0
         bf = sampleblobs[matchidx]
-        freq!(rf, freq(bf))
+        freq!(rb, freq(bf))
         # copy each circular order from bf.circorder into rb.circorder
         # rb.partition[k] = bf.partition[idxmap[k]] so order
         for (co_block, co_freq) in bf.circorder
@@ -120,3 +129,65 @@ function update_bipartitionfrequency!(
     return nothing
 end
 
+"""
+    _blobnode_blobedges
+
+Output: `(blobnode, blobedge_numbers)` where
+- `blobnode` is the vector of entry nodes, one per blob and
+- `blobedge_numbers` has one vector per blob, each being a vector with
+  one edge number per taxon block.
+
+**Warning**: uses `net.partition` and internal fields `.inte1` and `.intn1`.
+These fields should store the edge's bicomponent number, and the node's blob
+number (if non-trivial, 0 if the node is a trivial blob).
+They do if `net` was already traversed by [`count_blobpartitions`](@ref),
+which calls `process_biconnectedcomponents!` to build `net.partition`.
+The blob number should also be its index in the input `refblobs`.
+"""
+function _blobnode_blobedges(
+    net::PN.HybridNetwork,
+    hwmatrix::AbstractMatrix,
+    edgemap::Dict{<:Integer,<:Integer},
+    refblobs::Vector{BlobFreq{N}},
+    taxa::AbstractVector{<:String},
+) where N
+    blobnode = PN.Node[]
+    nblobs = length(refblobs)
+    blobedge_nums = [zeros(Int, nblocks(bb)) for bb in refblobs]
+    i_prev = 0
+    for p in net.partition
+        if PN.istrivial(p) # add cut-edge to blobedge_nums?
+            ee = p.edges[1]
+            b1_i = ee.node[1].intn1
+            b2_i = ee.node[2].intn1
+            (b1_i == 0 && b2_i == 0) && continue # non-redundant bipart, could be external
+            enum = ee.number
+            row = get(edgemap, enum, nothing)
+            if isnothing(row)
+                cn = getchild(ee)
+                cn.leaf || error("cut-edge without a row in hwmatrix, yet child isn't a leaf")
+                i0 = findfirst(cn.name, taxa)
+                split = ntuple(isequal(i0), N)
+            else
+                split = cluster_fromHmatrix(hwmatrix, row, N)
+            end
+            vsplitmatch(v) = v == split || all(v .!== split)
+            for b_i in (b1_i, b2_i)
+                b_i == 0 && continue # adjacent to trivial blob
+                block_j = findfirst(vsplitmatch, refblobs[b_i].partition)
+                isnothing(block_j) && error("cut-edge $enum, split $split: no matching taxon block in $(refblobs[b_i])")
+                blobedge_nums[blob_i][block_j] = enum
+            end
+        else # add blobnode
+            nn = net.vec_node[PN.entrynode_preindex(p)]
+            # nn.int1 ≤ i_prev if 2+ bicomps in same blob (0 if trivial blob)
+            nn.intn1 <= i_prev && continue
+            push!(blobnode, nn)
+            i_prev = nn.intn1
+        end
+    end
+    any(any(enums .== 0) for enums in blobedge_nums)
+    length(blobnode) == nblobs ||
+        error("found $(length(blobnode)) blobs instead of $nblobs")
+    return blobnode, blobedge_nums
+end
