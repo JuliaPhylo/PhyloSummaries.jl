@@ -61,15 +61,48 @@ function blobpartitions_support(
     update_blobcircorderfrequency!(refblobs, blobvec, taxa)
     update_hybridclusterfrequency!(refblobs, hybdict)
     update_bipartitionfrequency!(refbps, bpvec)
-    bbn, bbeis = _blobnode_blobedges(net, hwmatrix, edgemap, refblobs, taxa)
-    # todo: build tables. use bbn, bbeis to
-    # call blobdata_onToB, hybriddata_onToB and bipartdata_onToB?
-    # caution: those function may assume that bbeis are edge indices, not numbers
-    return bbn, bbeis # todo: temporary. replace with what's below
-    #=
+    bbn, bbei_nums = _blobnode_blobedges(referencenet, hwmatrix, edgemap, refblobs, taxa)
+    # convert edge numbers to edge indices for the existing table builders
+    edgenum2idx = Dict(e.number => i for (i, e) in pairs(referencenet.edge))
+    bbei = [Int[edgenum2idx[n] for n in nums] for nums in bbei_nums]
+    bpei = _bipartition_edgeindices(refbps, referencenet, hwmatrix, edgemap, edgenum2idx, taxa)
+    # build tables using existing builders
+    bdat, odat = blobdata_onToB(refblobs, bbn, nnets, taxa)
+    hdat = hybriddata_onToB(refblobs, bbn, bbei, nnets, referencenet.edge, taxa)
+    sdat = bipartdata_onToB(refbps, bpei, nnets, referencenet.edge, taxa)
     return (blob_table=bdat, circorder_table=odat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
-    =#
+end
+
+"""
+    _bipartition_edgeindices(refbps, net, hwmatrix, edgemap, edgenum2idx, taxa)
+
+For each non-redundant bipartition in `refbps`, find the corresponding edge
+index in `net.edge` by matching the split against the `hwmatrix`.
+"""
+function _bipartition_edgeindices(
+    refbps::Vector{SplitFreq{N}},
+    net::PN.HybridNetwork,
+    hwmatrix::AbstractMatrix,
+    edgemap::Dict{<:Integer,<:Integer},
+    edgenum2idx::Dict{Int,Int},
+    taxa::AbstractVector{<:String},
+) where N
+    bpei = Int[]
+    for rb in refbps
+        matched = false
+        csplit = .!rb.split
+        for row in axes(hwmatrix, 1)
+            rowsplit = cluster_fromHmatrix(hwmatrix, row, N)
+            if rowsplit == rb.split || rowsplit == csplit
+                push!(bpei, edgenum2idx[hwmatrix[row, 1]])
+                matched = true
+                break
+            end
+        end
+        matched || error("bipartition $(rb.split) not found in hwmatrix")
+    end
+    return bpei
 end
 
 """
@@ -92,17 +125,14 @@ function update_blobcircorderfrequency!(
 ) where N
     # todo: update the circular order
     for rb in refblobs
-        matchidx, _ = findmatchingblob(sampleblobs, rb.partition)
+        matchidx, idxmap = findmatchingblob(sampleblobs, rb.partition)
         isnothing(matchidx) && continue # all frequencies were initialized to 0
         bf = sampleblobs[matchidx]
         freq!(rb, freq(bf))
-        # copy each circular order from bf.circorder into rb.circorder
-        # rb.partition[k] = bf.partition[idxmap[k]] so order
-        for (co_block, co_freq) in bf.circorder
-            # todo: find block order in rb, corresponding to co_block in bf
-            idxmap_inrb = idxmap # wrong: fixit
-            add_canonical_circularorder!(rb.circorder, idxmap_inrb, co_freq)
-        end
+        # todo: copy circular orders from bf into rb, remapping block indices.
+        # rb.partition[k] = bf.partition[idxmap[k]], so each circular order
+        # co_block (a tuple of block indices in bf) needs to be remapped to
+        # block indices in rb before calling add_canonical_circularorder!.
     end
     return nothing
 end
@@ -154,6 +184,7 @@ function _blobnode_blobedges(
     blobnode = PN.Node[]
     nblobs = length(refblobs)
     blobedge_nums = [zeros(Int, nblocks(bb)) for bb in refblobs]
+    intn1_to_blobidx = Dict{Int,Int}() # .intn1 (bicomp index) → position in refblobs
     i_prev = 0
     for p in net.partition
         if PN.istrivial(p) # add cut-edge to blobedge_nums?
@@ -166,7 +197,7 @@ function _blobnode_blobedges(
             if isnothing(row)
                 cn = getchild(ee)
                 cn.leaf || error("cut-edge without a row in hwmatrix, yet child isn't a leaf")
-                i0 = findfirst(cn.name, taxa)
+                i0 = findfirst(isequal(cn.name), taxa)
                 split = ntuple(isequal(i0), N)
             else
                 split = cluster_fromHmatrix(hwmatrix, row, N)
@@ -174,19 +205,35 @@ function _blobnode_blobedges(
             vsplitmatch(v) = v == split || all(v .!== split)
             for b_i in (b1_i, b2_i)
                 b_i == 0 && continue # adjacent to trivial blob
-                block_j = findfirst(vsplitmatch, refblobs[b_i].partition)
-                isnothing(block_j) && error("cut-edge $enum, split $split: no matching taxon block in $(refblobs[b_i])")
-                blobedge_nums[blob_i][block_j] = enum
+                bi = get(intn1_to_blobidx, b_i, nothing)
+                isnothing(bi) && continue # blob not interesting (degree < minBdegree)
+                block_j = findfirst(vsplitmatch, refblobs[bi].partition)
+                isnothing(block_j) && error("cut-edge $enum, split $split: no matching taxon block in $(refblobs[bi])")
+                blobedge_nums[bi][block_j] = enum
             end
         else # add blobnode
             nn = net.vec_node[PN.entrynode_preindex(p)]
-            # nn.int1 ≤ i_prev if 2+ bicomps in same blob (0 if trivial blob)
+            # nn.intn1 ≤ i_prev if 2+ bicomps in same blob (0 if trivial blob)
             nn.intn1 <= i_prev && continue
             push!(blobnode, nn)
+            intn1_to_blobidx[nn.intn1] = length(blobnode)
             i_prev = nn.intn1
         end
     end
-    any(any(enums .== 0) for enums in blobedge_nums)
+    # fill in outgroup/complement blocks: entry cut-edge above each blob
+    for (bi, bn) in pairs(blobnode)
+        any(blobedge_nums[bi] .== 0) || continue
+        # find the parent edge leading outside the blob
+        for e in bn.edge
+            if PN.ischildof(bn, e)
+                j = findfirst(blobedge_nums[bi] .== 0)
+                blobedge_nums[bi][j] = e.number
+                break
+            end
+        end
+    end
+    any(any(enums .== 0) for enums in blobedge_nums) &&
+        error("some blob taxon blocks have no matching edge")
     length(blobnode) == nblobs ||
         error("found $(length(blobnode)) blobs instead of $nblobs")
     return blobnode, blobedge_nums
