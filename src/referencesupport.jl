@@ -129,10 +129,18 @@ function update_blobcircorderfrequency!(
         isnothing(matchidx) && continue # all frequencies were initialized to 0
         bf = sampleblobs[matchidx]
         freq!(rb, freq(bf))
-        # todo: copy circular orders from bf into rb, remapping block indices.
-        # rb.partition[k] = bf.partition[idxmap[k]], so each circular order
-        # co_block (a tuple of block indices in bf) needs to be remapped to
-        # block indices in rb before calling add_canonical_circularorder!.
+        # copy circular orders from bf into rb, remapping block indices.
+        # rb.partition[k] = bf.partition[idxmap[k]], so the inverse gives us:
+        # bf block index j → rb block index invmap[j]
+        P = length(idxmap)
+        invmap = Vector{Int}(undef, P)
+        for k in 1:P
+            invmap[idxmap[k]] = k
+        end
+        for (co_key, co_freq) in bf.circorder
+            remapped = [invmap[j] for j in co_key]
+            add_canonical_circularorder!(rb.circorder, remapped, co_freq)
+        end
     end
     return nothing
 end
