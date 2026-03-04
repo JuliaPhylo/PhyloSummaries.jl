@@ -1176,6 +1176,12 @@ function blobdata_onL1( # for consensus level-1 network
     return blob_data
 end
 
+"""
+`blobedges` should give the *index* of edges in `netedge`
+optional: `blobedges_nums` for edge numbers.
+Otherwise edge numbers are assumed to be equal to edge indices.
+fixit: rename to avoid confusing indices with numbers
+"""
 function hybriddata_onToB(
     blobparts::Vector{BlobFreq{N}},
     blobnode::Vector{PN.Node},
@@ -1183,6 +1189,7 @@ function hybriddata_onToB(
     nnets::Number,
     netedge::Vector{PN.Edge},
     taxa::Vector{<:AbstractString},
+    blobedges_nums = nothing,
 ) where N
     nB = length(blobparts)
     @assert nB == length(blobedges)
@@ -1200,6 +1207,7 @@ function hybriddata_onToB(
         cnum[j] = nn[(from1 ? 2 : 1)].number
     end
     hybrid_data = (blob = bnum, node_from = pnum, node_to = cnum, edge = hedgenum,
+    # fixit: output edge = xxx to give edge numbers, not indices
         support_hybrid = [x[4]/nnets for x in itr],
         cluster_num = [splitstring(b.partition[h]) for (i,b,h,f) in itr],
         cluster = [splitstring_names(b.partition[h], taxa) for (i,b,h,f) in itr],
@@ -1207,6 +1215,7 @@ function hybriddata_onToB(
     return hybrid_data
 end
 
+# `biedges` should give the *index* of edges in `netedge`
 function bipartdata_onToB(
     biparts::Vector{SplitFreq{N}},
     biedges::Vector{Int},

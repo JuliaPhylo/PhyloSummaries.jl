@@ -58,7 +58,7 @@ function blobpartitions_support(
     refbps = SplitFreq{ntaxa}[]
     hwmatrix, edgemap = count_blobpartitions!(refblobs, refbps, referencenet,
         taxa, minimumblobdegree, false, 0.0) # frequencies initialized at 0
-    update_blobcircorderfrequency!(refblobs, blobvec, taxa)
+    update_blobcircorderfrequency!(refblobs, blobvec)
     update_hybridclusterfrequency!(refblobs, hybdict)
     update_bipartitionfrequency!(refbps, bpvec)
     bbn, bbei_nums = _blobnode_blobedges(referencenet, hwmatrix, edgemap, refblobs, taxa)
@@ -106,7 +106,7 @@ function _bipartition_edgeindices(
 end
 
 """
-    update_blobcircorderfrequency!(refblobs, sampleblobs, taxa)
+    update_blobcircorderfrequency!(refblobs, sampleblobs)
 
 Update the frequency and circular order dictionary of each "reference" blob
 partition blob (item in `refblobs`), to match that from `sampleblobs`.
@@ -121,7 +121,6 @@ clades aggregated over all sample blobs
 function update_blobcircorderfrequency!(
     refblobs::Vector{BlobFreq{N}},
     sampleblobs::Vector{BlobFreq{N}},
-    taxa::AbstractVector{<:String},
 ) where N
     for rb in refblobs
         matchidx, idxmap = findmatchingblob(sampleblobs, rb.partition)
@@ -131,7 +130,7 @@ function update_blobcircorderfrequency!(
         # copy circular orders from bf into rb, remapping block indices.
         # rb.partition[k] = bf.partition[idxmap[k]], so the inverse gives us:
         # bf block index j → rb block index invmap[j]
-        P = length(idxmap)
+        P = nblocks(rb) # also = length(idxmap)
         invmap = Vector{Int}(undef, P)
         for k in 1:P
             invmap[idxmap[k]] = k
@@ -193,6 +192,9 @@ function _blobnode_blobedges(
     blobedge_nums = [zeros(Int, nblocks(bb)) for bb in refblobs]
     intn1_to_blobidx = Dict{Int,Int}() # .intn1 (bicomp index) → position in refblobs
     i_prev = 0
+    # fixit: I think it's incorrect below, generally.
+    # intn1_to_blobidx can be incomplete when trying to add a cut-edge.
+    # show one example where intn1 != blob ID = blob index in refblobs
     for p in net.partition
         if PN.istrivial(p) # add cut-edge to blobedge_nums?
             ee = p.edges[1]
