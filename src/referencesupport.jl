@@ -123,7 +123,6 @@ function update_blobcircorderfrequency!(
     sampleblobs::Vector{BlobFreq{N}},
     taxa::AbstractVector{<:String},
 ) where N
-    # todo: update the circular order
     for rb in refblobs
         matchidx, idxmap = findmatchingblob(sampleblobs, rb.partition)
         isnothing(matchidx) && continue # all frequencies were initialized to 0
