@@ -229,18 +229,6 @@ function _blobnode_blobedges(
             i_prev = nn.intn1
         end
     end
-    # fill in outgroup/complement blocks: entry cut-edge above each blob
-    for (bi, bn) in pairs(blobnode)
-        any(blobedge_nums[bi] .== 0) || continue
-        # find the parent edge leading outside the blob
-        for e in bn.edge
-            if PN.ischildof(bn, e)
-                j = findfirst(blobedge_nums[bi] .== 0)
-                blobedge_nums[bi][j] = e.number
-                break
-            end
-        end
-    end
     any(any(enums .== 0) for enums in blobedge_nums) &&
         error("some blob taxon blocks have no matching edge")
     length(blobnode) == nblobs ||
