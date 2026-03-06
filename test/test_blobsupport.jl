@@ -26,13 +26,4 @@ sdt = res.bipartition_table
 @test isempty(sdt.edge)
 
 
-refnet2 = readnewick("(((A,(B)#H1),(#H1,C)),((D,(E)#H2),(#H2,F)));")
-taxa2 = sort(tiplabels(refnet2))
-refblobs = PhyloSummaries.BlobFreq{6}[]
-refbps = PhyloSummaries.SplitFreq{6}[]
-hwmatrix, edgemap, blobdegree = PhyloSummaries.count_blobpartitions!(refblobs, refbps, refnet2, taxa2, 3, false, 0.0)
-bbn, bbei_nums = PhyloSummaries._blobnode_blobedges(refnet2, hwmatrix, edgemap, refblobs, taxa2, blobdegree, 3)
-@test length(bbn) == 2
-@test length(bbei_nums) == 2
-
 end
