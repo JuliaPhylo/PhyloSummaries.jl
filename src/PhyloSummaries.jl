@@ -20,5 +20,5 @@ resetnodenumbers_fromnames!
 include("utils.jl")
 include("consensustrees.jl")
 include("consensusblobs.jl")
-include("referencesupport.jl")
+include("blobsupport.jl")
 end
