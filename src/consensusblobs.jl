@@ -413,7 +413,7 @@ function count_blobpartitions!(
     # gather non-redundant cut-edges: from trivial bicomponents
     count_nonredundantbipartitions!(bpvec, blobdegree,
             net, taxaindex, minBdegree, hwmatrix, edgemap, netweight)
-    return hwmatrix, edgemap
+    return hwmatrix, edgemap, blobdegree
 end
 
 """

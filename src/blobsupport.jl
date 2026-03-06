@@ -33,6 +33,7 @@ See also:
 todo
 ```
 """
+
 function blobpartitions_support(
     networks::AbstractVector{PN.HybridNetwork},
     referencenet::PN.HybridNetwork;
@@ -56,12 +57,12 @@ function blobpartitions_support(
     hybdict = count_hybridclusters(blobvec)
     refblobs = BlobFreq{ntaxa}[]
     refbps = SplitFreq{ntaxa}[]
-    hwmatrix, edgemap = count_blobpartitions!(refblobs, refbps, referencenet,
+    hwmatrix, edgemap, blobdegree = count_blobpartitions!(refblobs, refbps, referencenet,
         taxa, minimumblobdegree, false, 0.0) # frequencies initialized at 0
     update_blobcircorderfrequency!(refblobs, blobvec)
     update_hybridclusterfrequency!(refblobs, hybdict)
     update_bipartitionfrequency!(refbps, bpvec)
-    bbn, bbei_nums = _blobnode_blobedges(referencenet, hwmatrix, edgemap, refblobs, taxa)
+    bbn, bbei_nums = _blobnode_blobedges(referencenet, hwmatrix, edgemap, refblobs, taxa, blobdegree, minimumblobdegree)
     # convert edge numbers to edge indices for the existing table builders
     edgenum2idx = Dict(e.number => i for (i, e) in pairs(referencenet.edge))
     bbei = [Int[edgenum2idx[n] for n in nums] for nums in bbei_nums]
@@ -186,15 +187,35 @@ function _blobnode_blobedges(
     edgemap::Dict{<:Integer,<:Integer},
     refblobs::Vector{BlobFreq{N}},
     taxa::AbstractVector{<:String},
+    blobdegree::Vector{Int},
+    minBdegree::Int
 ) where N
     blobnode = PN.Node[]
     nblobs = length(refblobs)
     blobedge_nums = [zeros(Int, nblocks(bb)) for bb in refblobs]
-    intn1_to_blobidx = Dict{Int,Int}() # .intn1 (bicomp index) → position in refblobs
+
+    # Build mapping from entry node intn1 to blob index in refblobs
+    intn1_to_blobidx = Dict{Int,Int}()
     i_prev = 0
-    # fixit: I think it's incorrect below, generally.
-    # intn1_to_blobidx can be incomplete when trying to add a cut-edge.
-    # show one example where intn1 != blob ID = blob index in refblobs
+    idx = 1
+    for (bidx, p) in pairs(net.partition)
+        if !PN.istrivial(p) 
+            nn = net.vec_node[PN.entrynode_preindex(p)]
+
+            nn.intn1 <= i_prev && continue
+            if blobdegree[bidx] >= minBdegree
+                push!(blobnode, nn)
+                intn1_to_blobidx[nn.intn1] = idx
+                idx += 1
+            end
+            i_prev = nn.intn1
+        end
+    end
+
+    length(blobnode) == nblobs ||
+        error("found $(length(blobnode)) interesting blobs instead of $nblobs")
+
+    # Pass 2: Assign cut-edges to their interesting blobs
     for p in net.partition
         if PN.istrivial(p) # add cut-edge to blobedge_nums?
             ee = p.edges[1]
@@ -215,23 +236,18 @@ function _blobnode_blobedges(
             for b_i in (b1_i, b2_i)
                 b_i == 0 && continue # adjacent to trivial blob
                 bi = get(intn1_to_blobidx, b_i, nothing)
-                isnothing(bi) && continue # blob not interesting (degree < minBdegree)
+                if isnothing(bi)
+                    @warn "Blob index $(b_i) not found in refblobs. Not interesting blob" # warning only for testing
+                    continue
+                end
                 block_j = findfirst(vsplitmatch, refblobs[bi].partition)
                 isnothing(block_j) && error("cut-edge $enum, split $split: no matching taxon block in $(refblobs[bi])")
                 blobedge_nums[bi][block_j] = enum
             end
-        else # add blobnode
-            nn = net.vec_node[PN.entrynode_preindex(p)]
-            # nn.intn1 ≤ i_prev if 2+ bicomps in same blob (0 if trivial blob)
-            nn.intn1 <= i_prev && continue
-            push!(blobnode, nn)
-            intn1_to_blobidx[nn.intn1] = length(blobnode)
-            i_prev = nn.intn1
         end
     end
+
     any(any(enums .== 0) for enums in blobedge_nums) &&
         error("some blob taxon blocks have no matching edge")
-    length(blobnode) == nblobs ||
-        error("found $(length(blobnode)) blobs instead of $nblobs")
     return blobnode, blobedge_nums
 end
