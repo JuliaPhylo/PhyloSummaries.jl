@@ -66,11 +66,11 @@ function blobpartitions_support(
     # convert edge numbers to edge indices for the existing table builders
     edgenum2idx = Dict(e.number => i for (i, e) in pairs(referencenet.edge))
     bbei = [Int[edgenum2idx[n] for n in nums] for nums in bbei_nums]
-    bpei = _bipartition_edgeindices(refbps, referencenet, hwmatrix, edgemap, edgenum2idx, taxa)
+    bpei, bpe_nums = _bipartition_edgeindices(refbps, referencenet, hwmatrix, edgemap, edgenum2idx, taxa)
     # build tables using existing builders
     bdat, odat = blobdata_onToB(refblobs, bbn, nnets, taxa)
     hdat = hybriddata_onToB(refblobs, bbn, bbei, nnets, referencenet.edge, taxa, bbei_nums)
-    sdat = bipartdata_onToB(refbps, bpei, nnets, referencenet.edge, taxa)
+    sdat = bipartdata_onToB(refbps, bpei, nnets, referencenet.edge, taxa, bpe_nums)
     return (blob_table=bdat, circorder_table=odat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
@@ -90,20 +90,23 @@ function _bipartition_edgeindices(
     taxa::AbstractVector{<:String},
 ) where N
     bpei = Int[]
+    bpe_nums = Int[]
     for rb in refbps
         matched = false
         csplit = .!rb.split
         for row in axes(hwmatrix, 1)
             rowsplit = cluster_fromHmatrix(hwmatrix, row, N)
             if rowsplit == rb.split || rowsplit == csplit
-                push!(bpei, edgenum2idx[hwmatrix[row, 1]])
+                edge_num = hwmatrix[row, 1]
+                push!(bpe_nums, edge_num)
+                push!(bpei, edgenum2idx[edge_num])
                 matched = true
                 break
             end
         end
         matched || error("bipartition $(rb.split) not found in hwmatrix")
     end
-    return bpei
+    return bpei, bpe_nums
 end
 
 """

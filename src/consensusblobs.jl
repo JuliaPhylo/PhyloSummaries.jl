@@ -1222,15 +1222,17 @@ function bipartdata_onToB(
     nnets::Number,
     netedge::Vector{PN.Edge},
     taxa::Vector{<:AbstractString},
+    bpe_nums = nothing,
 ) where N
     nB = length(biparts)
     @assert nB == length(biedges)
     bitr = ((i,biparts[i]) for i in nB:-1:1) # from most to least frequent
-    enum = [biedges[i] for (i,b) in bitr]
-    pnum = Vector{Int}(undef, length(enum)) # parent & child node numbers
-    cnum = Vector{Int}(undef, length(enum))
+    enum = isnothing(bpe_nums) ? [biedges[i] for (i,b) in bitr] : [bpe_nums[i] for (i,b) in bitr]
+    eidx = [biedges[i] for (i,b) in bitr]
+    pnum = Vector{Int}(undef, length(eidx)) # parent & child node numbers
+    cnum = Vector{Int}(undef, length(eidx))
     for i in nB:-1:1
-        ee = netedge[enum[i]]
+        ee = netedge[eidx[i]]
         pnum[i] = getparent(ee).number
         cnum[i] = getchild(ee).number
     end
