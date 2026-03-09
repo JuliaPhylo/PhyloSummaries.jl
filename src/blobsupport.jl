@@ -69,7 +69,7 @@ function blobpartitions_support(
     bpei = _bipartition_edgeindices(refbps, referencenet, hwmatrix, edgemap, edgenum2idx, taxa)
     # build tables using existing builders
     bdat, odat = blobdata_onToB(refblobs, bbn, nnets, taxa)
-    hdat = hybriddata_onToB(refblobs, bbn, bbei, nnets, referencenet.edge, taxa)
+    hdat = hybriddata_onToB(refblobs, bbn, bbei, nnets, referencenet.edge, taxa, bbei_nums)
     sdat = bipartdata_onToB(refbps, bpei, nnets, referencenet.edge, taxa)
     return (blob_table=bdat, circorder_table=odat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)

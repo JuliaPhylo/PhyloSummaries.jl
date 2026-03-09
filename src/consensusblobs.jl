@@ -1180,7 +1180,6 @@ end
 `blobedges` should give the *index* of edges in `netedge`
 optional: `blobedges_nums` for edge numbers.
 Otherwise edge numbers are assumed to be equal to edge indices.
-fixit: rename to avoid confusing indices with numbers
 """
 function hybriddata_onToB(
     blobparts::Vector{BlobFreq{N}},
@@ -1196,11 +1195,12 @@ function hybriddata_onToB(
     bitr = ((i,blobparts[i]) for i in nB:-1:1) # from most to least frequent blob
     itr = ((i,b,h,f) for (i,b) in bitr for (h,f) in b.hybrid)
     bnum = [x[1] for x in itr]
-    hedgenum = [blobedges[i][h] for (i,b,h,f) in itr]
-    nE = length(hedgenum)
+    hedgeindex = [blobedges[i][h] for (i,b,h,f) in itr]
+    hedgenum = isnothing(blobedges_nums) ? hedgeindex : [blobedges_nums[i][h] for (i,b,h,f) in itr]
+    nE = length(hedgeindex)
     pnum = Vector{Int}(undef, nE) # parent & child node numbers: if
     cnum = Vector{Int}(undef, nE) # edge directed p-->c -> hybrid clade
-    for (j,bi,ei) in zip(1:nE, bnum, hedgenum)
+    for (j,bi,ei) in zip(1:nE, bnum, hedgeindex)
         nn = netedge[ei].node
         from1 = nn[1] === blobnode[bi] || nn[1].intn1 == bi # .intn1 not set for ToB
         pnum[j] = nn[(from1 ? 1 : 2)].number
