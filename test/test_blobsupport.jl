@@ -34,16 +34,9 @@ ht = res.hybrid_table
 sdt = res.bipartition_table
 @test isempty(sdt.edge)
 
-
-@testset "empty networks" begin
-    @test_throws ArgumentError blobpartitions_support(HybridNetwork[], refnet)
-end
-
-@testset "invalid minimumblobdegree" begin
+@testset "errors" begin
     @test_throws ArgumentError blobpartitions_support(nets, refnet; minimumblobdegree=2)
-end
-
-@testset "invalid netweight" begin
+    @test_throws ArgumentError blobpartitions_support(HybridNetwork[], refnet)
     @test_throws ErrorException blobpartitions_support(nets, refnet; netweight=[1.0, 1.0])
     @test_throws ErrorException blobpartitions_support(nets, refnet; netweight=fill(-1.0, 5))
 end
