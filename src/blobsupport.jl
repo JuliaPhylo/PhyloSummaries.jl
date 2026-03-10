@@ -65,7 +65,7 @@ function blobpartitions_support(
     bbn, bbei_nums = _blobnode_blobedges(referencenet, hwmatrix, edgemap, refblobs, taxa, blobdegree, minimumblobdegree)
     # convert edge numbers to edge indices for the existing table builders
     edgenum2idx = Dict(e.number => i for (i, e) in pairs(referencenet.edge))
-    bbei = [Int[edgenum2idx[n] for n in nums] for nums in bbei_nums]
+    bbei = Vector{Int}[Int[edgenum2idx[n] for n in nums] for nums in bbei_nums]
     bpei, bpe_nums = _bipartition_edgeindices(refbps, referencenet, hwmatrix, edgemap, edgenum2idx, taxa)
     # build tables using existing builders
     bdat, odat = blobdata_onToB(refblobs, bbn, nnets, taxa)
@@ -195,7 +195,7 @@ function _blobnode_blobedges(
 ) where N
     blobnode = PN.Node[]
     nblobs = length(refblobs)
-    blobedge_nums = [zeros(Int, nblocks(bb)) for bb in refblobs]
+    blobedge_nums = Vector{Int}[zeros(Int, nblocks(bb)) for bb in refblobs]
 
     # Build mapping from entry node intn1 to blob index in refblobs
     intn1_to_blobidx = Dict{Int,Int}()

@@ -1207,7 +1207,6 @@ function hybriddata_onToB(
         cnum[j] = nn[(from1 ? 2 : 1)].number
     end
     hybrid_data = (blob = bnum, node_from = pnum, node_to = cnum, edge = hedgenum,
-    # fixit: output edge = xxx to give edge numbers, not indices
         support_hybrid = [x[4]/nnets for x in itr],
         cluster_num = [splitstring(b.partition[h]) for (i,b,h,f) in itr],
         cluster = [splitstring_names(b.partition[h], taxa) for (i,b,h,f) in itr],
