@@ -62,12 +62,11 @@ function blobpartitions_support(
     update_blobcircorderfrequency!(refblobs, blobvec)
     update_hybridclusterfrequency!(refblobs, hybdict)
     update_bipartitionfrequency!(refbps, bpvec)
-    bbn, bbei_nums = _blobnode_blobedges(referencenet, hwmatrix, edgemap, refblobs, taxa, blobdegree, minimumblobdegree)
-    # convert edge numbers to edge indices for the existing table builders
+    bbn, bbei_nums = _blobnode_blobedges(referencenet,
+        hwmatrix, edgemap, refblobs, taxa, blobdegree, minimumblobdegree)
     edgenum2idx = Dict(e.number => i for (i, e) in pairs(referencenet.edge))
-    bbei = Vector{Int}[Int[edgenum2idx[n] for n in nums] for nums in bbei_nums]
-    bpei, bpe_nums = _bipartition_edgeindices(refbps, referencenet, hwmatrix, edgemap, edgenum2idx, taxa)
-    # build tables using existing builders
+    bbei = [Int[edgenum2idx[n] for n in nums] for nums in bbei_nums]
+    bpei, bpe_nums = _bipartition_edgeindices(refbps, hwmatrix, edgenum2idx)
     bdat, odat = blobdata_onToB(refblobs, bbn, nnets, taxa)
     hdat = hybriddata_onToB(refblobs, bbn, bbei, nnets, referencenet.edge, taxa, bbei_nums)
     sdat = bipartdata_onToB(refbps, bpei, nnets, referencenet.edge, taxa, bpe_nums)
@@ -76,18 +75,15 @@ function blobpartitions_support(
 end
 
 """
-    _bipartition_edgeindices(refbps, net, hwmatrix, edgemap, edgenum2idx, taxa)
+    _bipartition_edgeindices(refbps, hwmatrix, edgenum2idx)
 
 For each non-redundant bipartition in `refbps`, find the corresponding edge
-index in `net.edge` by matching the split against the `hwmatrix`.
+index and edge number by matching the split against the `hwmatrix`.
 """
 function _bipartition_edgeindices(
     refbps::Vector{SplitFreq{N}},
-    net::PN.HybridNetwork,
     hwmatrix::AbstractMatrix,
-    edgemap::Dict{<:Integer,<:Integer},
     edgenum2idx::Dict{Int,Int},
-    taxa::AbstractVector{<:String},
 ) where N
     bpei = Int[]
     bpe_nums = Int[]
@@ -183,6 +179,14 @@ number (if non-trivial, 0 if the node is a trivial blob).
 They do if `net` was already traversed by [`count_blobpartitions`](@ref),
 which calls `process_biconnectedcomponents!` to build `net.partition`.
 The blob number should also be its index in the input `refblobs`.
+
+assumptions about input arguments, met after calling `count_blobpartitions`
+with the same `minBdegree`:
+- `blobdegree`: vector of length `net.partition`, with 1 degree per bicomponent:
+  blob degree if the bicomponent is at the top (entry) of a blob, 0 if it is
+  trivial (1 edge) or below another bicomponent in the same blob.
+- `blobnode` has 1 node for each blob of degree ≥ `minBdegree`, in the same
+  order as they appear in `blobdegree` (as in a `net.partition`)
 """
 function _blobnode_blobedges(
     net::PN.HybridNetwork,
@@ -193,32 +197,25 @@ function _blobnode_blobedges(
     blobdegree::Vector{Int},
     minBdegree::Int
 ) where N
-    blobnode = PN.Node[]
     nblobs = length(refblobs)
     blobedge_nums = Vector{Int}[zeros(Int, nblocks(bb)) for bb in refblobs]
-
-    # Build mapping from entry node intn1 to blob index in refblobs
+    # 1. build blobnode, and map entry node intn1 → blob index in refblobs
+    blobnode = PN.Node[]
     intn1_to_blobidx = Dict{Int,Int}()
-    i_prev = 0
     idx = 1
-    for (bidx, p) in pairs(net.partition)
-        if !PN.istrivial(p) 
-            nn = net.vec_node[PN.entrynode_preindex(p)]
-
-            nn.intn1 <= i_prev && continue
-            if blobdegree[bidx] >= minBdegree
-                push!(blobnode, nn)
-                intn1_to_blobidx[nn.intn1] = idx
-                idx += 1
-            end
-            i_prev = nn.intn1
-        end
+    for (bidx, bbd) in pairs(blobdegree)
+        bbd < minBdegree && continue
+        nn = net.vec_node[PN.entrynode_preindex(net.partition[bidx])]
+        nn.intn1 == bidx ||
+            error("blob starting at bicomponent $bidx ≠ entry node intn1 $(nn.intn1)")
+        push!(blobnode, nn)
+        intn1_to_blobidx[nn.intn1] = idx
+        idx += 1
     end
-
     length(blobnode) == nblobs ||
         error("found $(length(blobnode)) interesting blobs instead of $nblobs")
 
-    # Pass 2: Assign cut-edges to their interesting blobs
+    # 2. Assign cut-edges to their interesting blobs
     for p in net.partition
         if PN.istrivial(p) # add cut-edge to blobedge_nums?
             ee = p.edges[1]

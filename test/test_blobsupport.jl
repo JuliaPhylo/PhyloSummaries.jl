@@ -1,9 +1,11 @@
 # test blobpartitions_support using level1_7taxa_abc.nwk
 @testset "blobpartitions_support" begin
 
-nets = readmultinewick(joinpath(@__DIR__, "level1_7taxa_abc.nwk"))
+nfile = joinpath(@__DIR__,"..","test","level1_7taxa_abc.nwk")
+# nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","level1_7taxa_abc.nwk")
+nets = readmultinewick(nfile)
 @test length(nets) == 5
-refnet = nets[5]
+refnet = deepcopy(nets[5])
 res = blobpartitions_support(nets, refnet)
 @test res.taxa == ["a1", "a2", "a3", "a4", "b1", "c1", "c2"]
 
