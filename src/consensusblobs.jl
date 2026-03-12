@@ -350,9 +350,13 @@ interesting blob, in one network `net`.
 If a new blob partition or non-redundant bipartition if found, that was absent
 from `blobs` or `biparts` respectively, a new entry is created in the vector.
 
-Output: `(hwmatrix, edgemap)` where `hwmatrix` is the matrix describing
-`net`'s hardwired clusters (1 per internal edge), and `edgemap` is a
-dictionary mapping each edge number to its row in `hwmatrix`.
+Output: `(hwmatrix, edgemap, blobdegree)`
+* `hwmatrix`: matrix describing `net`'s hardwired clusters (1 per internal edge)
+* `edgemap`: dictionary mapping each edge number to its row in `hwmatrix`
+* `blobdegree`: vector of length `net.partition` (# of biconnected components)
+  with 1 degree per bicomponent: blob degree if the bicomponent is at the top of
+  (entry to) a blob, or 0 if the bicomponent is trivial (1 edge) or
+  below another bicomponent in the same blob.
 
 Notes:
 - A "blob" here means a non-trivial blob with at least 1 hybrid node.
@@ -1177,7 +1181,7 @@ function blobdata_onL1( # for consensus level-1 network
 end
 
 """
-`blobedges` should give the *index* of edges in `netedge`
+`blobedges` should give the *index* of edges in `netedge`.
 optional: `blobedges_nums` for edge numbers.
 Otherwise edge numbers are assumed to be equal to edge indices.
 """
@@ -1214,7 +1218,11 @@ function hybriddata_onToB(
     return hybrid_data
 end
 
-# `biedges` should give the *index* of edges in `netedge`
+"""
+`biedges` should give the *index* of edges in `netedge`.
+optional: `bpe_nums` for the bipartition edge numbers.
+Otherwise edge numbers are assumed to be equal to edge indices.
+"""
 function bipartdata_onToB(
     biparts::Vector{SplitFreq{N}},
     biedges::Vector{Int},
@@ -1226,8 +1234,8 @@ function bipartdata_onToB(
     nB = length(biparts)
     @assert nB == length(biedges)
     bitr = ((i,biparts[i]) for i in nB:-1:1) # from most to least frequent
-    enum = isnothing(bpe_nums) ? [biedges[i] for (i,b) in bitr] : [bpe_nums[i] for (i,b) in bitr]
     eidx = [biedges[i] for (i,b) in bitr]
+    enum = isnothing(bpe_nums) ? eidx : [bpe_nums[i] for (i,b) in bitr]
     pnum = Vector{Int}(undef, length(eidx)) # parent & child node numbers
     cnum = Vector{Int}(undef, length(eidx))
     for i in nB:-1:1

@@ -62,13 +62,13 @@ function blobpartitions_support(
     update_blobcircorderfrequency!(refblobs, blobvec)
     update_hybridclusterfrequency!(refblobs, hybdict)
     update_bipartitionfrequency!(refbps, bpvec)
-    bbn, bbei_nums = _blobnode_blobedges(referencenet,
+    bbn, bbe_nums = _blobnode_blobedges(referencenet,
         hwmatrix, edgemap, refblobs, taxa, blobdegree, minimumblobdegree)
-    edgenum2idx = Dict(e.number => i for (i, e) in pairs(referencenet.edge))
-    bbei = [Int[edgenum2idx[n] for n in nums] for nums in bbei_nums]
+    edgenum2idx = Dict{Int,Int}(e.number => i for (i, e) in pairs(referencenet.edge))
+    bbei = Vector{Int}[[edgenum2idx[n] for n in nums] for nums in bbe_nums]
     bpei, bpe_nums = _bipartition_edgeindices(refbps, hwmatrix, edgenum2idx)
     bdat, odat = blobdata_onToB(refblobs, bbn, nnets, taxa)
-    hdat = hybriddata_onToB(refblobs, bbn, bbei, nnets, referencenet.edge, taxa, bbei_nums)
+    hdat = hybriddata_onToB(refblobs, bbn, bbei, nnets, referencenet.edge, taxa, bbe_nums)
     sdat = bipartdata_onToB(refbps, bpei, nnets, referencenet.edge, taxa, bpe_nums)
     return (blob_table=bdat, circorder_table=odat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
@@ -198,7 +198,7 @@ function _blobnode_blobedges(
     minBdegree::Int
 ) where N
     nblobs = length(refblobs)
-    blobedge_nums = Vector{Int}[zeros(Int, nblocks(bb)) for bb in refblobs]
+    blobedge_nums = [zeros(Int, nblocks(bb)) for bb in refblobs]
     # 1. build blobnode, and map entry node intn1 → blob index in refblobs
     blobnode = PN.Node[]
     intn1_to_blobidx = Dict{Int,Int}()
@@ -237,7 +237,8 @@ function _blobnode_blobedges(
                 b_i == 0 && continue # adjacent to trivial blob
                 bi = get(intn1_to_blobidx, b_i, nothing)
                 if isnothing(bi)
-                    @warn "Blob index $(b_i) not found in refblobs. Not interesting blob" # warning only for testing
+                    blobdegree[b_i] < minBdegree ||
+                        error("interesting blob at node with intn1=$b_i yet index not found")
                     continue
                 end
                 block_j = findfirst(vsplitmatch, refblobs[bi].partition)
@@ -246,7 +247,6 @@ function _blobnode_blobedges(
             end
         end
     end
-
     any(any(enums .== 0) for enums in blobedge_nums) &&
         error("some blob taxon blocks have no matching edge")
     return blobnode, blobedge_nums
