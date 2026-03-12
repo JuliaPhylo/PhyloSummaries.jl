@@ -1,6 +1,6 @@
 """
     blobpartitions_support(networks, referencenet;
-        minimumblobdegree=4, network_weights=nothing)
+        minimumblobdegree=3, network_weights=nothing)
 
 Calculate the support for blob partitions and related features (circular orders,
 hybrid clades, bipartitions non-redundant with a blob) for the blobs present
@@ -30,14 +30,60 @@ See also:
 # example
 
 ```jldoctest
-todo
+julia> netfile = joinpath(dirname(pathof(PhyloSummaries)), "..",
+    "test","level1_7taxa_abc.nwk");
+
+julia> bootnet = readmultinewick(netfile); # could be bootstrap networks
+
+julia> nwk = "(((a3,(a4,#H1)),a2),(((c2,(#H2,c1)),(b1)#H2))#H1,a1);"
+
+julia> refnet = readnewick(nwk); # same as 5th bootnet
+
+julia> res = blobpartitions_support(bootnet, refnet);
+
+julia> keys(res)
+(:blob_table, :circorder_table, :hybrid_table, :bipartition_table, :taxa)
+
+julia> using DataFrames; DataFrame(res[:blob_table])
+2×6 DataFrame
+ Row │ blob   degree  node   support_partition  partition_num  partition            
+     │ Int64  Int64   Int64  Float64            String         String               
+─────┼──────────────────────────────────────────────────────────────────────────────
+   1 │     2       4     -7                0.4  1,2,3,4|7|6|5  a1,a2,a3,a4|c2|c1|b1
+   2 │     1       5     -2                0.6  1|2|3|4|5,6,7  a1|a2|a3|a4|b1,c1,c2
+
+julia> DataFrame(res[:circorder_table])
+2×5 DataFrame
+ Row │ blob   order            support_circorder  partition_num  partition            
+     │ Int64  Tuple…           Float64            String         String               
+─────┼────────────────────────────────────────────────────────────────────────────────
+   1 │     2  (1, 2, 3, 4)                   0.4  1,2,3,4|7|6|5  a1,a2,a3,a4|c2|c1|b1
+   2 │     1  (1, 2, 3, 4, 5)                0.6  1|2|3|4|5,6,7  a1|a2|a3|a4|b1,c1,c2
+
+julia> DataFrame(res[:hybrid_table])
+3×7 DataFrame
+ Row │ blob   node_from  node_to  edge   support_hybrid  cluster_num  cluster     
+     │ Int64  Int64      Int64    Int64  Float64         String       String      
+─────┼────────────────────────────────────────────────────────────────────────────
+   1 │     2          6        8     13             0.2  5            b1
+   2 │     2         -7        3     15             0.4  1,2,3,4      a1,a2,a3,a4
+   3 │     1          3       -7     15             0.6  5,6,7        b1,c1,c2
+
+julia> DataFrame(res[:bipartition_table]) # refnet has 0 non-redundant bipartitions
+0×6 DataFrame
+ Row │ node1  node2  edge   support_nonredundant  cluster_num  cluster 
+     │ Int64  Int64  Int64  Float64               String       String  
+─────┴─────────────────────────────────────────────────────────────────
+
 ```
+To plot these support values onto the reference network,
+see examples in the package manual.
 """
 
 function blobpartitions_support(
     networks::AbstractVector{PN.HybridNetwork},
     referencenet::PN.HybridNetwork;
-    minimumblobdegree::Int=4,
+    minimumblobdegree::Int=3,
     netweight::Union{Nothing,AbstractVector}=nothing,
 )
     isempty(networks) &&
@@ -53,7 +99,7 @@ function blobpartitions_support(
       all(netweight .>= 0) || error("network weights should be > 0")
       nnets = sum(netweight)
     end
-    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree)
+    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree, false, netweight)
     hybdict = count_hybridclusters(blobvec)
     refblobs = BlobFreq{ntaxa}[]
     refbps = SplitFreq{ntaxa}[]
