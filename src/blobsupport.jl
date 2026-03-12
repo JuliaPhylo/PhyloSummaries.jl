@@ -64,7 +64,8 @@ function blobpartitions_support(
     update_bipartitionfrequency!(refbps, bpvec)
     bbn, bbe_nums = _blobnode_blobedges(referencenet,
         hwmatrix, edgemap, refblobs, taxa, blobdegree, minimumblobdegree)
-    edgenum2idx = Dict{Int,Int}(e.number => i for (i, e) in pairs(referencenet.edge))
+    edgenum2idx = Dict(e.number => i for (i, e) in pairs(referencenet.edge))
+    # specify type in case of empty iterator
     bbei = Vector{Int}[[edgenum2idx[n] for n in nums] for nums in bbe_nums]
     bpei, bpe_nums = _bipartition_edgeindices(refbps, hwmatrix, edgenum2idx)
     bdat, odat = blobdata_onToB(refblobs, bbn, nnets, taxa)
