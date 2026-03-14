@@ -1,6 +1,6 @@
 """
     blobpartitions_support(networks, referencenet;
-        minimumblobdegree=3, network_weights=nothing)
+        minimumblobdegree=3, netweights=nothing)
 
 Calculate the support for blob partitions and related features (circular orders,
 hybrid clades, bipartitions non-redundant with a blob) for the blobs present
@@ -8,7 +8,7 @@ in a reference network `referencenet`,
 based on their frequency in a sample of `networks`.
 
 Sample networks are weighted equally by default, unless a vector of
-`network_weights` is provided (of same length as the vector of sample networks).
+`netweights` is provided (of same length as the vector of sample networks).
 
 Output: a `NamedTuple` of tables, named as follows
 - `:blob_table`: support for each blob partition in the reference network,
@@ -84,7 +84,7 @@ function blobpartitions_support(
     networks::AbstractVector{PN.HybridNetwork},
     referencenet::PN.HybridNetwork;
     minimumblobdegree::Int=3,
-    netweight::Union{Nothing,AbstractVector}=nothing,
+    netweights::Union{Nothing,AbstractVector}=nothing,
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot compute reference support"))
@@ -93,13 +93,13 @@ function blobpartitions_support(
     taxa = sort(tiplabels(referencenet))
     ntaxa = length(taxa)
     nnets = length(networks)
-    if !isnothing(netweight)
-      length(netweight) == nnets ||
-          error("there should be $nnets network weights, got $(length(netweight))")
-      all(netweight .>= 0) || error("network weights should be > 0")
-      nnets = sum(netweight)
+    if !isnothing(netweights)
+      length(netweights) == nnets ||
+          error("there should be $nnets network weights, got $(length(netweights))")
+      all(netweights .>= 0) || error("network weights should be > 0")
+      nnets = sum(netweights)
     end
-    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree, false, netweight)
+    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree, false, netweights)
     hybdict = count_hybridclusters(blobvec)
     refblobs = BlobFreq{ntaxa}[]
     refbps = SplitFreq{ntaxa}[]

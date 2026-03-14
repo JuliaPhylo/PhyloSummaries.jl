@@ -42,7 +42,7 @@ net = readnewick.(
  "(((#H2,((c,b,((e)#H3,(#H3,d))))#H2))#H1,#H1,a);",
  "(((((((((e,d)),(c,b)))#H2),#H2))#H1,#H1),a);"])
 refnet = readnewick("(a,((c,b),((d)#H3,(#H3,e))));")
-res = blobpartitions_support(net, refnet; netweight=[1,1,3])
+res = blobpartitions_support(net, refnet; netweights=[1,1,3])
 @test res[:blob_table] == (blob=[1], degree=[3], node=[-5], support_partition=[.4],
     partition_num=["1,2,3|4|5"], partition=["a,b,c|d|e"])
 @test res[:circorder_table].support_circorder ≈ [.4] # (1+1)/(1+1+3) from weights
@@ -50,15 +50,15 @@ res = blobpartitions_support(net, refnet; netweight=[1,1,3])
     edge=[5,8], support_hybrid=[0.,.4], cluster_num=["4","5"], cluster=["d","e"])
 @test res[:bipartition_table] == (node1=[-3], node2=[-4], edge=[4],
     support_nonredundant=[.6], cluster_num=["2,3"], cluster=["b,c"])
-res = blobpartitions_support(net, refnet; netweight=[1,1,3], minimumblobdegree=4)
+res = blobpartitions_support(net, refnet; netweights=[1,1,3], minimumblobdegree=4)
 for k in keys(res[:blob_table]) @test isempty(res[:blob_table][k]); end
 @test res[:bipartition_table] == (node1=[-3,-3], node2=[-5,-4], edge=[10,4],
     support_nonredundant=[1,.6], cluster_num=["1,2,3","2,3"], cluster=["a,b,c","b,c"])
 
 @test_throws ArgumentError blobpartitions_support(net, refnet; minimumblobdegree=2)
 @test_throws ArgumentError blobpartitions_support(HybridNetwork[], refnet)
-@test_throws ErrorException blobpartitions_support(net, refnet; netweight=[1.0,1])
-@test_throws ErrorException blobpartitions_support(net, refnet; netweight=[1,0.,-1])
+@test_throws ErrorException blobpartitions_support(net, refnet; netweights=[1.0,1])
+@test_throws ErrorException blobpartitions_support(net, refnet; netweights=[1,0.,-1])
 end
 
 end

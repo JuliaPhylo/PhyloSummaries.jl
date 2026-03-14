@@ -79,7 +79,7 @@ isredundantsplit(b1::SplitFreq{N}, b2::BlobFreq{N}) where N =
 
 """
     consensus_treeofblobs(networks; proportion=0,
-        minimumblobdegree=4, network_weights=nothing)
+        minimumblobdegree=4, netweights=nothing)
 
 Consensus tree summarizing the partitions of "interesting" blobs (nodes in
 the tree of blobs) and the non-redundant bipartitions
@@ -104,7 +104,7 @@ With option `supportaslength=true`, this is also stored in the edge's
 
 By default, all input networks have equal weight: the support for a feature
 (blob or bipartition) is the proportion of networks with this feature.
-Optionally, a vector of `network_weights` can be provided, to give networks
+Optionally, a vector of `netweights` can be provided, to give networks
 unequal weights. There should be as many weights as there are input vectors.
 
 An "interesting" blob in an input network N is a non-trivial blob
@@ -137,7 +137,7 @@ function consensus_treeofblobs(
     minimumblobdegree::Int=4,
     supportaslength::Bool=false,
     suppressinfo::Bool=false,
-    netweight::Union{Nothing,AbstractVector}=nothing,
+    netweights::Union{Nothing,AbstractVector}=nothing,
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot get a consensus"))
@@ -145,14 +145,14 @@ function consensus_treeofblobs(
         throw(ArgumentError("minimumblobdegree should be 3 or higher, not $(minimumblobdegree)"))
     taxa = sort(tiplabels(networks[1]))
     nnets = length(networks)
-    if !isnothing(netweight)
-      length(netweight) == nnets ||
-          error("there should be $nnets network weights, got $(length(netweight))")
-      all(netweight .>= 0) || error("network weights should be > 0")
-      nnets = sum(netweight)
+    if !isnothing(netweights)
+      length(netweights) == nnets ||
+          error("there should be $nnets network weights, got $(length(netweights))")
+      all(netweights .>= 0) || error("network weights should be > 0")
+      nnets = sum(netweights)
     end
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree,
-        false, netweight)
+        false, netweights)
     hybdict = count_hybridclusters(blobvec) # before filtering
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
     update_hybridclusterfrequency!(blobvec, hybdict)
@@ -171,7 +171,7 @@ end
 
 """
     consensus_level1network(networks; proportion=0,
-        minimumblobdegree=4, outgroup=nothing, network_weights=nothing)
+        minimumblobdegree=4, outgroup=nothing, netweights=nothing)
 
 Consensus network summarizing a list of level-1 networks, by these steps:
 1. A consensus tree of blobs is built as in [`consensus_treeofblobs`](@ref),
@@ -193,7 +193,7 @@ Consensus network summarizing a list of level-1 networks, by these steps:
 
 By default, all input networks have equal weight: the support for a feature
 (blob, circular order, hybrid clade, bipartition) is the proportion of networks
-with this feature. To give networks unequal weights, a `network_weights` vector
+with this feature. To give networks unequal weights, a `netweights` vector
 can be provided. There should be as many weights as there are input vectors.
 
 See [`consensus_level1network_save`](@ref) to save the output.
@@ -204,7 +204,7 @@ function consensus_level1network(
     minimumblobdegree::Int=4,
     outgroup::Union{Nothing,String}=nothing,
     suppressinfo::Bool=false,
-    netweight::Union{Nothing,AbstractVector}=nothing,
+    netweights::Union{Nothing,AbstractVector}=nothing,
 )
     isempty(networks) &&
         throw(ArgumentError("No input networks: cannot get a consensus"))
@@ -214,14 +214,14 @@ function consensus_level1network(
     isnothing(outgroup) || outgroup ∈ taxa || # early problem detection
         error("outgroup $outgroup is not in the taxon list: $taxa")
     nnets = length(networks)
-    if !isnothing(netweight)
-      length(netweight) == nnets ||
-          error("there should be $nnets network weights, got $(length(netweight))")
-      all(netweight .>= 0) || error("network weights should be > 0")
-      nnets = sum(netweight)
+    if !isnothing(netweights)
+      length(netweights) == nnets ||
+          error("there should be $nnets network weights, got $(length(netweights))")
+      all(netweights .>= 0) || error("network weights should be > 0")
+      nnets = sum(netweights)
     end
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree,
-        true, netweight)
+        true, netweights)
     hybdict = count_hybridclusters(blobvec) # before filtering blobs out
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
     update_hybridclusterfrequency!(blobvec, hybdict)
@@ -278,7 +278,7 @@ end
 
 """
     count_blobpartitions(networks, taxa, minimumblobdegree,
-        require_level1=false, netweight=nothing)
+        require_level1=false, netweights=nothing)
 
 `(blob_vec, bipart_vec)` where `blob_vec` is a vector of
 [`BlobFreq{ntax}`](@ref) object (`ntax` being the number of taxa),
@@ -320,7 +320,7 @@ function count_blobpartitions(
     taxa::AbstractVector{<:String},
     minBdegree::Int,
     require_level1::Bool=false,
-    netweight::Union{Nothing,AbstractVector}=nothing,
+    netweights::Union{Nothing,AbstractVector}=nothing,
 )
     ntaxa = length(taxa)
     all(n.numtaxa == ntaxa for n in networks) ||
@@ -328,7 +328,7 @@ function count_blobpartitions(
     # hardwiredclusters will error if different taxon sets
     blobvec = BlobFreq{ntaxa}[]
     bpvec = SplitFreq{ntaxa}[]  # bipartitions, frequency: if non-redundant
-    nweight = (isnothing(netweight) ? i -> 1.0 : i -> Float64(netweight[i]))
+    nweight = (isnothing(netweights) ? i -> 1.0 : i -> Float64(netweights[i]))
     for (i,net) in enumerate(networks)
         nw = nweight(i)
         nw > 0 || continue # do not add blobs/biparts of weight 0
@@ -339,7 +339,7 @@ function count_blobpartitions(
 end
 
 """
-    count_blobpartitions!(blobs, biparts, net, netweight, taxa, minBdegree,
+    count_blobpartitions!(blobs, biparts, net, taxa, minBdegree,
         require_level1, netweight)
 
 Helper for [`count_blobpartitions`](@ref).

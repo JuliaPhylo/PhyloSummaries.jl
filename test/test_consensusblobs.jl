@@ -181,10 +181,10 @@ end
 tob,_ = consensus_treeofblobs(net, suppressinfo=true)
 @test writenewick(tob) == "(t1,t2,t3,t4,t5,t6)_7_blob1;"
 @test getroot(tob).fvalue == 6/10
-@test_throws "10 network weights, got 2" consensus_treeofblobs(net, netweight=[0,1])
-@test_throws "weights should be > 0" consensus_treeofblobs(net[[1,2]], netweight=[0,-1])
+@test_throws "10 network weights, got 2" consensus_treeofblobs(net, netweights=[0,1])
+@test_throws "weights should be > 0" consensus_treeofblobs(net[[1,2]], netweights=[0,-1])
 tob,_ = consensus_treeofblobs(net, suppressinfo=true,
-  netweight=[0,1,1,1,0,0,0,0,1,0]) # ≡ net[[2,3,4,9]] without weights
+  netweights=[0,1,1,1,0,0,0,0,1,0]) # ≡ net[[2,3,4,9]] without weights
 @test writenewick(tob) == "(t5,t6,(t4,t3,t2,t1)_8_blob1)_7;" # blob from nets 4,9
 @test tob.node[8].fvalue == 0.5
 tob,_ = consensus_treeofblobs(net[[4,9,3,2]], suppressinfo=true)
@@ -255,7 +255,7 @@ con = res[:net]
 
 res = consensus_level1network(net[1:4], minimumblobdegree=3, suppressinfo=true)
 res = consensus_level1network(net, minimumblobdegree=3, suppressinfo=true,
-  netweight=[1,1,1,1,0]) # ≡ net[1:4] without weights. hedge of weight 0
+  netweights=[1,1,1,1,0]) # ≡ net[1:4] without weights. hedge of weight 0
 con = res[:net]
 @test writenewick(con) == "(a3,(a4,#H12)_11,(a2,(a1,((((c1,c2)_8,(b1)#H15)_16,#H15)_9_blob1)#H12)_13)_14)_10_blob2;"
 @test [n.fvalue for n in con.node if n.hybrid] == [.5, 0]
@@ -272,7 +272,7 @@ con = res[:net]
   support_nonredundant=[0.5], cluster_num=["1,2,3,4,5"], cluster=["a1,a2,a3,a4,b1"])
 
 res = consensus_level1network(net[[1,3,4]], minimumblobdegree=3,
-    suppressinfo=true, netweight=[0.8,0.9,1.3])
+    suppressinfo=true, netweights=[0.8,0.9,1.3])
 con = res[:net]
 @test writenewick(con) == "(c1,c2,((b1,(((a2,a1)_11,(a4,a3)_12)_10)#H14)_13,#H14)_9_blob1)_8;"
 @test [n.fvalue for n in con.node if n.intn1 ≠ -1] ≈ [1.3,1.3,2.2]./3
