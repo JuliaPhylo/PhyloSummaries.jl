@@ -191,6 +191,10 @@ Consensus network summarizing a list of level-1 networks, by these steps:
    do not conflict with this outgroup taxon being an outgroup: below the root,
    and not affected (below) any reticulation.
 
+By default, a greedy consensus consensus is calculated.
+The majority-rule tree can be obtained by using `proportion=0.5`,
+and the strict consensus using `proportion=1`.
+
 By default, all input networks have equal weight: the support for a feature
 (blob, circular order, hybrid clade, bipartition) is the proportion of networks
 with this feature. To give networks unequal weights, a `netweights` vector
