@@ -1,6 +1,6 @@
 """
     blobpartitions_support(networks, referencenet;
-        minimumblobdegree=3, netweights=nothing)
+        minimumblobdegree=3, netweight=nothing)
 
 Calculate the support for blob partitions and related features (circular orders,
 hybrid clades, bipartitions non-redundant with a blob) for the blobs present
@@ -8,7 +8,7 @@ in a reference network `referencenet`,
 based on their frequency in a sample of `networks`.
 
 Sample networks are weighted equally by default, unless a vector of
-`netweights` is provided (of same length as the vector of sample networks).
+`netweight` is provided (of same length as the vector of sample networks).
 
 Output: a `NamedTuple` of tables, named as follows
 - `:blob_table`: support for each blob partition in the reference network,
@@ -30,12 +30,11 @@ See also:
 # example
 
 ```jldoctest
-julia> netfile = joinpath(dirname(pathof(PhyloSummaries)), "..",
-    "test","level1_7taxa_abc.nwk");
+julia> netfile = joinpath(dirname(pathof(PhyloSummaries)), "..", "test","level1_7taxa_abc.nwk");
 
 julia> bootnet = readmultinewick(netfile); # could be bootstrap networks
 
-julia> nwk = "(((a3,(a4,#H1)),a2),(((c2,(#H2,c1)),(b1)#H2))#H1,a1);"
+julia> nwk = "(((a3,(a4,#H1)),a2),(((c2,(#H2,c1)),(b1)#H2))#H1,a1);";
 
 julia> refnet = readnewick(nwk); # same as 5th bootnet
 
@@ -79,7 +78,6 @@ julia> DataFrame(res[:bipartition_table]) # refnet has 0 non-redundant bipartiti
 To plot these support values onto the reference network,
 see examples in the package manual.
 """
-
 function blobpartitions_support(
     networks::AbstractVector{PN.HybridNetwork},
     referencenet::PN.HybridNetwork;

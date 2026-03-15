@@ -168,11 +168,12 @@ show(blb_df, allcols=true)
 This `blb_df` table describes each blob partition, and shows its support.
 Here our consensus tree of blobs has a single blob, so this table
 has a single row.
+
 - When the edges and nodes of this blob are removed, the full taxon set
-  is disconnected into multiple taxon blocks: a *partition* of the taxa.
+  is disconnected into multiple taxon blocks: a _partition_ of the taxa.
   This partition is described by a list of taxa in each block,
   with blocks separated by `|`. So here we see that our partition has
-  6 parts, or *taxon blocks*, and each taxon is alone in its own block.
+  6 parts, or _taxon blocks_, and each taxon is alone in its own block.
 - The number of taxon blocks is the **degree** of the blob, given in
   the "degree" column.
 - The "node" column given the number of the node that represents the blob, in
@@ -198,10 +199,10 @@ show(select(blb_df, [:support_partition,:partition]), truncate=64)
 
 Next we can look the table describing bipartitions: edges in the
 consensus tree of blobs that, when deleted, separate the taxon into
-*two* parts. Since many edges are already in the tree because they
+_two_ parts. Since many edges are already in the tree because they
 are connected to a blob, we only look at the support of edges as being
-non-redundant with any blob, that is, *additional* support: the proportion
-of input networks that have this edge *not* connected to any blob.
+non-redundant with any blob, that is, _additional_ support: the proportion
+of input networks that have this edge _not_ connected to any blob.
 
 Here we don't have any such edges because our consensus is a
 star tree (a single blob, no cut edges).
@@ -226,6 +227,7 @@ that the hybrid is in, and whose descendant clade is exactly this
 taxon block.
 
 In our example:
+
 - The most frequent hybrid is t6: in 50% of input networks.
   For example, t6 is of hybrid origin in "net 1" above.
   Note that it may be of hybrid origin in networks that do not
@@ -398,6 +400,7 @@ We can re-read these files later, like this:
 con2 = readnewick("level1consensus_net.nwk");
 writenewick(con2) # internal node names give node numbers used in tables
 ```
+
 ```@example
 using CSV
 blb2 = CSV.read("level1consensus_blob.csv", DataFrame)
@@ -460,7 +463,6 @@ nothing # hide
 ```
 
 ![consensus level-1 network with support values, after re-reading results from file](../assets/figures/consensus_l1net2.svg)
-
 
 ```@eval
 for f in "level1consensus_" .* ["net.nwk","blob.csv","hybrid.csv","bipartition.csv"]
@@ -588,7 +590,7 @@ in PhyloNetworks, that map support onto a reference network:
 Below, we use these functions to map the support of more features (like hybrid sisters) onto our level-1 consensus network as a reference network.
 Note that, unlike the consensus functions here, the results of
 `treeedges_support` and `hybridclades_support` depend on which hybrid edges
-are *major* or *minor*, in the input networks.
+are _major_ or _minor_, in the input networks.
 The support for an edge to be a "tree" edge is the proportion of input networks
 in which this edge is retained after deleting all the minor hybrid edges are
 deleted, to get the major tree of each input network.
@@ -627,3 +629,87 @@ in the major tree of 100% of our input networks.
 
 See the section about PhyloNetworks's [Network support](@extref PhyloNetworks)
 for more details.
+
+## blob support for a reference network
+
+The function [`blobpartitions_support`](@ref) takes a reference network and
+a sample of networks, and returns support values for the blobs, circular
+orders, hybrid clades, and non-redundant bipartitions present in the
+reference network. Unlike [`consensus_level1network`](@ref), the sample
+networks do not need to be level-1.
+
+The example below uses the same network file as the
+[non-redundant bipartitions](@ref) section, with the 5th network as the
+reference. Sample networks can optionally be weighted: here we give twice
+as much weight to the 3rd network to illustrate the option.
+
+```@repl
+netfile = joinpath(dirname(pathof(PhyloSummaries)), "..",
+    "test","level1_7taxa_abc.nwk");
+bootnet = readmultinewick(netfile);
+nwk = "(((a3,(a4,#H1)),a2),(((c2,(#H2,c1)),(b1)#H2))#H1,a1);";
+refnet = readnewick(nwk); # same as bootnet[5]
+wts = [1.0, 1.0, 2.0, 1.0, 1.0]; # 3rd network has weight of 2.0
+res_bs = blobpartitions_support(bootnet, refnet; netweight=wts);
+keys(res_bs)
+res_bs[:taxa]
+```
+
+The output is a `NamedTuple` with the same keys as `consensus_treeofblobs`
+and `consensus_level1network`. Support values are proportions of the total
+weight (`sum(wts) = 6.0`) rather than the total count. Without weights,
+each network counts as 1 and the total is 5.
+
+```@repl
+DataFrame(res_bs[:blob_table])
+```
+
+Both blobs have `support_partition` of 0.5: each is present in networks
+whose weights sum to 3.0 out of 6.0.
+Note that the support values here differ from the unweighted values seen
+in the [non-redundant bipartitions](@ref) section (0.4 and 0.6),
+because the 3rd network (weight 2) counts double.
+
+```@repl
+DataFrame(res_bs[:circorder_table])
+```
+
+For each blob, a single circular order is observed across all sample
+networks that contain that blob, so `support_circorder` equals
+`support_partition` for both rows.
+
+```@repl
+DataFrame(res_bs[:hybrid_table])
+```
+
+The taxon block b1 is of hybrid origin in fewer sample networks
+(support ≈ 0.17 = 1/6) than a1,a2,a3,a4 or b1,c1,c2 (both 0.5 = 3/6).
+
+```@repl
+DataFrame(res_bs[:bipartition_table]) # refnet has 0 non-redundant bipartitions
+```
+
+The table is empty because every cut-edge in the reference network is
+adjacent to one of its two blobs — there are no non-redundant bipartitions.
+
+We can plot these support values onto the reference network in the same way
+as for the consensus outputs above:
+
+```@example
+R"svg"(figname("blobsupport_7taxa_abc.svg"), width=7, height=3) # hide
+R"layout"([1 2]); # hide
+R"par"(mar=[0,0,0.5,0]); # hide
+blb_bs = DataFrame(res_bs[:blob_table])
+hyb_bs = DataFrame(res_bs[:hybrid_table])
+plot(refnet, shownodenumber=true, showedgenumber=true, tipoffset=0.05);
+R"mtext"("node & edge numbers", side=3, line=-1);
+plot(refnet, nodelabeladj=-0.1, edgelabeladj=[.5,-0.2],
+    nodelabelcolor="orangered", edgelabelcolor="deepskyblue",
+    nodelabel=select(blb_bs, [:node, :support_partition]),
+    edgelabel=select(hyb_bs, [:edge, :support_hybrid]));
+R"mtext"("blob (red) & hybrid (blue) support", side=3, line=-1);
+R"dev.off()"; # hide
+nothing # hide
+```
+
+![blob partition support mapped onto reference network, 5 input networks on 7 taxa](../assets/figures/blobsupport_7taxa_abc.svg)

@@ -10,7 +10,7 @@ links = InterLinks(
 DocMeta.setdocmeta!(
     PhyloSummaries,
     :DocTestSetup,
-    :(using PhyloNetworks; using PhyloSummaries);
+    :(using PhyloNetworks; using PhyloSummaries; ENV["COLUMNS"] = 200);
     recursive=true)
 
 makedocs(;
