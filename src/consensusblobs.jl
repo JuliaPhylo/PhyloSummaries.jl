@@ -261,6 +261,12 @@ cause unintended errors. Node numbers will also be different when re-reading
 the network from the newick file, but the original node numbers can be recovered
 with [`resetnodenumbers_fromnames!`](@ref)
 
+input:
+- `result_object` should be 1 object, as output by
+  [`consensus_level1network`](@ref): named tuple including the keys
+  `:blob_table`, `:hybrid_table` and `:bipartition_table`.
+- `rootname`: string, all output files will start with this.
+
 !!! warn "Files will be overwritten, if they already exist"
 
 """
