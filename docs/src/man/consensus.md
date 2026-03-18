@@ -630,53 +630,71 @@ in the major tree of 100% of our input networks.
 See the section about PhyloNetworks's [Network support](@extref PhyloNetworks)
 for more details.
 
-## blob support for a reference network
+## support for blobs in a reference network
 
 The function [`blobpartitions_support`](@ref) takes a reference network and
-a sample of networks, and returns support values for the blobs, circular
-orders, hybrid clades, and non-redundant bipartitions present in the
-reference network. Unlike [`consensus_level1network`](@ref), the sample
-networks do not need to be level-1.
+a sample of networks, and returns support values for blob-related features
+in the reference network, measured by how often they are found in the sample:
+the partition of taxa from each blob, the circular order of these taxon blocks
+(if the sample networks are of level 1),
+the clades below a lowest hybrid node in a blob, and
+the bipartitions non-redundant with a blob.
+Like [`consensus_treeofblobs`](@ref), the sample networks can be of any level.
 
-The example below uses the same network file as the
-[non-redundant bipartitions](@ref) section, with the 5th network as the
-reference. Sample networks can optionally be weighted: here we give twice
-as much weight to the 3rd network to illustrate the option.
+The example below uses the same 10 sample networks as in the
+[consensus tree of blob](@ref) section, but with a twist.
+Here we will give unequal weights to the sample networks, as if the 10 networks
+came from 8 bootstrap replicates. Some methods (like NANUQ+) may return
+multiple networks with equally good scores. We will do here as if:
+- for the 5th bootstrap data set, 3 networks were returned.
+  We will give each of these 3 networks a weight of 1/3.
+- for bootstrap data sets 1-4, and 6-8, only 1 network was returned, so
+  each one of these networks will be given a weight of 1.
 
 ```@repl
 netfile = joinpath(dirname(pathof(PhyloSummaries)), "..",
-    "test","level1_7taxa_abc.nwk");
+    "test","bootstrapnets_h1.nwk");
 bootnet = readmultinewick(netfile);
-nwk = "(((a3,(a4,#H1)),a2),(((c2,(#H2,c1)),(b1)#H2))#H1,a1);";
-refnet = readnewick(nwk); # same as bootnet[5]
-wts = [1.0, 1.0, 2.0, 1.0, 1.0]; # 3rd network has weight of 2.0
+wts = [1, 1, 1, 1, 1/3,1/3,1/3, 1, 1, 1]; # nets 5,6,7 from same boostrap data
+```
+
+Next we read our reference network, and map support for its blob features.
+
+```@repl
+refnwk = "((t6,(t5,#H9:::0.336)),(((t3)#H9:::0.664,(t2,t1)),t4));";
+refnet = readnewick(refnwk);
 res_bs = blobpartitions_support(bootnet, refnet; netweights=wts);
-keys(res_bs)
-res_bs[:taxa]
+keys(res_bs) # names of tables we should look at
 ```
 
 The output is a `NamedTuple` with the same keys as `consensus_treeofblobs`
 and `consensus_level1network`. Support values are proportions of the total
-weight (`sum(wts) = 6.0`) rather than the total count. Without weights,
-each network counts as 1 and the total is 5.
+weight (`sum(wts) = 8.0` from 8 bootstrap data sets) rather than the
+total number of sample networks (10).
 
 ```@repl
 DataFrame(res_bs[:blob_table])
 ```
 
-Both blobs have `support_partition` of 0.5: each is present in networks
-whose weights sum to 3.0 out of 6.0.
-Note that the support values here differ from the unweighted values seen
-in the [non-redundant bipartitions](@ref) section (0.4 and 0.6),
-because the 3rd network (weight 2) counts double.
+Our reference network has only 1 reticulation, so only 1 blob, and we see
+that this blob has `support_partition` of 0.25.
+If we plotted our input networks, we would see that this blob is in
+networks 2 and 3: whose weights sum to 2 out of 8.
+Note that these support values do not appear in the
+[consensus tree of blob](@ref) section, because this blob is not selected
+to be in the consensus tree of blob.
 
 ```@repl
 DataFrame(res_bs[:circorder_table])
 ```
 
-For each blob, a single circular order is observed across all sample
-networks that contain that blob, so `support_circorder` equals
-`support_partition` for both rows.
+We see that the blob appears in our sample with 2 different circular
+order of its taxon blocks: the first in the table is the order in the
+reference network
+
+todo: plot the reference network side-by-side with network 3, which has
+the alternative circular order. perhaps show the code to "rotate" edges
+before plotting it, to better show the order visually.
 
 ```@repl
 DataFrame(res_bs[:hybrid_table])
