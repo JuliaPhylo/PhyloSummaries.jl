@@ -650,7 +650,7 @@ bootnet = readmultinewick(netfile);
 nwk = "(((a3,(a4,#H1)),a2),(((c2,(#H2,c1)),(b1)#H2))#H1,a1);";
 refnet = readnewick(nwk); # same as bootnet[5]
 wts = [1.0, 1.0, 2.0, 1.0, 1.0]; # 3rd network has weight of 2.0
-res_bs = blobpartitions_support(bootnet, refnet; netweight=wts);
+res_bs = blobpartitions_support(bootnet, refnet; netweights=wts);
 keys(res_bs)
 res_bs[:taxa]
 ```

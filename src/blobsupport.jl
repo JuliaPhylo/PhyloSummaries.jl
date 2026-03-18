@@ -1,6 +1,6 @@
 """
     blobpartitions_support(networks, referencenet;
-        minimumblobdegree=3, netweight=nothing)
+        minimumblobdegree=3, netweights=nothing)
 
 Calculate the support for blob partitions and related features (circular orders,
 hybrid clades, bipartitions non-redundant with a blob) for the blobs present
@@ -8,7 +8,7 @@ in a reference network `referencenet`,
 based on their frequency in a sample of `networks`.
 
 Sample networks are weighted equally by default, unless a vector of
-`netweight` is provided (of same length as the vector of sample networks).
+`netweights` is provided (of same length as the vector of sample networks).
 
 Output: a `NamedTuple` of tables, named as follows
 - `:blob_table`: support for each blob partition in the reference network,
