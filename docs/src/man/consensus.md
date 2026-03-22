@@ -646,6 +646,7 @@ The example below uses the same 10 sample networks as in the
 Here we will give unequal weights to the sample networks, as if the 10 networks
 came from 8 bootstrap replicates. Some methods (like NANUQ+) may return
 multiple networks with equally good scores. We will do here as if:
+
 - for the 5th bootstrap data set, 3 networks were returned.
   We will give each of these 3 networks a weight of 1/3.
 - for bootstrap data sets 1-4, and 6-8, only 1 network was returned, so
@@ -692,9 +693,24 @@ We see that the blob appears in our sample with 2 different circular
 order of its taxon blocks: the first in the table is the order in the
 reference network
 
-todo: plot the reference network side-by-side with network 3, which has
-the alternative circular order. perhaps show the code to "rotate" edges
-before plotting it, to better show the order visually.
+Let's visualize the reference network alongside input network 3, which has
+the alternative circular order. We use `rotate!` to untangle edges in network 3 and better show the circular order visually:
+
+```@example
+R"svg"(figname("circorder_comparison.svg"), width=7, height=3) # hide
+R"layout"([1 2])       # hide
+R"par"(mar=[0,0,0.5,0]); # hide
+plot(refnet,  tipoffset=0.05);
+R"mtext"("reference network", side=3, line=-1);
+net3 = bootnet[3]
+rotate!(net3, -6)
+plot(net3, tipoffset=0.05);
+R"mtext"("network 3: alternative circular order", side=3, line=-1);
+R"dev.off()"; # hide
+nothing # hide
+```
+
+![reference network and network 3 with alternative circular order](../assets/figures/circorder_comparison.svg)
 
 ```@repl
 DataFrame(res_bs[:hybrid_table])
