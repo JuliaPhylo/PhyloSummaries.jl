@@ -230,7 +230,7 @@ function consensus_level1network(
     filter_sort_compatible_partitions!(blobvec, bpvec, nnets, proportion)
     update_hybridclusterfrequency!(blobvec, hybdict)
     net, bbn, bbei, bpei = tree_from_blobpartitions(taxa, blobvec, bpvec, nnets, false)
-    res = expand_blobcycles!(net, bbn, bbei, blobvec, nnets, outgroup)
+    res = expand_blobcycles!(net, bbn, bbei, blobvec, nnets, outgroup, taxa)
     bdat = blobdata_onL1(blobvec, bbn, res..., nnets, taxa)
     hdat = hybriddata_onToB(blobvec, bbn, bbei, nnets, net.edge, taxa)
     sdat = bipartdata_onToB(bpvec, bpei, nnets, net.edge, taxa)
@@ -1290,6 +1290,7 @@ function expand_blobcycles!(
     blobparts::Vector{BlobFreq{N}},
     nnets::Number,
     outgroup::Union{Nothing, AbstractString},
+    taxa::AbstractVector{<:AbstractString},
 ) where N
     fixdirection = !isnothing(outgroup)
     if fixdirection
@@ -1307,9 +1308,16 @@ function expand_blobcycles!(
     h_blk = Vector{Int}(undef, nB) # hybrid: block number in the multipartition
     @assert nB == length(blobedges) == length(blobparts)
     bitr = ((i,blobparts[i]) for i in nB:-1:1) # from most to least frequent blob
+    if !fixdirection
+        rooti, bestblk, secblk = getoptimalroot(taxa, blobparts)
+    else
+        rooti = 0
+    end
     for (i,b) in bitr
+        hb = rooti > 0 ? bestblk[i] : 0
+        sb = rooti > 0 ? secblk[i]  : 0
         o_bs[i], h_bs[i], h_num[i], h_blk[i] = expand_blobcycleat!(net,
-            nnum, enum, i, blobnode[i],blobedges[i],b, nnets, fixdirection)
+            nnum, enum, i, blobnode[i], blobedges[i], b, nnets, fixdirection, rooti, hb, sb)
     end
     return o_bs, h_bs, h_num, h_blk
 end
@@ -1323,20 +1331,23 @@ function expand_blobcycleat!(
     bpart::BlobFreq{N,P},
     nnets::Number,
     fixdirection::Bool,
+    rooti::Integer,
+    bestblk::Integer,
+    secblk::Integer,
 ) where {N,P}
     # 1. find a taxon block / edge to be the hybrid block
-    hblock = argmax(bpart.hybrid) # most frequent hybrid block
-    hedge = net.edge[bedges[hblock]]
-    hbelowblob = isparentof(bnode, hedge)
-    if !hbelowblob && !fixdirection && hedge.containroot
-        rootatnode!(net, bnode) # re-root at the blob node
-        hbelowblob = isparentof(bnode, hedge)
+    if rooti > 0 && bestblk > 0 && bpart.partition[bestblk][rooti]
+        hblock = secblk > 0 ? secblk : (bestblk == 1 ? 2 : 1)
+    else
+        hblock = bestblk > 0 ? bestblk : argmax(bpart.hybrid)
     end
-    if !hbelowblob # then find another block to be hybrid
+    hedge = net.edge[bedges[hblock]]
+    if fixdirection && !isparentof(bnode, hedge)
+        # rooted network: hybrid must be below the blob node
         priorh = hblock
-        if length(bpart.hybrid) == 1 # then pick block 1, or 2 if prior was 1
+        if length(bpart.hybrid) == 1
             hblock = (priorh == 1 ? 2 : 1)
-        else # pick second most frequent hybrid block
+        else
             hblock = argmax(k -> (k==priorh ? 0 : bpart.hybrid[k]), keys(bpart.hybrid))
         end
         hedge = net.edge[bedges[hblock]]
@@ -1403,4 +1414,55 @@ function expand_blobcycleat!(
         PN.traverseDirectEdges!(getparent(hedge), hedge, false)
     end
     return circweight, hweight, getparent(hedge).number, hblock
+end
+
+
+"""
+    getoptimalroot(taxa, blobparts)
+
+Find the leaf index whose placement as root maximizes the total hybrid
+frequency summed across all blobs. For each blob, if the leaf belongs to the
+most-frequent hybrid block's cluster, the second-highest hybrid frequency is
+used instead. Returns 0 if `blobparts` is empty.
+"""
+function getoptimalroot(
+    taxa::AbstractVector{<:AbstractString},
+    blobparts::Vector{BlobFreq{N}},
+) where N
+    nB = length(blobparts)
+    # precompute per-blob: best hybrid block index, best and second-best frequency
+    bestblk   = Vector{Int}(undef, nB)
+    secblkvec = Vector{Int}(undef, nB)
+    bestfreq = Vector{Float64}(undef, nB)
+    secfreq  = Vector{Float64}(undef, nB)
+    for (j, b) in enumerate(blobparts)
+        hb = argmax(b.hybrid)
+        bestblk[j] = hb
+        bestfreq[j] = b.hybrid[hb]
+        if length(b.hybrid) > 1
+            sb = argmax(k -> b.hybrid[k], Iterators.filter(!=(hb), keys(b.hybrid)))
+            secblkvec[j] = sb
+            secfreq[j] = b.hybrid[sb]
+        else
+            secblkvec[j] = 0
+            secfreq[j] = 0.0
+        end
+    end
+    currmax = 0.0
+    currmaxroot = 0
+    for i in eachindex(taxa)
+        leafmax = 0.0
+        for j in 1:nB
+            if blobparts[j].partition[bestblk[j]][i]
+                leafmax += secfreq[j]
+            else
+                leafmax += bestfreq[j]
+            end
+        end
+        if leafmax > currmax
+            currmax = leafmax
+            currmaxroot = i
+        end
+    end
+    return currmaxroot, bestblk, secblkvec
 end
