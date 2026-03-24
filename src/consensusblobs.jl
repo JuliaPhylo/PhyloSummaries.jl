@@ -1342,8 +1342,12 @@ function expand_blobcycleat!(
         hblock = bestblk > 0 ? bestblk : argmax(bpart.hybrid)
     end
     hedge = net.edge[bedges[hblock]]
-    if fixdirection && !isparentof(bnode, hedge)
-        # rooted network: hybrid must be below the blob node
+    hbelowblob = isparentof(bnode, hedge)
+    if !hbelowblob && !fixdirection && hedge.containroot
+        rootatnode!(net, bnode) # re-root at the blob node purely to direct arrows away
+        hbelowblob = isparentof(bnode, hedge)
+    end
+    if !hbelowblob # chosen block can't be hybrid (e.g. !containroot): pick fallback
         priorh = hblock
         if length(bpart.hybrid) == 1
             hblock = (priorh == 1 ? 2 : 1)
@@ -1423,7 +1427,12 @@ end
 Find the leaf index whose placement as root maximizes the total hybrid
 frequency summed across all blobs. For each blob, if the leaf belongs to the
 most-frequent hybrid block's cluster, the second-highest hybrid frequency is
-used instead. Returns 0 if `blobparts` is empty.
+used instead.
+
+Output: `(rooti, bestblk, secblkvec)` where `rooti` is the optimal root leaf
+index (0 if `blobparts` is empty), `bestblk[j]` is the most-frequent hybrid
+block index for blob `j`, and `secblkvec[j]` is the second-most-frequent
+(0 if only one hybrid block).
 """
 function getoptimalroot(
     taxa::AbstractVector{<:AbstractString},
