@@ -674,14 +674,14 @@ weight (`sum(wts) = 8.0` from 8 bootstrap data sets) rather than the
 total number of sample networks (10).
 
 ```@repl
-DataFrame(res_bs[:blob_table])
+blb_bs = DataFrame(res_bs[:blob_table])
 ```
 
-Our reference network has only 1 reticulation, so only 1 blob, and we see
-that this blob has `support_partition` of 0.25.
+Our reference network has only 1 reticulation, so only 1 blob.
+We see that this blob has `support_partition` of 0.25.
 If we plotted our input networks, we would see that this blob is in
 networks 2 and 3: whose weights sum to 2 out of 8.
-Note that these support values do not appear in the
+These support values did not appear in the
 [consensus tree of blob](@ref) section, because this blob is not selected
 to be in the consensus tree of blob.
 
@@ -690,22 +690,22 @@ DataFrame(res_bs[:circorder_table])
 ```
 
 We see that the blob appears in our sample with 2 different circular
-order of its taxon blocks: the first in the table is the order in the
-reference network
-
+orders of its taxon blocks: the first in the table is the order in the
+reference network, and is the order that network 2 has.
 Let's visualize the reference network alongside input network 3, which has
-the alternative circular order. We use `rotate!` to untangle edges in network 3 and better show the circular order visually:
+the alternative circular order. We use `rotate!` to untangle edges
+in network 3, to better see the circular order visually:
 
 ```@example
 R"svg"(figname("circorder_comparison.svg"), width=7, height=3) # hide
-R"layout"([1 2])       # hide
+R"layout"([1 2]);      # hide
 R"par"(mar=[0,0,0.5,0]); # hide
 plot(refnet,  tipoffset=0.05);
 R"mtext"("reference network", side=3, line=-1);
 net3 = bootnet[3]
 rotate!(net3, -6)
 plot(net3, tipoffset=0.05);
-R"mtext"("network 3: alternative circular order", side=3, line=-1);
+R"mtext"("net 3: same blocks around blobs,\n≠ circular order", side=3, line=-2);
 R"dev.off()"; # hide
 nothing # hide
 ```
@@ -713,11 +713,12 @@ nothing # hide
 ![reference network and network 3 with alternative circular order](../assets/figures/circorder_comparison.svg)
 
 ```@repl
-DataFrame(res_bs[:hybrid_table])
+hyb_bs = DataFrame(res_bs[:hybrid_table])
 ```
 
-The taxon block b1 is of hybrid origin in fewer sample networks
-(support ≈ 0.17 = 1/6) than a1,a2,a3,a4 or b1,c1,c2 (both 0.5 = 3/6).
+The taxon block {t3} is of hybrid origin in the reference network,
+but only 25% of the sample networks (support 0.25 = 2/8), same as {t4}.
+Clade {t6} is of hybrid origin with higher support (0.375 = 3/8).
 
 ```@repl
 DataFrame(res_bs[:bipartition_table]) # refnet has 0 non-redundant bipartitions
@@ -732,16 +733,18 @@ as for the consensus outputs above:
 ```@example
 R"svg"(figname("blobsupport_7taxa_abc.svg"), width=7, height=3) # hide
 R"layout"([1 2]); # hide
-R"par"(mar=[0,0,0.5,0]); # hide
-blb_bs = DataFrame(res_bs[:blob_table])
-hyb_bs = DataFrame(res_bs[:hybrid_table])
-plot(refnet, shownodenumber=true, showedgenumber=true, tipoffset=0.05);
-R"mtext"("node & edge numbers", side=3, line=-1);
+R"par"(mar=[0,0,1.2,0]); # hide
 plot(refnet, nodelabeladj=-0.1, edgelabeladj=[.5,-0.2],
-    nodelabelcolor="orangered", edgelabelcolor="deepskyblue",
-    nodelabel=select(blb_bs, [:node, :support_partition]),
-    edgelabel=select(hyb_bs, [:edge, :support_hybrid]));
-R"mtext"("blob (red) & hybrid (blue) support", side=3, line=-1);
+  nodelabelcolor="orangered", edgelabelcolor="deepskyblue",
+  nodelabel=select(blb_bs, [:node, :support_partition]),
+  edgelabel=select(hyb_bs, [:edge, :support_hybrid]));
+R"mtext"("red: blob partition support\nblue: hybrid support, on edges",
+  side=3, line=-.8);
+plot(refnet, nodelabeladj=[-0.1,-0.2], nodelabelcolor="deepskyblue",
+  nodelabel=select(hyb_bs, [:node_from, :support_hybrid]));
+R"mtext"("blue: hybrid support, at nodes\n(follow the edge that exits the blob)",
+  side=3, line=-.8);
+R"mtext"("support as proportions (not %!)", outer=true, side=1, line=-1);
 R"dev.off()"; # hide
 nothing # hide
 ```
