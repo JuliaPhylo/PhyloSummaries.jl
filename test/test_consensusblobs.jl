@@ -357,38 +357,20 @@ end
   @test bps4[1].split == (true, true, false, false, false)  
 end
 
-@testset "optimal root logic overriding argmax" begin
-  # Math proof for getoptimalroot diverging from argmax(bpart.hybrid)
-  # We construct 10 networks on 6 taxa:
-  taxa = ["1", "2", "3", "4", "5", "6"]
+@testset "optimal root logic test" begin
+  nwk = String[]
+  for _ in 1:9 push!(nwk, "((((a1,a2,a3,a4))#H1, c1), (c2, (b1, #H1)));") end
+  for _ in 1:6 push!(nwk, "(((b1)#H1, c1), (c2, (((a1,a2,a3,a4)), #H1)));") end
+
+  for _ in 1:8 push!(nwk, "(((((b1,c1,c2))#H2, a1), a2), (a3, (a4, #H2)));") end
+  for _ in 1:2 push!(nwk, "((((a2)#H2, a1), ((b1,c1,c2))), (a3, (a4, #H2)));") end
   
-  # Blob 1 blocks: {1,2}, {5}, R={3,4,6}. Argmax is R.
-  n_B1_R  = "((((3,4),6)#H1, (5,#H1)), (1,2));"
-  n_B1_12 = "(((1,2)#H1, (5,#H1)), ((3,4),6));"
-  
-  # Blob 2 blocks: {3,4}, {6}, L={1,2,5}. Argmax is L.
-  n_B2_L  = "((((1,2),5)#H2, (6,#H2)), (3,4));"
-  n_B2_34 = "(((3,4)#H2, (6,#H2)), ((1,2),5));"
-  
-  nets = PN.HybridNetwork[]
-  # Make Blob 1 twice as frequent while maintaining the internal ratio:
-  for _ in 1:6 push!(nets, readnewick(n_B1_R)) end
-  for _ in 1:4 push!(nets, readnewick(n_B1_12)) end
-  
-  for _ in 1:3 push!(nets, readnewick(n_B2_L)) end
-  for _ in 1:2 push!(nets, readnewick(n_B2_34)) end
-  
-  # This array of 10 perfectly compatible networks yields 2 blobs natively.
-  # The union of their max-frequency hybrid blocks explicitly covers all 6 leaves,
-  # mathematically forcing getoptimalroot to pick a topology that diverges 
-  # from a purely greedy argmax fallback.
-  res = @test_logs (:warn, r"non-binary") match_mode=:any consensus_level1network(nets, suppressinfo=true)
-  
-  h_clusters = res[:hybrid_table].cluster
-  # The pure greedy argmax strategy would select "3,4,6" for Blob 1 and "1,2,5" for Blob 2.
-  # But due to the cycle dependencies, getoptimalroot chooses either ("1,2" and "1,2,5") OR ("3,4,6" and "3,4").
-  # Thus, the combined list of chosen hybrid clusters MUST NOT be the greedy pair:
-  @test "3,4,6" ∉ h_clusters || "1,2,5" ∉ h_clusters
+  net = readnewick.(nwk)
+  res = consensus_level1network(net, minimumblobdegree=3, proportion=0.01, suppressinfo=true)
+
+  @test "b1,c1,c2" in res[:blob_table].hybrid_cluster
+  @test "b1" in res[:blob_table].hybrid_cluster
+  @test "a1,a2,a3,a4" ∉ res[:blob_table].hybrid_cluster
 end
 
 end
