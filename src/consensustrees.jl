@@ -113,9 +113,6 @@ assumptions and **warnings**:
   If unsure, run `removedegree2nodes!.(trees, true))` to keep their root even
   of degree 2 or `removedegree2nodes!.(trees, false))` unroot them also.
 
-fixit: make a future version summarize edge lengths in
-input trees and store their average in the consensus tree.
-
 # example
 
 ```jldoctest
