@@ -377,6 +377,10 @@ end
     support_partition=[.6,.4], support_circorder=[.36,.32], support_hybrid=[.24,.32],
     partition_num=["6|1,2,3,4|5|7","2|1|5,6,7|4|3"], hybrid_cluster_num=["5","5,6,7"],
     partition=["c1|a1,a2,a3,a4|b1|c2","a2|a1|b1,c1,c2|a4|a3"], hybrid_cluster=["b1","b1,c1,c2"])
+  # outgroup conflicts with only hybrid in 4-blob & best hybrid in 5-blob
+  res = consensus_level1network(net[2:4], netweights=nwgt[2:4], outgroup="b1", suppressinfo=true);
+  @test writenewick(res[:net], internallabel=false) ==
+    "(b1,((c1)#H15,(((a1,(a2)#H11),(a4,(a3,#H11))),(c2,#H15))));"
   # ties for total hybrid score over all blobs: test use of subscore
   nwgt = [8,2, 8,2]
   res = consensus_level1network(net, netweights=nwgt, suppressinfo=true)

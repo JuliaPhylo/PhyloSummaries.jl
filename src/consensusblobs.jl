@@ -1340,7 +1340,7 @@ function expand_blobcycleat!(
             error("the required collection of hybrid clades are incompatible.")
         priorh = hblock
         if length(bpart.hybrid) == 1 # then pick block 1 arbitrarily:
-            hblock = (priorh == 1 ? 2 : 1) # alphabetical preference
+            hblock = (priorh == 1 ? 2 : 1) # 1st (or 2nd) in circular order
         else # pick second most frequent hybrid block
             hblock = argmax(k -> bpart.hybrid[k],  # requires Julia v1.7
                 Iterators.filter(!=(priorh), keys(bpart.hybrid)))
@@ -1439,8 +1439,7 @@ A hybrid block is compatible with `x` being an outgroup if it does *not*
 contain `x`, such that, for each blob partition, we only need to consider
 the 2 hybrid blocks of highest and second-highest frequencies.
 (In case of ties, including among block of 0 hybrid frequencies,
-the 'first' tied block is chosen -- lexicographically then, as taxa are
-sorted alphabetically.)
+the 'first' tied block is chosen -- first as listed in the circular order.)
 """
 function optimalhybridblocks(blobparts::Vector{BlobFreq{N}}) where N
     nB = length(blobparts)
