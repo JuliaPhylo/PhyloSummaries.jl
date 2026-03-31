@@ -656,7 +656,7 @@ multiple networks with equally good scores. We will do here as if:
 netfile = joinpath(dirname(pathof(PhyloSummaries)), "..",
     "test","bootstrapnets_h1.nwk");
 bootnet = readmultinewick(netfile);
-wts = [1, 1, 1, 1, 1/3,1/3,1/3, 1, 1, 1]; # nets 5,6,7 from same boostrap data
+wts = [1,1,1,1, 1/3,1/3,1/3, 1,1,1]; # nets 5,6,7 from same bootstrap data
 ```
 
 Next we read our reference network, and map support for its blob features.

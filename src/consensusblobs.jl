@@ -105,7 +105,7 @@ With option `supportaslength=true`, this is also stored in the edge's
 By default, all input networks have equal weight: the support for a feature
 (blob or bipartition) is the proportion of networks with this feature.
 Optionally, a vector of `netweights` can be provided, to give networks
-unequal weights. There should be as many weights as there are input vectors.
+unequal weights. There should be as many weights as there are input networks.
 
 An "interesting" blob in an input network N is a non-trivial blob
 (with at least one hybrid node) of degree m ≥ 4 by default.
@@ -148,8 +148,8 @@ function consensus_treeofblobs(
     if !isnothing(netweights)
       length(netweights) == nnets ||
           error("there should be $nnets network weights, got $(length(netweights))")
-      all(netweights .>= 0) || error("network weights should be > 0")
       nnets = sum(netweights)
+      nnets>0 && all(netweights .>= 0) || error("network weights should be ≥ 0")
     end
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree,
         false, netweights)
@@ -198,7 +198,7 @@ and the strict consensus using `proportion=1`.
 By default, all input networks have equal weight: the support for a feature
 (blob, circular order, hybrid clade, bipartition) is the proportion of networks
 with this feature. To give networks unequal weights, a `netweights` vector
-can be provided. There should be as many weights as there are input vectors.
+can be provided. There should be as many weights as there are input networks.
 
 See [`consensus_level1network_save`](@ref) to save the output.
 """
@@ -221,8 +221,8 @@ function consensus_level1network(
     if !isnothing(netweights)
       length(netweights) == nnets ||
           error("there should be $nnets network weights, got $(length(netweights))")
-      all(netweights .>= 0) || error("network weights should be > 0")
       nnets = sum(netweights)
+      nnets>0 && all(netweights .>= 0) || error("network weights should be ≥ 0")
     end
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree,
         true, netweights)

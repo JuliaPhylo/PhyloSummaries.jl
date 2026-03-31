@@ -182,7 +182,7 @@ tob,_ = consensus_treeofblobs(net, suppressinfo=true)
 @test writenewick(tob) == "(t1,t2,t3,t4,t5,t6)_7_blob1;"
 @test getroot(tob).fvalue == 6/10
 @test_throws "10 network weights, got 2" consensus_treeofblobs(net, netweights=[0,1])
-@test_throws "weights should be > 0" consensus_treeofblobs(net[[1,2]], netweights=[0,-1])
+@test_throws "weights should be ≥ 0" consensus_treeofblobs(net[[1,2]], netweights=[0,-1])
 tob,_ = consensus_treeofblobs(net, suppressinfo=true,
   netweights=[0,1,1,1,0,0,0,0,1,0]) # ≡ net[[2,3,4,9]] without weights
 @test writenewick(tob) == "(t5,t6,(t4,t3,t2,t1)_8_blob1)_7;" # blob from nets 4,9

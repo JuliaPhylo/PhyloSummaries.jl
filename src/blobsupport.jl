@@ -94,8 +94,8 @@ function blobpartitions_support(
     if !isnothing(netweights)
       length(netweights) == nnets ||
           error("there should be $nnets network weights, got $(length(netweights))")
-      all(netweights .>= 0) || error("network weights should be > 0")
       nnets = sum(netweights)
+      nnets>0 && all(netweights .>= 0) || error("network weights should be ≥ 0")
     end
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree, false, netweights)
     hybdict = count_hybridclusters(blobvec)
