@@ -67,14 +67,15 @@ jobs:
           Pkg.develop(PackageSpec(path=pwd()))
           Pkg.instantiate()
       - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-docdeploy@v1
+      - name: build and deploy doc
+        uses: julia-actions/julia-docdeploy@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
-      - name: Run doctests
+      - name: run doctests
         shell: julia --project=docs --color=yes {0}
         run: |
           using Documenter: DocMeta, doctest
           using PhyloSummaries
-          DocMeta.setdocmeta!(PhyloSummaries, :DocTestSetup, :(using PhyloSummaries; using PhyloNetworks); recursive=true)
+          DocMeta.setdocmeta!(PhyloSummaries, :DocTestSetup, :(using PhyloSummaries; using PhyloNetworks; ENV["COLUMNS"] = 200); recursive=true)
           doctest(PhyloSummaries)
