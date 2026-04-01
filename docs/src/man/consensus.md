@@ -705,7 +705,8 @@ R"mtext"("reference network", side=3, line=-1);
 net3 = bootnet[3]
 rotate!(net3, -6)
 plot(net3, tipoffset=0.05);
-R"mtext"("net 3: same blocks around blobs,\n≠ circular order", side=3, line=-2);
+R"mtext"("net 3: same blocks around the blob,\n≠ circular order",
+         side=3, line=-2, adj=0.1);
 R"dev.off()"; # hide
 nothing # hide
 ```
