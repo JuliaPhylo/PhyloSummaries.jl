@@ -1,3 +1,4 @@
+# will be run by julia-actions/julia-docdeploy
 using PhyloSummaries
 using Documenter
 
@@ -10,7 +11,7 @@ links = InterLinks(
 DocMeta.setdocmeta!(
     PhyloSummaries,
     :DocTestSetup,
-    :(using PhyloNetworks; using PhyloSummaries);
+    :(using PhyloNetworks; using PhyloSummaries; ENV["COLUMNS"] = 200);
     recursive=true)
 
 makedocs(;

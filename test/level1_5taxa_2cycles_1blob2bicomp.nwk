@@ -1,0 +1,5 @@
+(A,((((B,(C)#H1:::0.7),(#H1:::0.3,D)))#H0,#H0),E); # some rooted, some unrooted
+(A,(((B,(C)#H1:::0.65),(#H1:::0.35,D))#H0,#H0),E); # 2 bicomp = 1 blob
+(A,((C,(B)#H1),(#H1,E)),D);
+(D,((C,(B)#H1),(#H1,(A,E))));
+(C,((B)#H1,((#H1,(A,E)),D))); # same as previous but rooted at C

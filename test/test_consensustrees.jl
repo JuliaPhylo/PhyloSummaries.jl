@@ -13,17 +13,17 @@ counts = PS.SplitFreq{4}[]
 PS.count_bipartitions!(counts, tree1, taxa, false)
 PS.count_bipartitions!(counts, tree3, taxa, false)
 @test [PS.splitstring(s) * " -> $(PS.freq(s))" for s in counts] ==
-    ["1,2 -> 1", "1,3 -> 1"]
+    ["1,2 -> 1.0", "1,3 -> 1.0"]
 # rooted
 empty!(counts)
 PS.count_bipartitions!(counts, tree1, taxa, true)
 PS.count_bipartitions!(counts, tree3, taxa, true)
-@test [PS.splitstring(s) * " -> $(PS.freq(s))" for s in counts] ==
+@test [PS.splitstring(s) * " -> $(Int(PS.freq(s)))" for s in counts] ==
     ["1,2 -> 1", "3,4 -> 1", "1,3 -> 1", "2,4 -> 1"]
 end
 
 @testset "SplitFreq freq! setter" begin
-  sp = PS.SplitFreq{4}((true,true,false,false), Ref(1))
+  sp = PS.SplitFreq{4}((true,true,false,false), Ref(1.0))
   @test PS.freq(sp) == 1
   PS.freq!(sp, 10)
   @test PS.freq(sp) == 10

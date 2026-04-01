@@ -13,16 +13,15 @@
   @test_throws "≤ number of taxa" resetnodenumbers_fromnames!(net)
 
   # freq! setter for BlobFreq
-  net1 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")
-  taxa = ["A","B","C","D","E"]
-  blobs, _ = PS.count_blobpartitions([net1], taxa, 4)
-  @test PS.freq(blobs[1]) == 1
-  PS.freq!(blobs[1], 42)
-  @test PS.freq(blobs[1]) == 42
+  blob = PS.BlobFreq{4,3}(
+    [(true,true,false,false),(false,false,true,false),(false,false,false,true)],
+    Ref(3.0), Dict((1,3,2) => 1.0), Dict(1 => 1.0))
+  PS.freq!(blob, 42)
+  @test PS.freq(blob) == 42
 
   # isredundantsplit(SplitFreq, BlobFreq) wrapper
-  sp = PS.SplitFreq{5}((true,true,false,false,false), Ref(1))
-  @test PS.isredundantsplit(sp, blobs[1])
+  sp = PS.SplitFreq{4}((true,true,true,false), Ref(1.))
+  @test PS.isredundantsplit(sp, blob)
 
   # check_nonnumericnames and startree error on numeric taxon names
   @test PS.check_nonnumericnames(["_2", "b", "c"]) == 1
@@ -151,7 +150,7 @@ tob,_ = consensus_treeofblobs(net, suppressinfo=true)
 @test [e.y for e in tob.edge] ≈ [-1,-1,-1,-1,-1, 1]
 end
 
-@testset "consensus ToB" begin
+@testset "consensus ToB & level-1" begin
 # nets 1,2,4,5: same blob AE|B|C|D, same hybrid C, same circular order
 # net 3; blob AD|C|B(hybrid)|E
 net = readnewick.(nwk)
@@ -182,7 +181,10 @@ end
 tob,_ = consensus_treeofblobs(net, suppressinfo=true)
 @test writenewick(tob) == "(t1,t2,t3,t4,t5,t6)_7_blob1;"
 @test getroot(tob).fvalue == 6/10
-tob,_ = consensus_treeofblobs(net[[2,3,4,9]], suppressinfo=true)
+@test_throws "10 network weights, got 2" consensus_treeofblobs(net, netweights=[0,1])
+@test_throws "weights should be ≥ 0" consensus_treeofblobs(net[[1,2]], netweights=[0,-1])
+tob,_ = consensus_treeofblobs(net, suppressinfo=true,
+  netweights=[0,1,1,1,0,0,0,0,1,0]) # ≡ net[[2,3,4,9]] without weights
 @test writenewick(tob) == "(t5,t6,(t4,t3,t2,t1)_8_blob1)_7;" # blob from nets 4,9
 @test tob.node[8].fvalue == 0.5
 tob,_ = consensus_treeofblobs(net[[4,9,3,2]], suppressinfo=true)
@@ -251,7 +253,9 @@ con = res[:net]
   support_nonredundant=[.6,.2], cluster_num = ["1,2,3,4,5", "1,2,3,4"],
   cluster=["a1,a2,a3,a4,b1", "a1,a2,a3,a4"])
 
-res = consensus_level1network(net[1:4], minimumblobdegree=3, suppressinfo=true) # hedge of weight 0
+res = consensus_level1network(net[1:4], minimumblobdegree=3, suppressinfo=true)
+res = consensus_level1network(net, minimumblobdegree=3, suppressinfo=true,
+  netweights=[1,1,1,1,0]) # ≡ net[1:4] without weights. hedge of weight 0
 con = res[:net]
 @test writenewick(con) == "(a3,(a4,#H12)_11,(a2,(a1,((((c1,c2)_8,(b1)#H15)_16,#H15)_9_blob1)#H12)_13)_14)_10_blob2;"
 @test [n.fvalue for n in con.node if n.hybrid] == [.5, 0]
@@ -267,17 +271,18 @@ con = res[:net]
 @test res[:bipartition_table] == (node1=[16], node2=[8], edge=[8],
   support_nonredundant=[0.5], cluster_num=["1,2,3,4,5"], cluster=["a1,a2,a3,a4,b1"])
 
-res = consensus_level1network(net[[1,3,4]], minimumblobdegree=3, suppressinfo=true)
+res = consensus_level1network(net[[1,3,4]], minimumblobdegree=3,
+    suppressinfo=true, netweights=[0.8,0.9,1.3])
 con = res[:net]
 @test writenewick(con) == "(c1,c2,((b1,(((a2,a1)_11,(a4,a3)_12)_10)#H14)_13,#H14)_9_blob1)_8;"
-@test [n.fvalue for n in con.node if n.intn1 ≠ -1] ≈ [1,1,2]./3
+@test [n.fvalue for n in con.node if n.intn1 ≠ -1] ≈ [1.3,1.3,2.2]./3
 @test res[:blob_table] == (blob=[1], degree=[3], node=[9], hybrid=[14],
-  support_partition=[1/3], support_circorder=[1/3], support_hybrid=[2/3],
+  support_partition=[1.3/3], support_circorder=[1.3/3], support_hybrid=[2.2/3],
   partition_num = ["5|6,7|1,2,3,4"], hybrid_cluster_num = ["1,2,3,4"],
   partition = ["b1|c1,c2|a1,a2,a3,a4"], hybrid_cluster = ["a1,a2,a3,a4"],
 )
 @test res[:bipartition_table] == (node1=[10,10,8], node2=[12,11,9], edge=[11,10,8],
-  support_nonredundant = [2/3,2/3,1/3], cluster_num = ["3,4","1,2","1,2,3,4,5"],
+  support_nonredundant = [2.2/3,2.2/3,.8/3], cluster_num = ["3,4","1,2","1,2,3,4,5"],
   cluster = ["a3,a4", "a1,a2", "a1,a2,a3,a4,b1"])
 
 # frequent hybrid compatible with frequent blob, but never found together
@@ -292,7 +297,7 @@ con = res[:tob]
 @test res[:hybrid_table] == (blob=[1,1], node_from=[9,9], node_to=[1,10], edge=[1,8],
   support_hybrid=[.4,.6], cluster_num=["1","5,6,7"], cluster=["a1","b1,c1,c2"])
 
-  # level-1 nets, and missing hybrid last alphabetically
+# level-1 nets, and missing hybrid last alphabetically
 net = readnewick.(
 ["(a3,(a2,(((b1,(c2,c1)),#H1),d1)),(a4)#H1);",
  "(((b1,(c1,c2)))#H1,d1,(a2,(a3,(a4,#H1))));",
@@ -352,5 +357,40 @@ end
   @test bps4[1].split == (true, true, false, false, false)  
 end
 
+@testset "optimal hybrid choice" begin
+  # example for which the optimal solution ≠ greedy solution
+  nwk = ["((((a1,a2,a3,a4))#H1, c1), (c2, (b1, #H1)));", # 4-blob
+  "(((b1)#H1, c1), (c2, (((a1,a2,a3,a4)), #H1)));", # same 4-blob but ≠ hybrid
+  "(((((b1,c1,c2))#H2, a1), a2), (a3, (a4, #H2)));", # 5-blob
+  "((((a2)#H2, a1), ((b1,c1,c2))), (a3, (a4, #H2)));"] # same 5-blob, ≠ hyb
+  net = readnewick.(nwk)
+  nwgt = [9,6, 8,2] # nwgt ./25 = hybrid weights [.36,.24,.32,.08]
+  res = consensus_level1network(net, netweights=nwgt,
+    minimumblobdegree=3, proportion=0.01, suppressinfo=true)
+  @test writenewick(res[:net]) ==
+    "(a2,(a1,#H14)_13,(a3,(a4,(((c1,(c2,(b1)#H11)_12)_8_blob2,#H11)_10)#H14)_15)_16)_9_blob1;"
+  @test res[:hybrid_table] == (blob=[2,2,1,1], node_from=[10,11,14,9],
+    node_to=[14,5,10,2], edge=[8,5,8,2], support_hybrid=[.36,.24,.32,.08],
+    cluster_num=["1,2,3,4","5","5,6,7","2"],
+    cluster=["a1,a2,a3,a4","b1","b1,c1,c2","a2"])
+  @test res[:blob_table] == (blob=[2,1], degree=[4,5], node=[8,9], hybrid=[11,14],
+    support_partition=[.6,.4], support_circorder=[.36,.32], support_hybrid=[.24,.32],
+    partition_num=["6|1,2,3,4|5|7","2|1|5,6,7|4|3"], hybrid_cluster_num=["5","5,6,7"],
+    partition=["c1|a1,a2,a3,a4|b1|c2","a2|a1|b1,c1,c2|a4|a3"], hybrid_cluster=["b1","b1,c1,c2"])
+  # outgroup conflicts with only hybrid in 4-blob & best hybrid in 5-blob
+  res = consensus_level1network(net[2:4], netweights=nwgt[2:4], outgroup="b1", suppressinfo=true);
+  @test writenewick(res[:net], internallabel=false) ==
+    "(b1,((c1)#H15,(((a1,(a2)#H11),(a4,(a3,#H11))),(c2,#H15))));"
+  # ties for total hybrid score over all blobs: test use of subscore
+  nwgt = [8,2, 8,2]
+  res = consensus_level1network(net, netweights=nwgt, suppressinfo=true)
+  @test writenewick(res[:net]) ==
+    "(a2,(a1,#H11)_10,(a3,(a4,(((c1,(c2,(b1)#H15)_16)_14,#H15)_8_blob1)#H11)_12)_13)_9_blob2;"
+  @test res[:hybrid_table][[:support_hybrid,:cluster]] == (support_hybrid=[.4,.1,.4,.1],
+    cluster=["b1,c1,c2","a2","a1,a2,a3,a4","b1"])
+  res = consensus_level1network(net[[3,4,1,2]], netweights=nwgt, suppressinfo=true)
+  @test writenewick(res[:net]) == # blob 1&2 order switched
+    "(a2,(a1,#H14)_13,(a3,(a4,(((c1,(c2,(b1)#H11)_12)_8_blob2,#H11)_10)#H14)_15)_16)_9_blob1;"
 end
 
+end
