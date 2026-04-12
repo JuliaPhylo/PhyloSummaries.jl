@@ -183,7 +183,7 @@ Consensus network summarizing a list of level-1 networks, by these steps:
    supported blobs.
 3. To resolve a blob, its taxon blocks are placed around a cycle in the
    circular order most-frequently found in input networks.
-3. To orient the edges in the cycle, the node chosen to be hybrid is the one
+4. To orient the edges in the cycle, the node chosen to be hybrid is the one
    whose descendant clade has the highest (or second-highest) support as being
    a hybrid clade, among the placements that are compatible with each other.
    * If an `outgroup` is provided, the hybrid node is chosen among those that

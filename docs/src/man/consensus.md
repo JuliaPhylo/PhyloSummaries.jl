@@ -153,6 +153,8 @@ This root node represents a blob that is present in many input networks.
 It was assigned the name `_7_blob1`, so later this node will be referred
 as "node 7" and stands for "blob 1".
 
+### interpretation of output tables
+
 The other parts of the results are tables that
 let us inspect the support for the blob(s) and other features.
 Here, we use the [`DataFrames`](https://dataframes.juliadata.org/stable/)
@@ -292,6 +294,45 @@ nothing # hide
 
 ![consensus tree of blobs with support values](../assets/figures/consensus_tob_support.svg)
 
+### options
+
+[`consensus_treeofblobs`](@ref) has an option `proportion`: blobs with support
+below this proportion are not considered. This is set to 0 by default for a
+greedy consensus. The majority-rule consensus is obtained with `proportion=0.5`
+and strict consensus with `proportion=1`.
+
+Another option is `minimumblobdegree=4` by default, which corresponds
+to ignoring blobs of degree 2 (like parallel edges)
+or 3 (like a cycle of 3 nodes and 3 edges), which may unvoluntarily remain
+after pruning taxa.
+This `minimumblobdegree` can be set to 3 to consider blobs of degree 3[^no2blob].
+
+[^no2blob]: Blobs of degree 2 are never considered, because they define
+    bipartitions just like edges in a tree, and there can be several with the
+    same bipartition in a given network.
+
+Below we give an example using the `netweights`, if we wanted to give
+different weights to different networks. In this example, the input networks
+are saved in a csv file with 2 columns: one for the newick format,
+the other for the weight. Here networks 5-7 are each given weight 1/3,
+as if all 3 were tied networks estimated from the same bootstrap replicate.
+
+We also use the option `suppressinfo=true` to suppress the information message
+about being cautious using internal node & edge numbers.
+
+```@repl
+netandweights_csv = joinpath(dirname(pathof(PhyloSummaries)), "..",
+    "test","bootstrapnets_h1.csv");
+using CSV, DataFrames
+df = CSV.read(netandweights_csv, DataFrame, types=String) # 1/3 read as String
+netsample = readnewick.(df.network);
+wts = parse.(Rational{Int}, df.weight)
+res = consensus_treeofblobs(netsample, netweights=wts, suppressinfo=true);
+DataFrame(res[:blob_table])
+```
+We get the same blob, but with different support (due to weighing the
+input networks differently).
+
 ## consensus level-1 network
 
 The function [`consensus_level1network`](@ref) first calculates
@@ -328,6 +369,11 @@ nothing # hide
 ```
 
 ![consensus level-1 network with edge/node numbers and names](../assets/figures/consensus_l1net_names.svg)
+
+Note that which hybrid edge is assigned to be major or minor
+is arbitrary, yet if affects the network visualization above.
+
+### interpration of support values
 
 Like for the consensus tree of blobs, the rest of the result gives
 us support values for various features of our consensus.
