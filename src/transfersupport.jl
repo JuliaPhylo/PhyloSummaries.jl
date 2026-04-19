@@ -99,14 +99,13 @@ function blobtransfer_support(
     taxa = sort(tiplabels(referencenet))
     ntaxa = length(taxa)
 
-    # extract reference blob partitions
     refblobs = BlobFreq{ntaxa}[]
     count_blobpartitions!(refblobs, SplitFreq{ntaxa}[], referencenet,
         taxa, minimumblobdegree, false, 0.0)
     nref = length(refblobs)
     nnet = length(networks)
 
-    # build global deduplicated blobvec across all sample networks
+
     blobvec, _ = count_blobpartitions(networks, taxa, minimumblobdegree)
     nblob = length(blobvec)
 
