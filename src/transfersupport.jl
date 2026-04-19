@@ -85,9 +85,6 @@ end
 Compute transfer support for each blob partition in `referencenet` based on
 its minimum transfer distance to blob partitions found in `networks`.
 
-For each reference blob β, transfer support is the average across sample
-networks of `1 - TI(β, T_i) / Δ(β)`, where `TI` is the minimum transfer
-distance to any blob in sample network `T_i`.
 """
 function blobtransfer_support(
     networks::AbstractVector{PN.HybridNetwork},
