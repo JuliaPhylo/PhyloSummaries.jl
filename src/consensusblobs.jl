@@ -1164,6 +1164,7 @@ end
 function blobdata_onL1( # for consensus level-1 network
     blobparts::Vector{BlobFreq{N}},
     blobnode::Vector{PN.Node},
+    o_bk::Vector,
     o_bs::Vector,
     h_bs::Vector,
     h_num::Vector,
@@ -1182,9 +1183,9 @@ function blobdata_onL1( # for consensus level-1 network
         support_partition = [freq(b)/nnets for (i,b) in bitr],
         support_circorder = [o_bs[i] for (i,b) in bitr],
         support_hybrid = [h_bs[i] for (i,b) in bitr],
-        partition_num = [partitionstring(b) for (i,b) in bitr],
+        partition_num = [partitionstring(b.partition, o_bk[i]) for (i,b) in bitr],
         hybrid_cluster_num = [splitstring(b.partition[h_blk[i]]) for (i,b) in bitr],
-        partition = [partitionstring_names(b.partition, taxa) for (i,b) in bitr],
+        partition = [partitionstring_names(b.partition, taxa, o_bk[i]) for (i,b) in bitr],
         hybrid_cluster = [splitstring_names(b.partition[h_blk[i]], taxa) for (i,b) in bitr],
     )
     return blob_data
@@ -1301,6 +1302,7 @@ function expand_blobcycles!(
     nnum = Ref(maximum(n.number for n in net.node)+1)
     enum = Ref(maximum(e.number for e in net.edge)+1)
     nB = length(blobnode)
+    o_bk = Vector{NTuple{P,Int} where P}(undef, nB) # order of blocks
     o_bs = Vector{Float64}(undef, nB) # order: bootstrap support
     h_bs = Vector{Float64}(undef, nB) # hybrid: bootstrap support
     h_num = Vector{Int}(undef, nB) # hybrid: node number
@@ -1309,11 +1311,11 @@ function expand_blobcycles!(
     bitr = ((i,blobparts[i]) for i in nB:-1:1) # from most to least frequent blob
     hybblock = (fixdirection ? nothing : optimalhybridblocks(blobparts))
     for (i,b) in bitr
-        o_bs[i], h_bs[i], h_num[i], h_blk[i] = expand_blobcycleat!(net,
+        o_bk[i], o_bs[i], h_bs[i], h_num[i], h_blk[i] = expand_blobcycleat!(net,
             nnum, enum, i, blobnode[i], blobedges[i], b, nnets, fixdirection,
             (fixdirection ? 0 : hybblock[i]))
     end
-    return o_bs, h_bs, h_num, h_blk
+    return o_bk, o_bs, h_bs, h_num, h_blk
 end
 function expand_blobcycleat!(
     net::PN.HybridNetwork,
@@ -1408,7 +1410,7 @@ function expand_blobcycleat!(
     if containroot # to update edges' containroot. ischild1 already correct
         PN.traverseDirectEdges!(getparent(hedge), hedge, false)
     end
-    return circweight, hweight, getparent(hedge).number, hblock
+    return blockorder, circweight, hweight, getparent(hedge).number, hblock
 end
 
 
