@@ -81,7 +81,7 @@ end
 
 """
     blobtransfer_support(networks, referencenet; minimumblobdegree=3)
-
+ 
 Compute transfer support for each blob partition in `referencenet` based on
 its minimum transfer distance to blob partitions found in `networks`.
 
@@ -102,27 +102,17 @@ function blobtransfer_support(
     nref = length(refblobs)
     nnet = length(networks)
 
-
-    blobvec, _ = count_blobpartitions(networks, taxa, minimumblobdegree)
-    nblob = length(blobvec)
-
+    # build global deduplicated blobvec with per-network blob indices
+    net_blobidx = Vector{Int}[]
+    blobvec, _ = count_blobpartitions(networks, taxa,
+        minimumblobdegree; net_blobidx)
 
     # TODO: benchmark Dict vs Matrix cache approach
     C = Matrix{Int}(undef, ntaxa, ntaxa)
     dist_cache = Dict{Tuple{Int,Int},Int}()
 
-    # for each network, find its blobvec indices and compute transfer index
-    # (TODO: modify count_blobpartitions! to track indices directly)
     ti_sum = zeros(Float64, nref)
-    for net in networks
-        net_blobs = BlobFreq{ntaxa}[]
-        count_blobpartitions!(net_blobs, SplitFreq{ntaxa}[], net,
-            taxa, minimumblobdegree, false, 1.0)
-        idxs = Int[]
-        for nb in net_blobs
-            matchidx, _ = findmatchingblob(blobvec, nb.partition)
-            !isnothing(matchidx) && push!(idxs, matchidx)
-        end
+    for idxs in net_blobidx
         for r in 1:nref
             ti_sum[r] += transferindex!(C, dist_cache, r,
                 refblobs[r].partition, idxs, blobvec)

@@ -330,7 +330,8 @@ function count_blobpartitions(
     taxa::AbstractVector{<:String},
     minBdegree::Int,
     require_level1::Bool=false,
-    netweights::Union{Nothing,AbstractVector}=nothing,
+    netweights::Union{Nothing,AbstractVector}=nothing;
+    net_blobidx::Union{Nothing,Vector{Vector{Int}}}=nothing,
 )
     ntaxa = length(taxa)
     all(n.numtaxa == ntaxa for n in networks) ||
@@ -341,9 +342,14 @@ function count_blobpartitions(
     nweight = (isnothing(netweights) ? i -> 1.0 : i -> Float64(netweights[i]))
     for (i,net) in enumerate(networks)
         nw = nweight(i)
-        nw > 0 || continue # do not add blobs/biparts of weight 0
+        if nw <= 0
+            !isnothing(net_blobidx) && push!(net_blobidx, Int[])
+            continue
+        end
+        idxs = !isnothing(net_blobidx) ? Int[] : nothing
         count_blobpartitions!(blobvec, bpvec, net, taxa, minBdegree,
-            require_level1, nw)
+            require_level1, nw; blobindices=idxs)
+        !isnothing(net_blobidx) && push!(net_blobidx, idxs)
     end
     return blobvec, bpvec
 end
@@ -388,7 +394,8 @@ function count_blobpartitions!(
     taxa::AbstractVector{<:String},
     minBdegree::Int,
     require_level1::Bool,
-    netweight::Float64,
+    netweight::Float64;
+    blobindices::Union{Nothing,Vector{Int}}=nothing,
 ) where N
     taxaindex = Dict(t => i for (i, t) in pairs(taxa))
     PN.process_biconnectedcomponents!(net)
@@ -422,7 +429,7 @@ function count_blobpartitions!(
         PN.istrivial(bc) && continue
         blobdegree[bidx] = count_blobpartitions!(blobvec, visitedbcc,
             net, taxaindex, minBdegree, bc, bidx, hwmatrix, edgemap,
-            require_level1, netweight)
+            require_level1, netweight, blobindices)
     end
     # gather non-redundant cut-edges: from trivial bicomponents
     count_nonredundantbipartitions!(bpvec, blobdegree,
@@ -453,6 +460,7 @@ function count_blobpartitions!(
     edgemap::Dict{<:Integer,<:Integer},
     require_level1::Bool,
     netweight::Float64,
+    blobindices::Union{Nothing,Vector{Int}}=nothing,
 ) where N
     blobdegree = (bidx==1 ? Ref(0) : Ref(1)) # parent edge: 0 if root, 1 ow
     splits, hybrids, islevel1 = blobtaxonsetpartition!(visitedbcc, blobdegree,
@@ -478,6 +486,7 @@ function count_blobpartitions!(
         hybmap = Dict(hybrids[1] => netweight)
         newblob = BlobFreq{N,nparts}(splits, Ref(netweight), cofreq, hybmap)
         push!(blobvec, newblob)
+        !isnothing(blobindices) && push!(blobindices, length(blobvec))
     else # existing blob: increment frequencies of canonical partition slots
         bf = blobvec[matchidx]
         for k in hybrids
@@ -490,6 +499,7 @@ function count_blobpartitions!(
             add_canonical_circularorder!(bf.circorder, idxmap, netweight)
         end
         incrementfreq!(bf, netweight)
+        !isnothing(blobindices) && push!(blobindices, matchidx)
     end
     return blobdegree[]
 end
