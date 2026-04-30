@@ -111,13 +111,13 @@ function blobtransfer_support(
     C = Matrix{Int}(undef, ntaxa, ntaxa)
     dist_cache = Dict{Tuple{Int,Int},Int}()
 
-    ti_sum = zeros(Float64, nref)
-    for idxs in net_blobidx
+    # ti[r, i] = min transfer distance from refblob r to any blob in network i
+    ti = Matrix{Int}(undef, nref, nnet)
+    for (i, idxs) in enumerate(net_blobidx)
         for r in 1:nref
-            ti_sum[r] += transferindex!(C, dist_cache, r,
+            ti[r, i] = transferindex!(C, dist_cache, r,
                 refblobs[r].partition, idxs, blobvec)
         end
     end
-    return (refblobs=refblobs, transfer_index_sum=ti_sum,
-        nnet=nnet, taxa=taxa)
+    return (refblobs=refblobs, transfer_index=ti, taxa=taxa)
 end
