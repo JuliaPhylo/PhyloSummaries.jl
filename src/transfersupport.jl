@@ -80,13 +80,13 @@ end
 
 
 """
-    blobtransfer_support(networks, referencenet; minimumblobdegree=3)
+    blobsupport_transfer(networks, referencenet; minimumblobdegree=3)
  
 Compute transfer support for each blob partition in `referencenet` based on
 its minimum transfer distance to blob partitions found in `networks`.
 
 """
-function blobtransfer_support(
+function blobsupport_transfer(
     networks::AbstractVector{PN.HybridNetwork},
     referencenet::PN.HybridNetwork;
     minimumblobdegree::Int=3,
@@ -119,5 +119,8 @@ function blobtransfer_support(
                 refblobs[r].partition, idxs, blobvec)
         end
     end
+
+    # return table similar to blobdata_onToB (level 1)
+    # change to ts
     return (refblobs=refblobs, transfer_index=ti, taxa=taxa)
 end
