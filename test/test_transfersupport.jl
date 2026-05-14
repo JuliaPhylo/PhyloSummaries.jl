@@ -1,26 +1,7 @@
-@testset "blobtransferdistance" begin
-
-
-β = [(true,false,false,false,false,false,false),
-     (false,true,false,false,false,false,false),
-     (false,false,true,false,false,false,false),
-     (false,false,false,true,false,false,false),
-     (false,false,false,false,true,true,true)]
-
-β_star = [(true,false,false,false,false,false,false),
-          (false,true,false,false,false,false,false),
-          (false,false,true,true,false,false,false),
-          (false,false,false,false,true,true,true)]
-
-@test PS.blobtransferdistance(β, β)      == 0
-@test PS.blobtransferdistance(β, β_star) == 2
-@test PS.blobtransferdistance(β_star, β) == 2
-
-end
-
 @testset "blobsupport_transfer, 7 taxa level-1" begin
 
 nfile = joinpath(@__DIR__, "..", "test", "level1_7taxa_abc.nwk")
+# nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","level1_7taxa_abc.nwk")
 nets = readmultinewick(nfile)
 refnet = deepcopy(nets[5]) # 2 blobs: a1|a2|a3|a4|b1,c1,c2 and a1,a2,a3,a4|c2|c1|b1
 

@@ -2,7 +2,7 @@
     blobpartitions_support(networks, referencenet;
         minimumblobdegree=3, netweights=nothing)
 
-Calculate the support for blob partitions and related features (circular orders,
+Support for blob partitions and related features (circular orders,
 hybrid clades, bipartitions non-redundant with a blob) for the blobs present
 in a reference network `referencenet`,
 based on their frequency in a sample of `networks`.
@@ -14,6 +14,10 @@ Output: a `NamedTuple` of tables, named as follows
 - `:blob_table`: support for each blob partition in the reference network,
   including support for the circular order of the taxon blocks if the sample
   networks are of level 1.
+- `:transfer_table`: transfer index for each blob partition β in the reference
+  network: average TI(β,N) over networks N in the sample. This is the average
+  number of taxa to remove (from β and from N) to make β match some taxon block
+  in N (either from a blob or from a non-redundant bipartition).
 - `:hybrid_table`: support for each taxon block to be below a blob's
   lowest hybrid node in a sample network.
 - `:bipartition_table`: support for each non-redundant bipartition (cut-edge)
@@ -41,7 +45,7 @@ julia> refnet = readnewick(nwk); # same as 5th bootnet
 julia> res = blobpartitions_support(bootnet, refnet);
 
 julia> keys(res)
-(:blob_table, :circorder_table, :hybrid_table, :bipartition_table, :taxa)
+(:blob_table, :transfer_table, :circorder_table, :hybrid_table, :bipartition_table, :taxa)
 
 julia> using DataFrames; DataFrame(res[:blob_table])
 2×6 DataFrame
@@ -50,6 +54,14 @@ julia> using DataFrames; DataFrame(res[:blob_table])
 ─────┼──────────────────────────────────────────────────────────────────────────────
    1 │     2       4     -7                0.4  1,2,3,4|7|6|5  a1,a2,a3,a4|c2|c1|b1
    2 │     1       5     -2                0.6  1|2|3|4|5,6,7  a1|a2|a3|a4|b1,c1,c2
+
+julia> DataFrame(res[:transfer_table])
+2×5 DataFrame
+ Row │ blob   node   transferindex  partition_num  partition            
+     │ Int64  Int64  Float64        String         String               
+─────┼──────────────────────────────────────────────────────────────────
+   1 │     2     -7            1.6  1,2,3,4|7|6|5  a1,a2,a3,a4|c2|c1|b1
+   2 │     1     -2            1.4  1|2|3|4|5,6,7  a1|a2|a3|a4|b1,c1,c2
 
 julia> DataFrame(res[:circorder_table])
 2×5 DataFrame
@@ -97,12 +109,18 @@ function blobpartitions_support(
       nnets = sum(netweights)
       nnets>0 && all(netweights .>= 0) || error("network weights should be ≥ 0")
     end
-    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree, false, netweights)
+    # collect info on sample networks. do *not* filter them
+    bbidx = [Int[] for _ in eachindex(networks)]
+    blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree,
+        false, netweights, bbidx)
     hybdict = count_hybridclusters(blobvec)
+    # collect info on reference blobs
     refblobs = BlobFreq{ntaxa}[]
     refbps = SplitFreq{ntaxa}[]
     hwmatrix, edgemap, blobdegree = count_blobpartitions!(refblobs, refbps, referencenet,
         taxa, minimumblobdegree, false, 0.0) # frequencies initialized at 0
+    # compare reference and sample blobs
+    transfer = transferindex(refblobs, blobvec, netweights, nnets, bbidx)
     update_blobcircorderfrequency!(refblobs, blobvec)
     update_hybridclusterfrequency!(refblobs, hybdict)
     update_bipartitionfrequency!(refbps, bpvec)
@@ -112,10 +130,12 @@ function blobpartitions_support(
     # specify type in case of empty iterator
     bbei = Vector{Int}[[edgenum2idx[n] for n in nums] for nums in bbe_nums]
     bpei, bpe_nums = _bipartition_edgeindices(refbps, hwmatrix, edgenum2idx)
+    # build output tables
     bdat, odat = blobdata_onToB(refblobs, bbn, nnets, taxa)
+    tidat = blobdata_onToB_transferindex(refblobs, bbn, transfer, taxa)
     hdat = hybriddata_onToB(refblobs, bbn, bbei, nnets, referencenet.edge, taxa, bbe_nums)
     sdat = bipartdata_onToB(refbps, bpei, nnets, referencenet.edge, taxa, bpe_nums)
-    return (blob_table=bdat, circorder_table=odat,
+    return (blob_table=bdat, transfer_table=tidat, circorder_table=odat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
 

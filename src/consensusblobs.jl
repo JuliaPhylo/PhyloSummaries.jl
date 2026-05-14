@@ -288,7 +288,7 @@ end
 
 """
     count_blobpartitions(networks, taxa, minimumblobdegree,
-        require_level1=false, netweights=nothing)
+        require_level1=false, netweights=nothing, bbidx=nothing)
 
 `(blob_vec, bipart_vec)` where `blob_vec` is a vector of
 [`BlobFreq{ntax}`](@ref) object (`ntax` being the number of taxa),
@@ -322,6 +322,7 @@ Side effects and internal fields:
 - `.intn1` stores 0 if a node is a singleton blob, and the node's blob index
   otherwise: index of the first bicomponent in the blob (which are pre-ordered).
 - `.boole1` of edges, to visit hybrid nodes once and in "half" circular order.
+- `bbidx` needs to be pre-allocated. fixit --document this
 
 See also: [`consensus_treeofblobs`](@ref)
 """
@@ -330,8 +331,8 @@ function count_blobpartitions(
     taxa::AbstractVector{<:String},
     minBdegree::Int,
     require_level1::Bool=false,
-    netweights::Union{Nothing,AbstractVector}=nothing;
-    net_blobidx::Union{Nothing,Vector{Vector{Int}}}=nothing,
+    netweights::Union{Nothing,AbstractVector}=nothing,
+    bbidx::Union{Nothing,Vector{Vector{Int}}}=nothing,
 )
     ntaxa = length(taxa)
     all(n.numtaxa == ntaxa for n in networks) ||
@@ -340,23 +341,19 @@ function count_blobpartitions(
     blobvec = BlobFreq{ntaxa}[]
     bpvec = SplitFreq{ntaxa}[]  # bipartitions, frequency: if non-redundant
     nweight = (isnothing(netweights) ? i -> 1.0 : i -> Float64(netweights[i]))
+    nbbidx = (isnothing(bbidx) ? i -> nothing : i -> bbidx[i])
     for (i,net) in enumerate(networks)
         nw = nweight(i)
-        if nw <= 0
-            !isnothing(net_blobidx) && push!(net_blobidx, Int[])
-            continue
-        end
-        idxs = !isnothing(net_blobidx) ? Int[] : nothing
+        nw > 0 || continue # do not add blobs/biparts of weight 0
         count_blobpartitions!(blobvec, bpvec, net, taxa, minBdegree,
-            require_level1, nw; blobindices=idxs)
-        !isnothing(net_blobidx) && push!(net_blobidx, idxs)
+            require_level1, nw, nbbidx(i))
     end
     return blobvec, bpvec
 end
 
 """
     count_blobpartitions!(blobs, biparts, net, taxa, minBdegree,
-        require_level1, netweight)
+        require_level1, netweight, blobindices)
 
 Helper for [`count_blobpartitions`](@ref).
 Update the entries in the vector of `blobs` and in the vector of `biparts`
@@ -394,7 +391,7 @@ function count_blobpartitions!(
     taxa::AbstractVector{<:String},
     minBdegree::Int,
     require_level1::Bool,
-    netweight::Float64;
+    netweight::Float64,
     blobindices::Union{Nothing,Vector{Int}}=nothing,
 ) where N
     taxaindex = Dict(t => i for (i, t) in pairs(taxa))
@@ -439,7 +436,7 @@ end
 
 """
     count_blobpartitions!(blobs, visitedbcc, net, taxaindex, minBdegree,
-        blob, bidx, hwmatrix, edgemap, require_level1, netweight)
+        blob, bidx, hwmatrix, edgemap, require_level1, netweight, blobindices)
 
 Update the vector of `blobs` frequencies, and `visitedbcc` (to track
 biconnected components already visited) for a single potentially interesting
