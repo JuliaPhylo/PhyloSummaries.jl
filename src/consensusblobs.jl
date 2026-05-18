@@ -79,7 +79,8 @@ isredundantsplit(b1::SplitFreq{N}, b2::BlobFreq{N}) where N =
 
 """
     consensus_treeofblobs(networks; proportion=0,
-        minimumblobdegree=4, netweights=nothing)
+        minimumblobdegree=4, netweights=nothing,
+        suppressinfo=false)
 
 Consensus tree summarizing the partitions of "interesting" blobs (nodes in
 the tree of blobs) and the non-redundant bipartitions
@@ -129,6 +130,8 @@ By default, a greedy consensus consensus is calculated.
 The majority-rule tree can be obtained by using `proportion=0.5`,
 and the strict consensus using `proportion=1`.
 
+Use `suppressinfo=true` to turn off the message about node & edge numbers.
+
 See also: [`consensus_level1network`](@ref), [`count_blobpartitions!`](@ref)
 """
 function consensus_treeofblobs(
@@ -171,7 +174,8 @@ end
 
 """
     consensus_level1network(networks; proportion=0,
-        minimumblobdegree=4, outgroup=nothing, netweights=nothing)
+        minimumblobdegree=4, outgroup=nothing, netweights=nothing,
+        suppressinfo=true)
 
 Consensus network summarizing a list of level-1 networks, by these steps:
 1. A consensus tree of blobs is built as in [`consensus_treeofblobs`](@ref),
@@ -199,6 +203,8 @@ By default, all input networks have equal weight: the support for a feature
 (blob, circular order, hybrid clade, bipartition) is the proportion of networks
 with this feature. To give networks unequal weights, a `netweights` vector
 can be provided. There should be as many weights as there are input networks.
+
+Use `suppressinfo=true` to turn off the message about node & edge numbers.
 
 See [`consensus_level1network_save`](@ref) to save the output.
 """
