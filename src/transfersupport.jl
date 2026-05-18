@@ -1,5 +1,5 @@
 """
-    blobtransferdistance(blob1, blob2)
+    transferdistance(blob1, blob2)
 
 Transfer distance between partitions `blob1` and `blob2` of the same set of
 `N` taxa: minimum number of taxa to transfer from one block to another, for the
@@ -7,17 +7,17 @@ two partitions to be equal (one possibly padded with extra empty taxon blocks).
 Alternatively, this is the minimum number of taxa to exclude for the two
 partitions to be equal (possibly with some empty taxon blocks).
 """
-function blobtransferdistance(
+function transferdistance(
     blob1::AbstractVector{NTuple{N,Bool}},
     blob2::AbstractVector{NTuple{N,Bool}},
 ) where N
     kmax = max(length(blob1), length(blob2))
     C = Matrix{Int}(undef, kmax, kmax)
-    return blobtransferdistance!(C, blob1, blob2)
+    return transferdistance!(C, blob1, blob2)
 end
 
 """
-    blobtransferdistance!(C::AbstractMatrix{Int},
+    transferdistance!(C::AbstractMatrix{Int},
         β1::AbstractVector{NTuple{N,Bool}},
         β2::AbstractVector{NTuple{N,Bool}})
 
@@ -42,8 +42,8 @@ The Hungarian algorithm is then used with this cost matrix, from
 [Hungarian.jl](https://github.com/Gnimuc/Hungarian.jl)
 
 Assumptions:
-- `N` ≥ 1, and each blob is a correct partition of the `N` taxa into
-  `k1` and `k2` taxon blocks respectively, hence with `k1` and `k2≥1`.
+- `N` ≥ 1, and β1, β2 are both correct partition of the `N` taxa into
+  `k1` and `k2` taxon blocks respectively, hence with `k1 ≥ 1` and k2 ≥ 1`.
 - `C` has size `m1 × m2` with `m1,m2 ≥ k` where `k = max{k1,k2}`.
   The first `k` rows and columns of `C` are used to store the costs.
 
@@ -66,11 +66,14 @@ julia> β2 = [(true,true,false,false,false), (false,false,true,true,true)]
 
 julia> C = Matrix{Int}(undef, 3, 3); # max 3 taxon blocks
 
-julia> PS.blobtransferdistance!(C, β1, β2) # transfer 3 and 5 (or 3 and 4)
+julia> PS.transferdistance!(C, β1, β2) # transfer 3 and 5 (or 3 and 4)
+4
+
+julia> PS.transferdistance!(C, β2[1], β1) # same, from 1 side of bipartition β2
 4
 ```
 """
-function blobtransferdistance!(
+function transferdistance!(
     C::AbstractMatrix{Int},
     blob1::AbstractVector{NTuple{N,Bool}},
     blob2::AbstractVector{NTuple{N,Bool}},
@@ -93,6 +96,31 @@ function blobtransferdistance!(
     _, mincost = hungarian(Cv)
     return mincost
 end
+"""
+    transferdistance!(C::AbstractMatrix{Int},
+        s1::NTuple{N,Bool},
+        β2::AbstractVector{NTuple{N,Bool}})
+
+Twice the transfer distance `2 * d_transfer(β1,β2)` between partitions `β1`
+and `β2` of the same set of `N` taxa, where β1 is the bipartition `s1|s̄1`.
+"""
+function transferdistance!(
+    C::AbstractMatrix{Int},
+    split::NTuple{N,Bool},
+    blob2::AbstractVector{NTuple{N,Bool}},
+) where N
+    k2 = length(blob2)
+    @assert k2 > 1
+    Cv = view(C, 1:k2, 1:k2)
+    fill!(Cv, 0)
+    for j in 1:k2
+        Cv[1,j] = count(t -> xor(split[t], blob2[j][t]), 1:N)
+        Cv[2,j] = N - Cv[1,j] # split complement ↔ blob2[j]
+        Cv[3:k2,j] .= count(blob2[j])
+    end
+    _, mincost = hungarian(Cv)
+    return mincost
+end
 
 """
     transferindex!(C, dist_cache, β_idx, β,
@@ -105,7 +133,7 @@ non-redundant bipartitions at indices `bip_idx` in the `biparts` vector.
 This is `2 * TI` with
 `TI = min{ d_transfer(β,β*); β* ∈ blobs[blb_idx] ∪ biparts[bip_idx]}`.
 
-Distances are lazily computed via [`blobtransferdistance!`](@ref) and
+Distances are lazily computed via [`transferdistance!`](@ref) and
 stored in a dictionary `dist_cache[(β_idx, j, blob/bipart)]`
 for reuse across networks.
 
@@ -126,10 +154,9 @@ function transferindex!(
     mindist = N # max: transfer all N taxa. No need for typemax(Int)
     for (idx, isblob) in zip((blb_idx,bip_idx), (true,false)), j in idx
         key = (ref_idx, j, isblob)
-        βnet = (isblob ? blobs[j].partition :
-            [biparts[j].split, ntuple(i -> !biparts[j].split, N)])
+        βnet = (isblob ? blobs[j].partition : biparts[j].split)
         d = get!(dist_cache, key) do # enters block only if key not in dict yet
-            blobtransferdistance!(C, refblob, βnet)
+            transferdistance!(C, βnet, refblob)
         end
         if d < mindist  mindist = d; end
         mindist == 0 && break

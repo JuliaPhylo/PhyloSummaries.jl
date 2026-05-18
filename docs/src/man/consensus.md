@@ -724,12 +724,25 @@ blb_bs = DataFrame(res_bs[:blob_table])
 ```
 
 Our reference network has only 1 reticulation, so only 1 blob.
-We see that this blob has `support_partition` of 0.25.
+We see that this blob has `support_partition` of 0.25:
+25% of input networks have a blob with the same partition.
 If we plotted our input networks, we would see that this blob is in
 networks 2 and 3: whose weights sum to 2 out of 8.
 These support values did not appear in the
 [consensus tree of blob](@ref) section, because this blob is not selected
 to be in the consensus tree of blob.
+
+```@repl
+blb_bs = DataFrame(res_bs[:transfer_table])
+```
+
+The transfer index of each blob gives the average number of taxa
+that need to be removed (or transferred to a different or new block)
+for the blob partition to match with one of the network's partition,
+averaged over the sample networks. Here, this is 1 taxon on average,
+so 0 taxa for the 25% networks that have the same blob partition,
+and 1 or more for the remaining 75% networks.
+The lower the value (as a number of taxa), the higher the support.
 
 ```@repl
 DataFrame(res_bs[:circorder_table])

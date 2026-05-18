@@ -60,8 +60,8 @@ julia> DataFrame(res[:transfer_table])
  Row │ blob   node   transferindex  partition_num  partition            
      │ Int64  Int64  Float64        String         String               
 ─────┼──────────────────────────────────────────────────────────────────
-   1 │     2     -7            1.6  1,2,3,4|7|6|5  a1,a2,a3,a4|c2|c1|b1
-   2 │     1     -2            1.4  1|2|3|4|5,6,7  a1|a2|a3|a4|b1,c1,c2
+   1 │     2     -7            1.0  1,2,3,4|7|6|5  a1,a2,a3,a4|c2|c1|b1
+   2 │     1     -2            1.2  1|2|3|4|5,6,7  a1|a2|a3|a4|b1,c1,c2
 
 julia> DataFrame(res[:circorder_table])
 2×5 DataFrame
@@ -111,6 +111,7 @@ function blobpartitions_support(
     end
     # collect info on sample networks. do *not* filter them
     bbidx = [Int[] for _ in eachindex(networks)]
+    bpidx = [Int[] for _ in eachindex(networks)]
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree,
         false, netweights, bbidx, bpidx)
     hybdict = count_hybridclusters(blobvec)

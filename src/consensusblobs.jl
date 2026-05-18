@@ -322,7 +322,11 @@ Side effects and internal fields:
 - `.intn1` stores 0 if a node is a singleton blob, and the node's blob index
   otherwise: index of the first bicomponent in the blob (which are pre-ordered).
 - `.boole1` of edges, to visit hybrid nodes once and in "half" circular order.
-- `bbidx` needs to be pre-allocated. fixit --document this
+- `bbidx` and `bpidx`, if provided, should be vectors of length the number of
+  input networks. In these vectors, each item should be initialized as
+  a length-0 vector of integers. `bbidx[j]` and `bpidx[j]` will be filled
+  with the indices, in the output `blob_vec` and `bipart_vec` respectively,
+  of network `j`'s blobs and non-redundnat bipartitions.
 
 See also: [`consensus_treeofblobs`](@ref)
 """

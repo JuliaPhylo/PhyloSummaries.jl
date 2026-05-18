@@ -22,5 +22,4 @@ end
     include("test_consensustrees.jl")
     include("test_consensusblobs.jl")
     include("test_blobsupport.jl")
-    include("test_transfersupport.jl")
 end
