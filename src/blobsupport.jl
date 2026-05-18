@@ -112,7 +112,7 @@ function blobpartitions_support(
     # collect info on sample networks. do *not* filter them
     bbidx = [Int[] for _ in eachindex(networks)]
     blobvec, bpvec = count_blobpartitions(networks, taxa, minimumblobdegree,
-        false, netweights, bbidx)
+        false, netweights, bbidx, bpidx)
     hybdict = count_hybridclusters(blobvec)
     # collect info on reference blobs
     refblobs = BlobFreq{ntaxa}[]
@@ -120,7 +120,7 @@ function blobpartitions_support(
     hwmatrix, edgemap, blobdegree = count_blobpartitions!(refblobs, refbps, referencenet,
         taxa, minimumblobdegree, false, 0.0) # frequencies initialized at 0
     # compare reference and sample blobs
-    transfer = transferindex(refblobs, blobvec, netweights, nnets, bbidx)
+    transfer = transferindex(refblobs, blobvec, bpvec, netweights, nnets, bbidx, bpidx)
     update_blobcircorderfrequency!(refblobs, blobvec)
     update_hybridclusterfrequency!(refblobs, hybdict)
     update_bipartitionfrequency!(refbps, bpvec)

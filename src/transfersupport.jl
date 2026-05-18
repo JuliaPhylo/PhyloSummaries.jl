@@ -95,32 +95,41 @@ function blobtransferdistance!(
 end
 
 """
-    transferindex!(C, dist_cache, β_idx, β, blobindices, blobvec)
+    transferindex!(C, dist_cache, β_idx, β,
+                   blb_idx, blobs, bip_idx, biparts)
 
-Twice the minimum transfer distance between a reference blob β, at row index `β_idx`;
-and the blobs β* in a sample network, at indices `blobindices` in `blobvec`:
-`2 * TI` with `TI = min{ d_transfer(β,β*); β* ∈ blobvec[blobindices]}`.
+Twice the minimum transfer distance between a reference blob β,
+at row index `β_idx`, and all partitions β* in a sample network:
+blobs at indices `blb_idx` in the `blobs` vector, and
+non-redundant bipartitions at indices `bip_idx` in the `biparts` vector.
+This is `2 * TI` with
+`TI = min{ d_transfer(β,β*); β* ∈ blobs[blb_idx] ∪ biparts[bip_idx]}`.
 
 Distances are lazily computed via [`blobtransferdistance!`](@ref) and
-stored in a dictionary `dist_cache[(ref_idx, j)]` for reuse across networks.
+stored in a dictionary `dist_cache[(β_idx, j, blob/bipart)]`
+for reuse across networks.
 
 For each calculation of the transfer distance between β and one of the
-network's blob, `C` is used to store the costs to map the taxon blocks
-in β to those in the blob.
+network's partition β*, `C` is used to store the costs to map the taxon blocks
+in β to those in β*.
 """
 function transferindex!(
     C::AbstractMatrix{Int},
-    dist_cache::Dict{Tuple{Int,Int},Int},
+    dist_cache::Dict{Tuple{Int,Int,Bool},Int},
     ref_idx::Int,
     refblob::AbstractVector{NTuple{N,Bool}},
-    blobindices::AbstractVector{Int},
-    blobvec::Vector{BlobFreq{N}},
+    blb_idx::AbstractVector{Int},
+    blobs::Vector{BlobFreq{N}},
+    bip_idx::AbstractVector{Int},
+    biparts::Vector{SplitFreq{N}},
 ) where N
     mindist = N # max: transfer all N taxa. No need for typemax(Int)
-    for j in blobindices
-        key = (ref_idx, j)
+    for (idx, isblob) in zip((blb_idx,bip_idx), (true,false)), j in idx
+        key = (ref_idx, j, isblob)
+        βnet = (isblob ? blobs[j].partition :
+            [biparts[j].split, ntuple(i -> !biparts[j].split, N)])
         d = get!(dist_cache, key) do # enters block only if key not in dict yet
-            blobtransferdistance!(C, refblob, blobvec[j].partition)
+            blobtransferdistance!(C, refblob, βnet)
         end
         if d < mindist  mindist = d; end
         mindist == 0 && break
@@ -129,29 +138,38 @@ function transferindex!(
 end
 
 """
-    transferindex(refblobs, sampleblobs, netweights, nnets, bbidx)
+    transferindex(refblobs, blobs, biparts, netweights, nnets, bbidx, bpidx)
 
 Vector listing the transfer index of each blob in `refblobs` with respect to
-the sample of networks, whose blobs are stored in `sampleblobs`. Network `i`
-has weight `netweights[i]` and blobs at indices `bbidx` in `sampleblobs`.
+the sample of networks, whose blobs are stored in `blobs` and whose
+non-redundant bipartitions are stored in `biparts`. Network `i` has weight
+`netweights[i]`, blobs at indices `bbidx` in `blobs`, and bipartitions at
+indices `bpidx` in `biparts`.
+
+The transfer index of a blob β is the average minimum transfer distance d(β,N),
+with the average (or weighted average) taken over all networks N in the sample.
+`nnets` is a normalization factor: the total weight of all networks.
+
 See [`transferindex!`](@ref), which calculates twice the transfer index of
-one reference blob, and [``](@ref)
+one reference partition with respect to one network.
 """
 function transferindex(
     refblobs::Vector{BlobFreq{N}},
-    sampleblobs::Vector{BlobFreq{N}},
+    blobs::Vector{BlobFreq{N}},
+    biparts::Vector{SplitFreq{N}},
     netweights::Union{Nothing,AbstractVector},
     nnets::Number,
     bbidx::Vector{Vector{Int}},
+    bpidx::Vector{Vector{Int}},
 ) where N
     transfercost = Matrix{Int}(undef, N, N)
-    transferdist = Dict{Tuple{Int,Int},Int}() # d(refblob i, sampleblobj)
+    transferdist = Dict{Tuple{Int,Int,Bool},Int}() # d(ref β i, β* j, blob/bipart)
     ti = zeros(length(refblobs)) # sum of TI(refblob i, N) over N
     usenw = !isnothing(netweights)
-    for (n_i,idxs) in enumerate(bbidx)
+    for n_i in eachindex(bbidx) # for each network
         for (rb_i,rb) in enumerate(refblobs)
             d = transferindex!(transfercost, transferdist, rb_i, rb.partition,
-                idxs, sampleblobs)
+                bbidx[n_i], blobs, bpidx[n_i], biparts)
             ti[rb_i] += (usenw ? netweights[n_i] * d : d)
         end
     end
