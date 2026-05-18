@@ -171,6 +171,18 @@ function consensus_treeofblobs(
     return (tob=tob, blob_table=bdat, circorder_table=odat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
+"""
+    consensus_treeofblobs(net; ...)
+
+Same as `consensus_treeofblobs([net], ...)`, which can be used to obtain
+the blob partition and non-redundant bipartitions of a single network `net`.
+Warning: node and edges numbers in the output tables do *not* correspond to
+those in `net`, but to those in the output tree-of-blobs.
+
+See also [`PhyloNetworks.treeofblobs`](@extref).
+"""
+consensus_treeofblobs(net::PN.HybridNetwork; kwargs...) =
+    consensus_treeofblobs([net]; kwargs...)
 
 """
     consensus_level1network(networks; proportion=0,
@@ -248,6 +260,16 @@ function consensus_level1network(
     return (net=net, blob_table=bdat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
+"""
+    consensus_level1network(net; ...)
+
+Same as `consensus_level1network([net], ...)`, which can be used to obtain
+the blob and non-redundant bipartitions of a single level-1 network `net`.
+Warning: node and edges numbers in the output tables do *not* match those
+in `net`, but those in the output network.
+"""
+consensus_level1network(net::PN.HybridNetwork; kwargs...) =
+    consensus_level1network([net]; kwargs...)
 
 """
     consensus_level1network_save(result_object, rootname=nothing)

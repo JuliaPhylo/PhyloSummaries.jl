@@ -163,6 +163,9 @@ tob = res[:tob]
 @test res[:hybrid_table] == (blob=[1,1], node_from=[7,7], node_to=[2,3], edge=[2,3],
   support_hybrid=[.6,.4], cluster_num=["2","3"], cluster=["B","C"])
 
+@test_logs consensus_treeofblobs(net[1], suppressinfo=true)
+@test_logs (:info, r"^Node") consensus_level1network(net[1], minimumblobdegree=3)
+
 nfile = joinpath(@__DIR__,"..","test","bootstrapnets_h1.nwk")
 # nfile = joinpath(dirname(pathof(PhyloSummaries)), "..","test","bootstrapnets_h1.nwk")
 net = readmultinewick(nfile)
