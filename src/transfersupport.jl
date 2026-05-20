@@ -36,7 +36,7 @@ julia> const PS = PhyloSummaries; # to use internals with less typing
 
 julia> # below: partitions β1 = 123|5|4 and β2 = 12|345
 
-julia> β1 = [Bool.(v) for v in [(1,1,1,0,0), (0,0,0,0,1), (0,0,0,1,0)]
+julia> β1 = [Bool.(v) for v in [(1,1,1,0,0), (0,0,0,0,1), (0,0,0,1,0)]]
 3-element Vector{NTuple{5, Bool}}:
  (1, 1, 1, 0, 0)
  (0, 0, 0, 0, 1)
