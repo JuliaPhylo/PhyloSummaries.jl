@@ -18,6 +18,8 @@ Output: a `NamedTuple` of tables, named as follows
   network: average TI(β,N) over networks N in the sample. This is the average
   number of taxa to remove (from β and from N) to make β match some taxon block
   in N (either from a blob or from a non-redundant bipartition).
+  *Warning*: the calculation of this transfer index is experimental and
+  subject to change. See [`blobdata_onToB_transferindex`](@ref).
 - `:hybrid_table`: support for each taxon block to be below a blob's
   lowest hybrid node in a sample network.
 - `:bipartition_table`: support for each non-redundant bipartition (cut-edge)

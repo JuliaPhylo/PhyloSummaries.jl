@@ -1,22 +1,4 @@
 """
-    transferdistance(blob1, blob2)
-
-Transfer distance between partitions `blob1` and `blob2` of the same set of
-`N` taxa: minimum number of taxa to transfer from one block to another, for the
-two partitions to be equal (one possibly padded with extra empty taxon blocks).
-Alternatively, this is the minimum number of taxa to exclude for the two
-partitions to be equal (possibly with some empty taxon blocks).
-"""
-function transferdistance(
-    blob1::AbstractVector{NTuple{N,Bool}},
-    blob2::AbstractVector{NTuple{N,Bool}},
-) where N
-    kmax = max(length(blob1), length(blob2))
-    C = Matrix{Int}(undef, kmax, kmax)
-    return transferdistance!(C, blob1, blob2)
-end
-
-"""
     transferdistance!(C::AbstractMatrix{Int},
         β1::AbstractVector{NTuple{N,Bool}},
         β2::AbstractVector{NTuple{N,Bool}})
@@ -52,8 +34,9 @@ Assumptions:
 ```jldoctest
 julia> const PS = PhyloSummaries; # to use internals with less typing
 
-julia> β1 = [(true,true,true,false,false), (false,false,false,false,true),
-    (false,false,false,true,false)] # β1 = 123|5|4. below: β2 = 12|345
+julia> # below: partitions β1 = 123|5|4 and β2 = 12|345
+
+julia> β1 = [Bool.(v) for v in [(1,1,1,0,0), (0,0,0,0,1), (0,0,0,1,0)]
 3-element Vector{NTuple{5, Bool}}:
  (1, 1, 1, 0, 0)
  (0, 0, 0, 0, 1)
@@ -212,6 +195,13 @@ For each network N, the transfer index TI(β,N) of a blob β with respect to N
 is the transfer distance between β (as a partition into taxon blocks) and the
 best-matching blob in N:
 `TI(β,N) = min{ d_transfer(β,β*), β* blob partition in N}`
+
+*Warning*: this is **experimental**.
+The partitions being considered here are restricted to
+(1) partitions into 3+ taxon blocks from non-trivial 'interesting' blobs, and
+(2) non-redundant bipartitions.
+Not considered are partitions into 3+ taxon blocks from trivial blobs
+(which are not 'interesting').
 
 When taking the average, sample networks are weighted equally by default,
 unless a vector of `netweights` is provided.

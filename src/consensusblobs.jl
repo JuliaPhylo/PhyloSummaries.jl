@@ -171,12 +171,13 @@ function consensus_treeofblobs(
     return (tob=tob, blob_table=bdat, circorder_table=odat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
+
 """
     consensus_treeofblobs(net; ...)
 
 Same as `consensus_treeofblobs([net], ...)`, which can be used to obtain
 the blob partition and non-redundant bipartitions of a single network `net`.
-Warning: node and edges numbers in the output tables do *not* correspond to
+Warning: node and edge numbers in the output tables do *not* correspond to
 those in `net`, but to those in the output tree-of-blobs.
 
 See also [`PhyloNetworks.treeofblobs`](@extref).
@@ -187,7 +188,7 @@ consensus_treeofblobs(net::PN.HybridNetwork; kwargs...) =
 """
     consensus_level1network(networks; proportion=0,
         minimumblobdegree=4, outgroup=nothing, netweights=nothing,
-        suppressinfo=true)
+        suppressinfo=false)
 
 Consensus network summarizing a list of level-1 networks, by these steps:
 1. A consensus tree of blobs is built as in [`consensus_treeofblobs`](@ref),
@@ -265,7 +266,7 @@ end
 
 Same as `consensus_level1network([net], ...)`, which can be used to obtain
 the blob and non-redundant bipartitions of a single level-1 network `net`.
-Warning: node and edges numbers in the output tables do *not* match those
+Warning: node and edge numbers in the output tables do *not* match those
 in `net`, but those in the output network.
 """
 consensus_level1network(net::PN.HybridNetwork; kwargs...) =
@@ -354,7 +355,7 @@ Side effects and internal fields:
   input networks. In these vectors, each item should be initialized as
   a length-0 vector of integers. `bbidx[j]` and `bpidx[j]` will be filled
   with the indices, in the output `blob_vec` and `bipart_vec` respectively,
-  of network `j`'s blobs and non-redundnat bipartitions.
+  of network `j`'s blobs and non-redundant bipartitions.
 
 See also: [`consensus_treeofblobs`](@ref)
 """
@@ -472,8 +473,7 @@ end
 
 """
     count_blobpartitions!(blobs, visitedbcc, net, taxaindex, minBdegree,
-        blob, bidx, hwmatrix, edgemap, require_level1, netweight,
-        blobindices, bipartindices)
+        blob, bidx, hwmatrix, edgemap, require_level1, netweight, blobindices)
 
 Update the vector of `blobs` frequencies, and `visitedbcc` (to track
 biconnected components already visited) for a single potentially interesting

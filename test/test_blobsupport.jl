@@ -15,7 +15,7 @@ res = blobpartitions_support(net, refnet)
     partition_num=["1,2,3,4|7|6|5", "1|2|3|4|5,6,7"],
     partition = ["a1,a2,a3,a4|c2|c1|b1", "a1|a2|a3|a4|b1,c1,c2"])
 @test res[:transfer_table] == (blob=[2,1], node=[-7,-2],
-    transferindex=[2.4,.8], # averages of: 2,2,2,4,4 and 0,0,0,2,2
+    transferindex=[2.4,.8], # averages of: 2,2,2,3,3 and 0,0,0,2,2
     partition_num=["1,2,3,4|7|6|5", "1|2|3|4|5,6,7"],
     partition = ["a1,a2,a3,a4|c2|c1|b1", "a1|a2|a3|a4|b1,c1,c2"])
 @test res[:circorder_table].support_circorder == [0,0] # level-2 input: circular order not calculated

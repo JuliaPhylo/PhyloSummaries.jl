@@ -738,7 +738,7 @@ blb_bs = DataFrame(res_bs[:transfer_table])
 
 The transfer index of each blob gives the average number of taxa
 that need to be removed (or transferred to a different or new block)
-for the blob partition to match with one of the network's partition,
+for the blob partition to match with one of the network's partitions,
 averaged over the sample networks. Here, this is 1 taxon on average,
 so 0 taxa for the 25% networks that have the same blob partition,
 and 1 or more for the remaining 75% networks.
@@ -747,8 +747,14 @@ The lower the value (as a number of taxa), the higher the support.
 ```@repl
 DataFrame(res_bs[:circorder_table])
 ```
+*Warning*: the calculation of this transfer index is experimental and
+subject to change. The partitions being considered here are restricted to
+(1) partitions into 3+ taxon blocks from non-trivial blobs, and
+(2) non-redundant bipartitions.
+Not considered are partitions into 3+ taxon blocks from trivial blobs
+(which are not 'interesting'). A future version may consider them.
 
-We see that the blob appears in our sample with 2 different circular
+Below, we see that the blob appears in our sample with 2 different circular
 orders of its taxon blocks: the first in the table is the order in the
 reference network, and is the order that network 2 has.
 Let's visualize the reference network alongside input network 3, which has
