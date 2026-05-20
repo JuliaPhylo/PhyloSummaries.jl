@@ -79,7 +79,8 @@ isredundantsplit(b1::SplitFreq{N}, b2::BlobFreq{N}) where N =
 
 """
     consensus_treeofblobs(networks; proportion=0,
-        minimumblobdegree=4, netweights=nothing)
+        minimumblobdegree=4, netweights=nothing,
+        suppressinfo=false)
 
 Consensus tree summarizing the partitions of "interesting" blobs (nodes in
 the tree of blobs) and the non-redundant bipartitions
@@ -129,6 +130,8 @@ By default, a greedy consensus consensus is calculated.
 The majority-rule tree can be obtained by using `proportion=0.5`,
 and the strict consensus using `proportion=1`.
 
+Use `suppressinfo=true` to turn off the message about node & edge numbers.
+
 See also: [`consensus_level1network`](@ref), [`count_blobpartitions!`](@ref)
 """
 function consensus_treeofblobs(
@@ -170,8 +173,22 @@ function consensus_treeofblobs(
 end
 
 """
+    consensus_treeofblobs(net; ...)
+
+Same as `consensus_treeofblobs([net], ...)`, which can be used to obtain
+the blob partition and non-redundant bipartitions of a single network `net`.
+Warning: node and edge numbers in the output tables do *not* correspond to
+those in `net`, but to those in the output tree-of-blobs.
+
+See also [`PhyloNetworks.treeofblobs`](@extref).
+"""
+consensus_treeofblobs(net::PN.HybridNetwork; kwargs...) =
+    consensus_treeofblobs([net]; kwargs...)
+
+"""
     consensus_level1network(networks; proportion=0,
-        minimumblobdegree=4, outgroup=nothing, netweights=nothing)
+        minimumblobdegree=4, outgroup=nothing, netweights=nothing,
+        suppressinfo=false)
 
 Consensus network summarizing a list of level-1 networks, by these steps:
 1. A consensus tree of blobs is built as in [`consensus_treeofblobs`](@ref),
@@ -199,6 +216,8 @@ By default, all input networks have equal weight: the support for a feature
 (blob, circular order, hybrid clade, bipartition) is the proportion of networks
 with this feature. To give networks unequal weights, a `netweights` vector
 can be provided. There should be as many weights as there are input networks.
+
+Use `suppressinfo=true` to turn off the message about node & edge numbers.
 
 See [`consensus_level1network_save`](@ref) to save the output.
 """
@@ -242,6 +261,16 @@ function consensus_level1network(
     return (net=net, blob_table=bdat,
         hybrid_table=hdat, bipartition_table=sdat, taxa=taxa)
 end
+"""
+    consensus_level1network(net; ...)
+
+Same as `consensus_level1network([net], ...)`, which can be used to obtain
+the blob and non-redundant bipartitions of a single level-1 network `net`.
+Warning: node and edge numbers in the output tables do *not* match those
+in `net`, but those in the output network.
+"""
+consensus_level1network(net::PN.HybridNetwork; kwargs...) =
+    consensus_level1network([net]; kwargs...)
 
 """
     consensus_level1network_save(result_object, rootname=nothing)
@@ -288,7 +317,7 @@ end
 
 """
     count_blobpartitions(networks, taxa, minimumblobdegree,
-        require_level1=false, netweights=nothing)
+        require_level1=false, netweights=nothing, bbidx=nothing, bpidx=nothing)
 
 `(blob_vec, bipart_vec)` where `blob_vec` is a vector of
 [`BlobFreq{ntax}`](@ref) object (`ntax` being the number of taxa),
@@ -322,6 +351,11 @@ Side effects and internal fields:
 - `.intn1` stores 0 if a node is a singleton blob, and the node's blob index
   otherwise: index of the first bicomponent in the blob (which are pre-ordered).
 - `.boole1` of edges, to visit hybrid nodes once and in "half" circular order.
+- `bbidx` and `bpidx`, if provided, should be vectors of length the number of
+  input networks. In these vectors, each item should be initialized as
+  a length-0 vector of integers. `bbidx[j]` and `bpidx[j]` will be filled
+  with the indices, in the output `blob_vec` and `bipart_vec` respectively,
+  of network `j`'s blobs and non-redundant bipartitions.
 
 See also: [`consensus_treeofblobs`](@ref)
 """
@@ -331,6 +365,8 @@ function count_blobpartitions(
     minBdegree::Int,
     require_level1::Bool=false,
     netweights::Union{Nothing,AbstractVector}=nothing,
+    bbidx::Union{Nothing,Vector{Vector{Int}}}=nothing,
+    bpidx::Union{Nothing,Vector{Vector{Int}}}=nothing,
 )
     ntaxa = length(taxa)
     all(n.numtaxa == ntaxa for n in networks) ||
@@ -339,18 +375,20 @@ function count_blobpartitions(
     blobvec = BlobFreq{ntaxa}[]
     bpvec = SplitFreq{ntaxa}[]  # bipartitions, frequency: if non-redundant
     nweight = (isnothing(netweights) ? i -> 1.0 : i -> Float64(netweights[i]))
+    nbbidx = (isnothing(bbidx) ? i -> nothing : i -> bbidx[i])
+    nbpidx = (isnothing(bpidx) ? i -> nothing : i -> bpidx[i])
     for (i,net) in enumerate(networks)
         nw = nweight(i)
         nw > 0 || continue # do not add blobs/biparts of weight 0
         count_blobpartitions!(blobvec, bpvec, net, taxa, minBdegree,
-            require_level1, nw)
+            require_level1, nw, nbbidx(i), nbpidx(i))
     end
     return blobvec, bpvec
 end
 
 """
     count_blobpartitions!(blobs, biparts, net, taxa, minBdegree,
-        require_level1, netweight)
+        require_level1, netweight, blobindices, bipartindices)
 
 Helper for [`count_blobpartitions`](@ref).
 Update the entries in the vector of `blobs` and in the vector of `biparts`
@@ -389,6 +427,8 @@ function count_blobpartitions!(
     minBdegree::Int,
     require_level1::Bool,
     netweight::Float64,
+    blbindices::Union{Nothing,Vector{Int}}=nothing,
+    bipindices::Union{Nothing,Vector{Int}}=nothing,
 ) where N
     taxaindex = Dict(t => i for (i, t) in pairs(taxa))
     PN.process_biconnectedcomponents!(net)
@@ -422,17 +462,18 @@ function count_blobpartitions!(
         PN.istrivial(bc) && continue
         blobdegree[bidx] = count_blobpartitions!(blobvec, visitedbcc,
             net, taxaindex, minBdegree, bc, bidx, hwmatrix, edgemap,
-            require_level1, netweight)
+            require_level1, netweight, blbindices)
     end
     # gather non-redundant cut-edges: from trivial bicomponents
     count_nonredundantbipartitions!(bpvec, blobdegree,
-            net, taxaindex, minBdegree, hwmatrix, edgemap, netweight)
+            net, taxaindex, minBdegree, hwmatrix, edgemap,
+            netweight, bipindices)
     return hwmatrix, edgemap, blobdegree
 end
 
 """
     count_blobpartitions!(blobs, visitedbcc, net, taxaindex, minBdegree,
-        blob, bidx, hwmatrix, edgemap, require_level1, netweight)
+        blob, bidx, hwmatrix, edgemap, require_level1, netweight, blobindices)
 
 Update the vector of `blobs` frequencies, and `visitedbcc` (to track
 biconnected components already visited) for a single potentially interesting
@@ -453,6 +494,7 @@ function count_blobpartitions!(
     edgemap::Dict{<:Integer,<:Integer},
     require_level1::Bool,
     netweight::Float64,
+    blbindices::Union{Nothing,Vector{Int}}=nothing,
 ) where N
     blobdegree = (bidx==1 ? Ref(0) : Ref(1)) # parent edge: 0 if root, 1 ow
     splits, hybrids, islevel1 = blobtaxonsetpartition!(visitedbcc, blobdegree,
@@ -478,6 +520,7 @@ function count_blobpartitions!(
         hybmap = Dict(hybrids[1] => netweight)
         newblob = BlobFreq{N,nparts}(splits, Ref(netweight), cofreq, hybmap)
         push!(blobvec, newblob)
+        !isnothing(blbindices) && push!(blbindices, length(blobvec))
     else # existing blob: increment frequencies of canonical partition slots
         bf = blobvec[matchidx]
         for k in hybrids
@@ -490,6 +533,7 @@ function count_blobpartitions!(
             add_canonical_circularorder!(bf.circorder, idxmap, netweight)
         end
         incrementfreq!(bf, netweight)
+        !isnothing(blbindices) && push!(blbindices, matchidx)
     end
     return blobdegree[]
 end
@@ -756,6 +800,7 @@ function count_nonredundantbipartitions!(
     hwmatrix::AbstractMatrix,
     edgemap::Dict{<:Integer,<:Integer},
     netweight::Float64,
+    bipindices::Union{Nothing,Vector{Int}}=nothing,
 ) where N
     inchain_store = Dict{Int,Bool}()
     inchain_leaf = Dict{Int,Union{String,Nothing}}()
@@ -796,6 +841,7 @@ function count_nonredundantbipartitions!(
         isnothing(row) && error("unmapped non-external edge $(e.number)")
         split = split_fromHmatrix(hwmatrix, row, N)
         add_split!(bpvec, split, netweight)
+        !isnothing(bipindices) && push!(bipindices, length(bpvec))
     end
     # add 0 or 1 biparts for each 2-blob chain: match the 2 end edges for each
     # 1. edges that have no entry in hwmatrix. trivial: don't store them
@@ -828,6 +874,7 @@ function count_nonredundantbipartitions!(
         store2 = pop!(inchain_store, e2)
         if store1 && store2
             add_split!(bpvec, split, netweight)
+            !isnothing(bipindices) && push!(bipindices, length(bpvec))
         end
     end
     return nothing

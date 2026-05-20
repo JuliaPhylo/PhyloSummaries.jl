@@ -724,18 +724,39 @@ blb_bs = DataFrame(res_bs[:blob_table])
 ```
 
 Our reference network has only 1 reticulation, so only 1 blob.
-We see that this blob has `support_partition` of 0.25.
+We see that this blob has `support_partition` of 0.25:
+25% of input networks have a blob with the same partition.
 If we plotted our input networks, we would see that this blob is in
 networks 2 and 3: whose weights sum to 2 out of 8.
 These support values did not appear in the
 [consensus tree of blob](@ref) section, because this blob is not selected
 to be in the consensus tree of blob.
 
+Next, we look at the transfer index of each blob.
+This index is the average number of taxa that need to be removed
+(or transferred to a different or new block)
+for the blob partition to match with one of the network's partitions,
+averaged over the sample networks. Here, this is 1 taxon on average,
+so 0 taxa for the 25% networks that have the same blob partition,
+and 1 or more for the remaining 75% networks.
+The lower the value (as a number of taxa), the higher the support.
+
+```@repl
+DataFrame(res_bs[:transfer_table])
+```
+
+*Warning*: the calculation of this transfer index is experimental and
+subject to change. The partitions being considered here are restricted to
+(1) partitions into 3+ taxon blocks from non-trivial blobs, and
+(2) non-redundant bipartitions.
+Not considered are partitions into 3+ taxon blocks from trivial blobs
+(which are not 'interesting'). A future version may consider them.
+
 ```@repl
 DataFrame(res_bs[:circorder_table])
 ```
 
-We see that the blob appears in our sample with 2 different circular
+Above, we see that the blob appears in our sample with 2 different circular
 orders of its taxon blocks: the first in the table is the order in the
 reference network, and is the order that network 2 has.
 Let's visualize the reference network alongside input network 3, which has
