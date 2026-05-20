@@ -21,11 +21,11 @@ This cost is |β1[i] Δ β2[j]| where Δ is the symmetric difference:
 the number of taxa to be removed (or transferred to another block).
 
 The Hungarian algorithm is then used with this cost matrix, from
-[Hungarian.jl](https://github.com/Gnimuc/Hungarian.jl)
+[Hungarian.jl](https://github.com/Gnimuc/Hungarian.jl).
 
 Assumptions:
 - `N` ≥ 1, and β1, β2 are both correct partition of the `N` taxa into
-  `k1` and `k2` taxon blocks respectively, hence with `k1 ≥ 1` and k2 ≥ 1`.
+  `k1` and `k2` taxon blocks respectively, hence with `k1 ≥ 1` and `k2 ≥ 1`.
 - `C` has size `m1 × m2` with `m1,m2 ≥ k` where `k = max{k1,k2}`.
   The first `k` rows and columns of `C` are used to store the costs.
 
