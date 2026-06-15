@@ -126,8 +126,8 @@ A chain of 2-blob leads to multiple cut-edge sharing the same bipartition.
 This bipartition is counted only once (if non-trivial and non-redundant)
 as if 2-blobs had been suppressed in the input network.
 
-By default, a greedy consensus consensus is calculated.
-The majority-rule tree can be obtained by using `proportion=0.5`,
+By default, a greedy consensus is calculated.
+The majority-rule tree of blobs can be obtained by using `proportion=0.5`,
 and the strict consensus using `proportion=1`.
 
 Use `suppressinfo=true` to turn off the message about node & edge numbers.
@@ -208,9 +208,10 @@ Consensus network summarizing a list of level-1 networks, by these steps:
    * Otherwise, the total hybrid support is maximized (sum of hybrid support
      over all chosen hybrid clades)
 
-By default, a greedy consensus consensus is calculated.
-The majority-rule tree can be obtained by using `proportion=0.5`,
-and the strict consensus using `proportion=1`.
+By default, a greedy consensus is calculated.
+Alternatively, a level-1 network may be obtained by resolving the blobs of
+a majority-rule tree of blobs, say, by using `proportion=0.5`;
+or of the strict consensus tree of blobs using `proportion=1`.
 
 By default, all input networks have equal weight: the support for a feature
 (blob, circular order, hybrid clade, bipartition) is the proportion of networks
@@ -296,7 +297,7 @@ input:
   `:blob_table`, `:hybrid_table` and `:bipartition_table`.
 - `rootname`: string, all output files will start with this.
 
-!!! warn "Files will be overwritten, if they already exist"
+!!! warning "Files will be overwritten, if they already exist"
 
 """
 function consensus_level1network_save(

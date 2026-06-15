@@ -623,7 +623,7 @@ nothing # hide
   be present in more than 60% networks, if it's connected to a blob in these
   other networks, but we don't get to see this here.
 
-### support for hybrid sisters
+## support for hybrid sisters
 
 There may be high support for a clade to be of hybrid origin, in which case
 this clade has 2 sisters (in the simplest level-1 case).
@@ -633,6 +633,14 @@ in PhyloNetworks, that map support onto a reference network:
 [`PhyloNetworks.treeedges_support`](@extref) and
 [`PhyloNetworks.hybridclades_support`](@extref).
 
+::: note "major versus minor parent"
+    These support values for tree edges and hybrid clades & hybrid sisters
+    assume that hybrid edges are correctly assigned
+    either as being a "major" or "minor" parent, that is, contributing
+    a major (> 50%) or minor (< 50%) proportion of the hybrid's genome.
+    This assignment is correct if the network has γ inheritance probabilities,
+    but might otherwise be arbitrary (and incorrect).
+
 Below, we use these functions to map the support of more features (like hybrid sisters) onto our level-1 consensus network as a reference network.
 Note that, unlike the consensus functions here, the results of
 `treeedges_support` and `hybridclades_support` depend on which hybrid edges
@@ -640,6 +648,11 @@ are _major_ or _minor_, in the input networks.
 The support for an edge to be a "tree" edge is the proportion of input networks
 in which this edge is retained after deleting all the minor hybrid edges are
 deleted, to get the major tree of each input network.
+
+::: note "major tree"
+    Removing the minor hybrid edges and keeping only the major parent edge
+    of each hybrid gives the network's "major tree": to capture
+    the signal from a majority of the genome at each node.
 
 ```@repl
 BSe_majortree, majortree = treeedges_support(netsample, net);
