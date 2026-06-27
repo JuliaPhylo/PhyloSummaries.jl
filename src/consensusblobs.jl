@@ -85,7 +85,7 @@ isredundantsplit(b1::SplitFreq{N}, b2::BlobFreq{N}) where N =
 Consensus tree summarizing the partitions of "interesting" blobs (nodes in
 the tree of blobs) and the non-redundant bipartitions
 (cut-edges connecting non-interesting blobs)
-that are shared by more than the required `proportion` of input `trees`,
+that are shared by more than the required `proportion` of input `networks`,
 as defined by Wicke, Baños et al. (2026)
 (see [citations](https://github.com/juliaphylo/PhyloSummaries.jl/blob/master/CITATION.bib)).
 An error is thrown if the list of input networks is empty, or if the
