@@ -85,7 +85,9 @@ isredundantsplit(b1::SplitFreq{N}, b2::BlobFreq{N}) where N =
 Consensus tree summarizing the partitions of "interesting" blobs (nodes in
 the tree of blobs) and the non-redundant bipartitions
 (cut-edges connecting non-interesting blobs)
-that are shared by more than the required `proportion` of input `trees`.
+that are shared by more than the required `proportion` of input `networks`,
+as defined by Wicke, Baños et al. (2026)
+(see [citations](https://github.com/juliaphylo/PhyloSummaries.jl/blob/master/CITATION.bib)).
 An error is thrown if the list of input networks is empty, or if the
 input networks do not all have the same tip labels.
 
@@ -190,7 +192,10 @@ consensus_treeofblobs(net::PN.HybridNetwork; kwargs...) =
         minimumblobdegree=4, outgroup=nothing, netweights=nothing,
         suppressinfo=false)
 
-Consensus network summarizing a list of level-1 networks, by these steps:
+Consensus network summarizing a list of level-1 networks,
+as defined by Wicke, Baños et al. (2026)
+(see [citations](https://github.com/juliaphylo/PhyloSummaries.jl/blob/master/CITATION.bib))
+following these steps:
 1. A consensus tree of blobs is built as in [`consensus_treeofblobs`](@ref),
    with one node for each blob present in a majority (or in more than the
    required `proportion`) of input networks, if compatible with blobs
@@ -915,23 +920,6 @@ function filter_sort_compatible_partitions!(
         return nothing
     end
     threshold1 = max(0.5, proportion) * nnets
-    # filter for within-list compatibility
-    for bparts in (blobparts, biparts)
-        nB = length(bparts)
-        for j_cb in nB:-1:1
-            candidateb = bparts[j_cb]
-            freq(candidateb) > threshold1 && continue
-            iscompat = true
-            for j_kb in (j_cb+1):length(bparts)
-                if !iscompatible(candidateb, bparts[j_kb])
-                    iscompat = false
-                    break
-                end
-            end
-            iscompat || deleteat!(bparts, j_cb)
-        end
-    end
-    # filter for between-list compatibility
     nbb_j = length(blobparts) # Next BloB / BIpartition index to check:
     nbi_j = length(biparts)   # from most to least frequent
     nbb_f = (nbb_j>0 ? freq(blobparts[nbb_j]) : 0)
@@ -939,25 +927,45 @@ function filter_sort_compatible_partitions!(
     while nbb_j>0 || nbi_j>0
         # if equally frequent: favor keeping the blob
         if nbi_f > nbb_f # decide to keep or filter out the next bipart
-            cb = biparts[nbi_j] # Candidate Bipartition
             keep = true
-            for j_kb in (nbb_j+1):length(blobparts)
-                kb = blobparts[j_kb] # Kept Blob
-                if !iscompatible(cb, kb)
-                    keep = false
-                    break
+            if nbi_f <= threshold1
+                cb = biparts[nbi_j] # Candidate Bipartition
+                # check compatibility with currently retained blobs
+                for j_kb in (nbb_j+1):length(blobparts) # Kept Blob
+                    if !iscompatible(cb, blobparts[j_kb])
+                        keep = false
+                        break
+                    end
+                end
+                if keep # check compatibility with currently retained biparts
+                  for j_kb in (nbi_j+1):length(biparts) # Kept Bipart
+                    if !iscompatible(cb, biparts[j_kb])
+                        keep = false
+                        break
+                    end
+                  end
                 end
             end
             keep || deleteat!(biparts, nbi_j)
             nbi_j -= 1
             nbi_f = (nbi_j>0 ? freq(biparts[nbi_j]) : 0)
         else # decide to keep or filter out the next blob
-            cb = blobparts[nbb_j]
             iscompat = true
-            for j_kb in (nbi_j+1):length(biparts)
-                if !iscompatible(biparts[j_kb], cb) # okay if redundant
-                    iscompat = false
-                    break
+            if nbb_f <= threshold1
+                cb = blobparts[nbb_j]
+                for j_kb in (nbb_j+1):length(blobparts) # Kept Blob
+                    if !iscompatible(cb, blobparts[j_kb])
+                        iscompat = false
+                        break
+                    end
+                end
+                if iscompat
+                  for j_kb in (nbi_j+1):length(biparts)
+                    if !iscompatible(biparts[j_kb], cb) # okay if redundant
+                        iscompat = false
+                        break
+                    end
+                  end
                 end
             end
             iscompat || deleteat!(blobparts, nbb_j)
