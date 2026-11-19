@@ -52,8 +52,8 @@ res = blobpartitions_support(net, refnet; netweights=[1,1,3])
     partition_num=["1,2,3|4|5"], partition=["a,b,c|d|e"])
 @test res[:transfer_table].transferindex ≈ [.6] # weighted average of 0,0,1
 @test res[:circorder_table].support_circorder ≈ [.4] # (1+1)/(1+1+3) from weights
-@test res[:hybrid_table] == (blob=[1,1], node_from=[5,-7], node_to=[4,6],
-    edge=[5,8], support_hybrid=[0.,.4], cluster_num=["4","5"], cluster=["d","e"])
+@test res[:hybrid_table] == (blob=[1,1], node_from=[-7,5], node_to=[6,4],
+    edge=[8,5], support_hybrid=[.4,0.], cluster_num=["5","4"], cluster=["e","d"])
 @test res[:bipartition_table] == (node1=[-3], node2=[-4], edge=[4],
     support_nonredundant=[.6], cluster_num=["2,3"], cluster=["b,c"])
 res = blobpartitions_support(net, refnet; netweights=[1,1,3], minimumblobdegree=4)

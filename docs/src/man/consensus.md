@@ -89,7 +89,8 @@ nothing # hide
 ## consensus tree of blob
 
 Given a set of input phylogenetic networks (which may be trees or not),
-we can obtain a consensus of their "tree of blobs".
+we can obtain a consensus of their "tree of blobs"
+(see [Wicke, Baños et al. 2026](https://doi.org/10.64898/2026.10.31.763369)).
 
 For a given network, the tree of blob is obtained by contracting each
 blob (2-edge connected component) in the network into a single node.
@@ -240,6 +241,13 @@ In our example:
   a blob that partitions the taxa differently than the blob
   retained in the consensus.
 
+!!! warning "hybrid support at consensus blobs"
+    Hybrid support is only calculated (and stored in tables) for clades
+    whose stem edge is adjacent (directely connected) to a blob retained in
+    the consensus. The hybrid support for other clades is not tracked.
+    To get hybrid support for all clades in a reference network,
+    use `hybridclades_support` instead: see [support for hybrid sisters](@ref).
+
 The table about circular orders is about blobs of level 1 in input networks,
 for which the taxon blocks are arranged around the blob like around a circle.
 This "circular order" can be read clock-wise or counter-clockwise, and
@@ -335,8 +343,10 @@ input networks differently).
 
 ## consensus level-1 network
 
-The function [`consensus_level1network`](@ref) first calculates
-the consensus tree of blobs, then expands each blob node in that tree,
+[`consensus_level1network`](@ref) implements the consensus described in
+[Wicke, Baños et al. 2026](https://doi.org/10.64898/2026.10.31.763369).
+It first calculates the consensus tree of blobs,
+then expands each blob node in that tree,
 choosing the best-supported circular ordering and hybrid clade for each blob.
 This function only takes level-1 networks as input: in which each blob
 is a cycle with a circular order and a single hybrid node.
@@ -405,6 +415,11 @@ with the same columns as from the tree-of-blobs consensus above:
 ```@repl
 hyb_l1 = DataFrame(res_l1[:hybrid_table], copycols=false)
 ```
+
+Note that, like for the consensus tree of blob, hybrid support is
+only calculated for clades whose stem edge is adjacent to a blob retained in
+the consensus. To get hybrid support for all clades in a reference network,
+see [support for hybrid sisters](@ref).
 
 It's easier to see support values on a plot. Below, no edge has any
 additional support for being non-redundant with a blob (because our
@@ -633,7 +648,7 @@ in PhyloNetworks, that map support onto a reference network:
 [`PhyloNetworks.treeedges_support`](@extref) and
 [`PhyloNetworks.hybridclades_support`](@extref).
 
-::: note "major versus minor parent"
+!!! note "major versus minor parent"
     These support values for tree edges and hybrid clades & hybrid sisters
     assume that hybrid edges are correctly assigned
     either as being a "major" or "minor" parent, that is, contributing
@@ -649,7 +664,7 @@ The support for an edge to be a "tree" edge is the proportion of input networks
 in which this edge is retained after deleting all the minor hybrid edges are
 deleted, to get the major tree of each input network.
 
-::: note "major tree"
+!!! note "major tree"
     Removing the minor hybrid edges and keeping only the major parent edge
     of each hybrid gives the network's "major tree": to capture
     the signal from a majority of the genome at each node.

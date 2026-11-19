@@ -218,9 +218,11 @@ con = res[:net]
   partition_num = ["2|4|3|5|6|1"], hybrid_cluster_num=["6"],
   partition = ["t2|t4|t3|t5|t6|t1"], hybrid_cluster=["t6"],
 )
-@test res[:hybrid_table] == (blob=[1,1,1,1], node_from=[11,12,8,9],
-  node_to=[6,1,4,3], edge=[6,1,4,3], support_hybrid=[.5,.1,.2,.2],
-  cluster_num=["6","1","4","3"], cluster=["t6","t1","t4","t3"])
+# below: order of hybrids with equal frequency (within a blob) dependent on
+# arbitrary order from a dict. tested order: ok for julia v1.13.4, fails on v1.12.
+@test res[:hybrid_table] == (blob=[1,1,1,1], node_from=[11,9,8,12],
+  node_to=[6,3,4,1], edge=[6,3,4,1], support_hybrid=[.5,.2,.2,.1],
+  cluster_num=["6","3","4","1"], cluster=["t6","t3","t4","t1"])
 @test all(isempty(x) for x in res[:bipartition_table])
 
 nfile = joinpath(@__DIR__,"..","test","level1_7taxa_abc.nwk")
@@ -241,9 +243,9 @@ con = res[:net]
   partition = ["a3|a4|b1,c1,c2|a1|a2", "c1|c2|a1,a2,a3,a4|b1"],
   hybrid_cluster = ["b1,c1,c2","b1"],
 )
-@test res[:hybrid_table] == (blob=[2,1,1], node_from=[11,16,8], node_to=[8,5,11],
-  edge=[8,5,8], support_hybrid=[.6,.2,.4], cluster_num=["5,6,7", "5", "1,2,3,4"],
-  cluster=["b1,c1,c2", "b1", "a1,a2,a3,a4"])
+@test res[:hybrid_table] == (blob=[2,1,1], node_from=[11,8,16], node_to=[8,11,5],
+  edge=[8,8,5], support_hybrid=[.6,.4,.2], cluster_num=["5,6,7", "1,2,3,4", "5"],
+  cluster=["b1,c1,c2", "a1,a2,a3,a4", "b1"])
 @test all(isempty(x) for x in res[:bipartition_table])
 
 res = consensus_level1network(net, outgroup="a2", suppressinfo=true) # 1 blob, 1 bps, hyb edge reversed
@@ -297,8 +299,8 @@ res = consensus_treeofblobs(net, suppressinfo=true)
 con = res[:tob]
 @test writenewick(con, support=:y) == "(c1,c2,((a4,a3,a2,a1)_9_blob1,b1)_10::0.4)_8;"
 @test all(isempty(x) for x in res[:circorder_table]) # because level-2
-@test res[:hybrid_table] == (blob=[1,1], node_from=[9,9], node_to=[1,10], edge=[1,8],
-  support_hybrid=[.4,.6], cluster_num=["1","5,6,7"], cluster=["a1","b1,c1,c2"])
+@test res[:hybrid_table] == (blob=[1,1], node_from=[9,9], node_to=[10,1], edge=[8,1],
+  support_hybrid=[.6,.4], cluster_num=["5,6,7","1"], cluster=["b1,c1,c2","a1"])
 
 # level-1 nets, and missing hybrid last alphabetically
 net = readnewick.(
@@ -313,9 +315,9 @@ con = res[:net]
   "(a3,(a2,#H12)_11,(a4,((b1,(c1,c2)_10::0.6)_9,(d1)#H12)_13)_14)_8_blob1;"
 @test res[:bipartition_table] == (node1=[9], node2=[10], edge=[9],
   support_nonredundant=[.6], cluster_num=["5,6"], cluster=["c1,c2"])
-@test res[:hybrid_table] == (blob=[1,1,1,1], node_from=[14,13,12,8],
-  node_to=[3,9,7,2], edge=[3,8,7,2], support_hybrid=[.2,.2,.4,.2],
-  cluster_num=["3","4,5,6","7","2"], cluster=["a4","b1,c1,c2","d1","a3"])
+@test res[:hybrid_table] == (blob=[1,1,1,1], node_from=[12,8,14,13],
+  node_to=[7,2,3,9], edge=[7,2,3,8], support_hybrid=[.4,.2,.2,.2],
+  cluster_num=["7","2","3","4,5,6"], cluster=["d1","a3","a4","b1,c1,c2"])
   @test_throws ArgumentError consensus_level1network(PN.HybridNetwork[])
   net1 = readnewick("((((A,B),(C)#H1),(#H1,D)),E);")
   @test_throws ArgumentError consensus_level1network([net1], minimumblobdegree=2)

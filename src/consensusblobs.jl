@@ -1264,7 +1264,8 @@ function hybriddata_onToB(
     nB = length(blobparts)
     @assert nB == length(blobedges)
     bitr = ((i,blobparts[i]) for i in nB:-1:1) # from most to least frequent blob
-    itr = ((i,b,h,f) for (i,b) in bitr for (h,f) in b.hybrid)
+    itr = ((i,b,h,f) for (i,b) in bitr # from most to least frequent hybrid
+            for (h,f) in sort!(collect(b.hybrid), by = x -> x.second, rev=true))
     bnum = [x[1] for x in itr]
     hedgeindex = [blobedges[i][h] for (i,b,h,f) in itr]
     hedgenum = isnothing(blobedges_nums) ? hedgeindex : [blobedges_nums[i][h] for (i,b,h,f) in itr]
