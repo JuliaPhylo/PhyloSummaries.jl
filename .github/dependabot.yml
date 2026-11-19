@@ -6,7 +6,7 @@ updates:
     schedule:
       interval: "weekly"
   - package-ecosystem: "julia"
-    directory: # location of Project.toml
+    directories: # location of Project.toml
       - "/"
       - "/docs"
     schedule:
