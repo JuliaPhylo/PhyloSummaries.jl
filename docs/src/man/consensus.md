@@ -89,7 +89,8 @@ nothing # hide
 ## consensus tree of blob
 
 Given a set of input phylogenetic networks (which may be trees or not),
-we can obtain a consensus of their "tree of blobs".
+we can obtain a consensus of their "tree of blobs"
+(see [Wicke, Baños et al. 2026](https://doi.org/10.64898/2026.10.31.763369)).
 
 For a given network, the tree of blob is obtained by contracting each
 blob (2-edge connected component) in the network into a single node.
@@ -337,7 +338,8 @@ input networks differently).
 
 The function [`consensus_level1network`](@ref) first calculates
 the consensus tree of blobs, then expands each blob node in that tree,
-choosing the best-supported circular ordering and hybrid clade for each blob.
+choosing the best-supported circular ordering and hybrid clade for each blob
+(see [Wicke, Baños et al. 2026](https://doi.org/10.64898/2026.10.31.763369)).
 This function only takes level-1 networks as input: in which each blob
 is a cycle with a circular order and a single hybrid node.
 The result is a level-1 phylogenetic network.
@@ -633,7 +635,7 @@ in PhyloNetworks, that map support onto a reference network:
 [`PhyloNetworks.treeedges_support`](@extref) and
 [`PhyloNetworks.hybridclades_support`](@extref).
 
-::: note "major versus minor parent"
+!!! note "major versus minor parent"
     These support values for tree edges and hybrid clades & hybrid sisters
     assume that hybrid edges are correctly assigned
     either as being a "major" or "minor" parent, that is, contributing
@@ -649,7 +651,7 @@ The support for an edge to be a "tree" edge is the proportion of input networks
 in which this edge is retained after deleting all the minor hybrid edges are
 deleted, to get the major tree of each input network.
 
-::: note "major tree"
+!!! note "major tree"
     Removing the minor hybrid edges and keeping only the major parent edge
     of each hybrid gives the network's "major tree": to capture
     the signal from a majority of the genome at each node.
