@@ -78,8 +78,8 @@ julia> DataFrame(res[:hybrid_table])
  Row │ blob   node_from  node_to  edge   support_hybrid  cluster_num  cluster     
      │ Int64  Int64      Int64    Int64  Float64         String       String      
 ─────┼────────────────────────────────────────────────────────────────────────────
-   1 │     2          6        8     13             0.2  5            b1
-   2 │     2         -7        3     15             0.4  1,2,3,4      a1,a2,a3,a4
+   1 │     2         -7        3     15             0.4  1,2,3,4      a1,a2,a3,a4
+   2 │     2          6        8     13             0.2  5            b1
    3 │     1          3       -7     15             0.6  5,6,7        b1,c1,c2
 
 julia> DataFrame(res[:bipartition_table]) # refnet has 0 non-redundant bipartitions
